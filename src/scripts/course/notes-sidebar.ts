@@ -1,6 +1,7 @@
 // src/scripts/course/notes-sidebar.ts
 
-import { buildTree, type TreeNode } from '../../lib/writing/tree/model';
+import { renderTree, type TreeLabels } from '../../lib/writing/tree/render';
+import type { TreeNote } from '../../lib/writing/tree/model';
 
 export interface NoteFolder {
   id: string; name: string; parentId: string | null; courseId: string | null;
@@ -13,23 +14,34 @@ export interface NoteItem {
   position?: number | null;
 }
 
-// Locale used for the tree order (musiki has always sorted notas in Spanish
-// collation) and for the manual-ordering reorder endpoint's sibling read.
+// musiki has always sorted notas in Spanish collation; also drives the
+// manual-ordering reorder endpoint's sibling read.
 const TREE_LOCALE = 'es';
 
-async function reorderItem(
-  kind: 'note' | 'folder',
-  id: string,
-  parentId: string | null,
-  targetIndex: number,
-  courseId: string,
-): Promise<void> {
-  await fetch('/api/live/notes/reorder', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ courseId, kind, id, parentId, targetIndex }),
-  });
-}
+// Spanish labels for the shared tree renderer — these are exactly the
+// strings musiki's own DOM previously used for these actions (Renombrar,
+// Eliminar, "nueva nota...", etc.). `visibility`/`inherit`/`private`/
+// `supervision`/`committee`/`public` are unused (musiki passes
+// `showVisibility: false`) but required by TreeLabels' shape.
+const SPANISH_LABELS: TreeLabels = {
+  newNote: 'nueva nota...',
+  newFolder: 'nueva carpeta...',
+  rename: 'Renombrar',
+  delete: 'Eliminar',
+  visibility: 'Visibilidad',
+  inherit: 'Heredar',
+  private: 'Privado',
+  supervision: 'Supervisión',
+  committee: 'Comité',
+  public: 'Público',
+  confirmDelete: '¿Eliminar? Esta acción no se puede deshacer.',
+  empty: 'Sin notas',
+  loading: 'Cargando…',
+  error: 'No se pudieron cargar las notas.',
+  up: '↑',
+  down: '↓',
+  actions: 'Acciones',
+};
 
 function broadcastNotesSidebarRefresh(courseId: string) {
   const detail = { courseId, at: Date.now() };
@@ -42,7 +54,7 @@ function broadcastNotesSidebarRefresh(courseId: string) {
 function getNoteIconInfo(note: NoteItem) {
   const body = note.body || '';
   const title = note.title || '';
-  
+
   let isConcept = false;
   let isDraft = false;
 
@@ -95,44 +107,45 @@ export async function createFolder(courseId: string, name: string, parentId: str
   return data.folder ?? null;
 }
 
+function nextDefaultNoteTitle(notes: NoteItem[]): string {
+  const existing = new Set(notes.map(note => note.title.toLowerCase()));
+  let index = 1;
+  while (existing.has(`note-${String(index).padStart(2, '0')}`)) index++;
+  return `note-${String(index).padStart(2, '0')}`;
+}
+
+// Tracks, per outer sidebar container, the promise for that container's
+// current tree's first `refresh()` — so beginRootNoteCreation/
+// beginInlineFolderCreation (called by [...slug].astro right after
+// renderNotesTree, without awaiting it) can wait for the shared renderer's
+// create buttons to actually exist in the DOM before clicking them.
+const treeReady = new WeakMap<HTMLElement, Promise<void>>();
+
 export function beginRootNoteCreation(container: HTMLElement): void {
-  container.querySelector<HTMLButtonElement>('[data-notas-new-placeholder]')?.click();
+  const ready = treeReady.get(container) ?? Promise.resolve();
+  void ready.then(() => {
+    const createBar = container.querySelector<HTMLElement>('.notas-sb-owned-tree .writing-tree > .wt-create');
+    createBar?.querySelector<HTMLButtonElement>('button')?.click();
+  });
 }
 
 export function beginInlineFolderCreation(
   container: HTMLElement,
-  courseId: string,
+  _courseId: string,
   parentId: string | null = null,
-  indent = 0,
+  _indent = 0,
 ): void {
-  if (container.querySelector('[data-notas-folder-input]')) return;
-  const row = document.createElement('div');
-  row.dataset.notasFolderInput = 'true';
-  row.style.cssText = `padding:3px 8px 3px ${indent * 20 + 20}px;display:flex;align-items:center;gap:4px;font-size:11px;color:var(--c-fg)`;
-  row.innerHTML = '<span style="color:var(--c-fg-dim);font-size:11px">⊟</span>';
-  const input = document.createElement('input');
-  input.placeholder = 'nombre de carpeta...';
-  input.style.cssText = 'font:inherit;border:none;border-bottom:1px solid var(--c-link,#3b82f6);background:transparent;color:inherit;width:9rem;outline:none;padding:0';
-  row.appendChild(input);
-  container.appendChild(row);
-  input.focus();
-
-  let committing = false;
-  const commit = async () => {
-    if (committing) return;
-    committing = true;
-    const name = input.value.trim();
-    row.remove();
-    if (!name) return;
-    await createFolder(courseId, name, parentId);
-    broadcastNotesSidebarRefresh(courseId);
-    const tree = await loadNotesTree(courseId);
-    renderNotesTree(container, tree.folders, tree.notes, courseId, tree.currentUserId);
-  };
-  input.addEventListener('blur', () => { void commit(); }, { once: true });
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-    if (e.key === 'Escape') { e.preventDefault(); input.value = ''; input.blur(); }
+  // Only root-level creation is reachable through this entry point now: the
+  // shared renderer nests each open folder's own "new folder" button inside
+  // that folder (no per-folder id marker to target from the outside), so a
+  // non-null parentId here is a no-op. Every current caller passes the
+  // default (root) parentId.
+  if (parentId !== null) return;
+  const ready = treeReady.get(container) ?? Promise.resolve();
+  void ready.then(() => {
+    const createBar = container.querySelector<HTMLElement>('.notas-sb-owned-tree .writing-tree > .wt-create');
+    const buttons = createBar?.querySelectorAll<HTMLButtonElement>('button');
+    if (buttons && buttons.length > 1) buttons[1].click();
   });
 }
 
@@ -145,218 +158,157 @@ export function renderNotesTree(
 ) {
   container.innerHTML = '';
 
-  const reload = async () => {
-    try {
-      const { folders: f, notes: n, currentUserId: uid } = await loadNotesTree(courseId);
-      renderNotesTree(container, f, n, courseId, uid);
-    } catch (error) {
-      renderNotesTreeError(container, error);
-    }
+  const treeContainer = document.createElement('div');
+  treeContainer.className = 'notas-sb-owned-tree';
+  container.appendChild(treeContainer);
+
+  const sharedContainer = document.createElement('div');
+  sharedContainer.className = 'notas-sb-shared-section';
+  container.appendChild(sharedContainer);
+
+  let currentUid = currentUserId || '';
+  let latestNotes: NoteItem[] = notes;
+  // The initial paint reuses the already-loaded data the caller passed in
+  // (matches the previous synchronous-render behavior); every subsequent
+  // refresh (after create/rename/delete/reorder, or an external reload)
+  // fetches fresh via loadNotesTree.
+  let pendingInitial: { folders: NoteFolder[]; notes: NoteItem[]; currentUserId: string } | null = {
+    folders, notes, currentUserId: currentUid,
   };
 
-  const uidToUse = currentUserId || '';
-  const ownedNotes = notes.filter(n => !n.userId || n.userId === uidToUse);
-  const sharedNotes = notes.filter(n => n.userId && n.userId !== uidToUse);
+  let tree: ReturnType<typeof renderTree>;
 
-  // Shared tree model: same ordering rule so and musiki both use (position
-  // first, then locale-aware name/title, then id) — with every position
-  // NULL (today's data) this reproduces the exact previous alphabetical
-  // order. See src/lib/writing/tree/model.ts `buildTree`.
-  const tree = buildTree(folders, ownedNotes, TREE_LOCALE);
+  function renderSharedSection(allNotes: NoteItem[], uid: string) {
+    sharedContainer.innerHTML = '';
+    const sharedNotes = allNotes.filter(n => n.userId && n.userId !== uid);
+    if (!sharedNotes.length) return;
 
-  // Root drop zone: drop a note here to remove it from its folder
-  const rootDrop = document.createElement('div');
-  rootDrop.className = 'notas-sb-root-drop';
-  rootDrop.style.cssText = 'min-height:4px;transition:background 120ms';
-  rootDrop.addEventListener('dragover', e => {
-    if (!e.dataTransfer?.types.includes('text/x-musiki-note')) return;
-    e.preventDefault();
-    rootDrop.style.background = 'rgba(100,180,100,.15)';
-  });
-  rootDrop.addEventListener('dragleave', () => { rootDrop.style.background = ''; });
-  rootDrop.addEventListener('drop', async e => {
-    rootDrop.style.background = '';
-    const noteId = e.dataTransfer?.getData('text/x-musiki-note');
-    if (!noteId) return;
-    e.preventDefault();
-    await fetch('/api/live/notes', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: noteId, folderId: null }),
-    });
-    broadcastNotesSidebarRefresh(courseId);
-    await reload();
-  });
-  container.appendChild(rootDrop);
+    const sharedDetails = document.createElement('details');
+    sharedDetails.open = false;
+    sharedDetails.className = 'notas-sb-folder--special shared-notes-folder';
 
-  function renderLevel(nodes: TreeNode[], parentId: string | null, indent: number): HTMLElement {
-    const frag = document.createElement('div');
-    frag.className = 'notas-sb-level';
+    const sharedSummary = document.createElement('summary');
+    sharedSummary.className = 'notas-sb-folder';
+    sharedSummary.style.cssText = 'cursor:pointer;list-style:none;';
+    sharedSummary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:12px;width:10px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">👥</span><span class="notas-sb-folder-name">Compartidas conmigo</span>`;
 
-    const folderNodes = nodes.filter((n): n is Extract<TreeNode, { kind: 'folder' }> => n.kind === 'folder');
-    const folderSiblingIds = folderNodes.map(n => n.folder.id);
-    const noteNodes = nodes.filter((n): n is Extract<TreeNode, { kind: 'note' }> => n.kind === 'note');
-    const noteSiblingIds = noteNodes.map(n => n.note.id);
+    const sharedContent = document.createElement('div');
+    sharedContent.className = 'notas-sb-level';
 
-    for (const folderNode of folderNodes) {
-      // buildTree carries the original input objects through unchanged —
-      // this cast just recovers musiki's richer NoteFolder shape.
-      const folder = folderNode.folder as unknown as NoteFolder;
-      const details = document.createElement('details');
-      details.open = true;
-      const isSpecialFolder = /^(70[\s-]*conceptos|80[\s-]*recursos|90[\s-]*notas)/i.test(folder.name);
-      if (isSpecialFolder) {
-        details.className = 'notas-sb-folder--special';
-      }
-
-      const summary = document.createElement('summary');
-      summary.className = 'notas-sb-folder';
-      summary.style.cssText = 'cursor:pointer;list-style:none;';
-      summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:12px;width:10px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
-
-      // Draggable for manual reordering among sibling folders (same parent only —
-      // reparenting via drag stays out of scope, see deployment status notes).
-      summary.draggable = true;
-      summary.addEventListener('dragstart', e => {
-        e.stopPropagation();
-        e.dataTransfer?.setData('text/x-musiki-folder', folder.id);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-      });
-
-      // Folder drop zone: dropping a note here moves it into the folder;
-      // dropping another folder here reorders it to this folder's slot
-      // among its siblings.
-      summary.addEventListener('dragover', e => {
-        if (!e.dataTransfer?.types.includes('text/x-musiki-note') && !e.dataTransfer?.types.includes('text/x-musiki-folder')) return;
-        e.preventDefault();
-        summary.style.background = 'rgba(100,180,100,.18)';
-      });
-      summary.addEventListener('dragleave', () => { summary.style.background = ''; });
-      summary.addEventListener('drop', async e => {
-        e.preventDefault();
-        e.stopPropagation();
-        summary.style.background = '';
-        const noteId = e.dataTransfer?.getData('text/x-musiki-note');
-        if (noteId) {
-          await fetch('/api/live/notes', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: noteId, folderId: folder.id }),
-          });
-          broadcastNotesSidebarRefresh(courseId);
-          await reload();
-          return;
-        }
-        const draggedFolderId = e.dataTransfer?.getData('text/x-musiki-folder');
-        if (draggedFolderId && draggedFolderId !== folder.id) {
-          const targetIndex = folderSiblingIds.slice(0, folderSiblingIds.indexOf(folder.id)).filter(id => id !== draggedFolderId).length;
-          await reorderItem('folder', draggedFolderId, parentId, targetIndex, courseId);
-          broadcastNotesSidebarRefresh(courseId);
-          await reload();
-        }
-      });
-
-      summary.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showFolderMenu(e, folder, notes, reload, courseId, summary, container, indent); });
-
-      details.appendChild(summary);
-      details.appendChild(renderLevel(folderNode.children, folder.id, indent + 1));
-      details.addEventListener('toggle', () => {
-        const caret = summary.querySelector<HTMLElement>('.notas-sb-folder-caret');
-        if (caret) caret.textContent = details.open ? '▾' : '▸';
-      });
-      const caret = summary.querySelector<HTMLElement>('.notas-sb-folder-caret');
-      if (caret) caret.textContent = details.open ? '▾' : '▸';
-      frag.appendChild(details);
+    const sortedShared = [...sharedNotes].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    for (const note of sortedShared) {
+      sharedContent.appendChild(makeNoteItem(note, 0, uid, courseId));
     }
 
-    for (const noteNode of noteNodes) {
-      frag.appendChild(makeNoteItem(noteNode.note as unknown as NoteItem, indent, reload, uidToUse, courseId, {
-        parentId, siblingIds: noteSiblingIds,
-      }));
-    }
-
-    // Virtual Shared Notes folder at the bottom of the root level
-    if (parentId === null && sharedNotes.length > 0) {
-      const sharedDetails = document.createElement('details');
-      sharedDetails.open = false;
-      sharedDetails.className = 'notas-sb-folder--special shared-notes-folder';
-
-      const sharedSummary = document.createElement('summary');
-      sharedSummary.className = 'notas-sb-folder';
-      sharedSummary.style.cssText = 'cursor:pointer;list-style:none;';
-      sharedSummary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:12px;width:10px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">👥</span><span class="notas-sb-folder-name">Compartidas conmigo</span>`;
-
-      const sharedContent = document.createElement('div');
-      sharedContent.className = 'notas-sb-level';
-
-      const sortedShared = [...sharedNotes].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-      for (const note of sortedShared) {
-        sharedContent.appendChild(makeNoteItem(note, indent + 1, reload, uidToUse, courseId, null));
-      }
-
-      sharedDetails.appendChild(sharedSummary);
-      sharedDetails.appendChild(sharedContent);
-
-      sharedDetails.addEventListener('toggle', () => {
-        const caret = sharedSummary.querySelector<HTMLElement>('.notas-sb-folder-caret');
-        if (caret) caret.textContent = sharedDetails.open ? '▾' : '▸';
-      });
-
+    sharedDetails.appendChild(sharedSummary);
+    sharedDetails.appendChild(sharedContent);
+    sharedDetails.addEventListener('toggle', () => {
       const caret = sharedSummary.querySelector<HTMLElement>('.notas-sb-folder-caret');
       if (caret) caret.textContent = sharedDetails.open ? '▾' : '▸';
+    });
+    const caret = sharedSummary.querySelector<HTMLElement>('.notas-sb-folder-caret');
+    if (caret) caret.textContent = sharedDetails.open ? '▾' : '▸';
 
-      frag.appendChild(sharedDetails);
-    }
-
-    return frag;
+    sharedContainer.appendChild(sharedDetails);
   }
 
-  container.appendChild(renderLevel(tree, null, 0));
-  const placeholder = document.createElement('button');
-  placeholder.type = 'button';
-  placeholder.className = 'notas-sb-placeholder';
-  placeholder.dataset.notasNewPlaceholder = 'true';
-  placeholder.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%;border:none;background:none;cursor:pointer;text-align:left';
-  placeholder.innerHTML = '<span class="lesson-icon" style="font-size:12px;width:17px;text-align:center;flex-shrink:0;color:#45d384">+</span><span>nueva nota...</span>';
-  placeholder.addEventListener('click', () => {
-    void createNoteInFolder(null, courseId, reload, container, nextDefaultNoteTitle(notes));
-  });
-  placeholder.addEventListener('dragover', e => {
-    if (!e.dataTransfer?.types.includes('text/x-musiki-note')) return;
-    e.preventDefault();
-    placeholder.style.background = 'rgba(69,211,132,.12)';
-  });
-  placeholder.addEventListener('dragleave', () => { placeholder.style.background = ''; });
-  placeholder.addEventListener('drop', async e => {
-    const noteId = e.dataTransfer?.getData('text/x-musiki-note');
-    if (!noteId) return;
-    e.preventDefault();
-    placeholder.style.background = '';
-    await fetch('/api/live/notes', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: noteId, folderId: null }),
-    });
-    broadcastNotesSidebarRefresh(courseId);
-    await reload();
-  });
-  container.appendChild(placeholder);
+  // Render the shared-with-me section synchronously from the initial data
+  // so it doesn't flash empty while the owned tree's first refresh runs.
+  renderSharedSection(notes, currentUid);
 
-  container.oncontextmenu = e => {
-    if ((e.target as HTMLElement).closest('.notas-sb-item,.notas-sb-folder')) return;
-    e.preventDefault();
-    showRootMenu(e, container, courseId);
-  };
+  tree = renderTree({
+    container: treeContainer,
+    labels: SPANISH_LABELS,
+    locale: TREE_LOCALE,
+    canManage: true, // owner's own DB-notes tree
+    showVisibility: false,
+    selectedNoteId: null,
+    noteIcon: (note) => getNoteIconInfo(note as unknown as NoteItem).char,
+    noteActions: (note) => [{
+      label: 'Compartir',
+      run: () => openSharingModal(note.id, (note as unknown as NoteItem).title || '(sin título)', courseId),
+    }],
+    load: async () => {
+      const data = pendingInitial ?? await loadNotesTree(courseId);
+      pendingInitial = null;
+      currentUid = data.currentUserId || currentUid;
+      latestNotes = data.notes;
+      renderSharedSection(data.notes, currentUid);
+      const owned = data.notes.filter(n => !n.userId || n.userId === currentUid);
+      return { folders: data.folders, notes: owned as unknown as TreeNote[] };
+    },
+    onOpenNote(id) {
+      const note = latestNotes.find(n => n.id === id);
+      window.dispatchEvent(new CustomEvent('musiki:open-db-note', {
+        detail: { noteId: id, title: note?.title || '(sin título)' },
+      }));
+    },
+    actions: {
+      async createNote(parentId) {
+        const suggested = nextDefaultNoteTitle(latestNotes);
+        const title = window.prompt('Nombre de la nota…', suggested)?.trim();
+        if (!title) return;
+        const res = await fetch('/api/live/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, body: '', courseId, folderId: parentId }),
+        });
+        if (!res.ok) throw new Error('create-note-failed');
+        broadcastNotesSidebarRefresh(courseId);
+      },
+      async createFolder(parentId, name) {
+        const folder = await createFolder(courseId, name, parentId);
+        if (!folder) throw new Error('create-folder-failed');
+        broadcastNotesSidebarRefresh(courseId);
+      },
+      async renameNote(id, title) {
+        const res = await fetch('/api/live/notes', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, title }),
+        });
+        if (!res.ok) throw new Error('rename-note-failed');
+        broadcastNotesSidebarRefresh(courseId);
+      },
+      async renameFolder(id, name) {
+        const res = await fetch('/api/note-folders', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, name }),
+        });
+        if (!res.ok) throw new Error('rename-folder-failed');
+        broadcastNotesSidebarRefresh(courseId);
+      },
+      async deleteNote(id) {
+        const res = await fetch(`/api/live/notes?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('delete-note-failed');
+        broadcastNotesSidebarRefresh(courseId);
+      },
+      async deleteFolder(id) {
+        const res = await fetch(`/api/note-folders?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('delete-folder-failed');
+        broadcastNotesSidebarRefresh(courseId);
+      },
+      async reorder(kind, id, parentId, targetIndex) {
+        // Folder reparenting is allowed here — the server (course-order-core.ts)
+        // validates the target is the caller's own folder in the same course
+        // scope (or root) and not the folder itself or one of its own
+        // descendants; see src/lib/writing/notes/course-order-core.test.mjs.
+        const res = await fetch('/api/live/notes/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId, kind, id, parentId, targetIndex }),
+        });
+        if (!res.ok) throw new Error('reorder-failed');
+        broadcastNotesSidebarRefresh(courseId);
+      },
+    },
+  });
+
+  treeReady.set(container, tree.refresh());
 }
 
-function makeNoteItem(
-  note: NoteItem,
-  indent: number,
-  reload: () => Promise<void>,
-  currentUserId: string,
-  courseId: string,
-  dropCtx: { parentId: string | null; siblingIds: string[] } | null,
-): HTMLElement {
+function makeNoteItem(note: NoteItem, indent: number, currentUserId: string, courseId: string): HTMLElement {
   const el = document.createElement('div');
   el.className = 'notas-sb-item';
   el.draggable = true;
@@ -364,52 +316,27 @@ function makeNoteItem(
   el.style.cssText = `cursor:pointer;border-left:2px solid transparent;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;padding-right:4px;`;
   el.title = note.title || '(sin título)';
 
-  // Manual reordering: dropping a note onto another owned note inserts it
-  // right before the target in that note's folder (cross-folder moves
-  // included — matches the existing folder-summary/root drop behavior).
-  if (dropCtx) {
-    el.addEventListener('dragover', e => {
-      if (!e.dataTransfer?.types.includes('text/x-musiki-note')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      el.style.background = 'rgba(100,180,100,.12)';
-    });
-    el.addEventListener('dragleave', () => { el.style.background = ''; });
-    el.addEventListener('drop', async e => {
-      const draggedId = e.dataTransfer?.getData('text/x-musiki-note');
-      if (!draggedId) return;
-      e.preventDefault();
-      e.stopPropagation();
-      el.style.background = '';
-      if (draggedId === note.id) return;
-      const targetIndex = dropCtx.siblingIds.slice(0, dropCtx.siblingIds.indexOf(note.id)).filter(id => id !== draggedId).length;
-      await reorderItem('note', draggedId, dropCtx.parentId, targetIndex, courseId);
-      broadcastNotesSidebarRefresh(courseId);
-      await reload();
-    });
-  }
-  
   const ic = getNoteIconInfo(note);
   const scaleStyle = ic.isConcept ? 'transform: scale(0.6); transform-origin: center; display: inline-block;' : '';
   const colorStyle = ic.color ? `color: ${ic.color};` : '';
-  
+
   const isOwner = !note.userId || note.userId === currentUserId;
-  
+
   const left = document.createElement('div');
   left.style.cssText = 'display:flex;align-items:center;gap:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-grow:1;';
-  
+
   const iconSpan = document.createElement('span');
   iconSpan.className = 'lesson-icon';
   iconSpan.style.cssText = `font-size:12px;width:17px;text-align:center;flex-shrink:0;${scaleStyle}${colorStyle}`;
   iconSpan.innerHTML = ic.char;
   left.appendChild(iconSpan);
-  
+
   const titleSpan = document.createElement('span');
   titleSpan.className = 'notas-sb-note-title';
   titleSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
   titleSpan.textContent = note.title || '(sin título)';
   left.appendChild(titleSpan);
-  
+
   if (!isOwner && note.ownerName) {
     const ownerSpan = document.createElement('span');
     ownerSpan.className = 'notas-sb-note-owner';
@@ -417,9 +344,9 @@ function makeNoteItem(
     ownerSpan.textContent = `(${note.ownerName})`;
     left.appendChild(ownerSpan);
   }
-  
+
   el.appendChild(left);
-  
+
   if (isOwner) {
     const shareBtn = document.createElement('button');
     shareBtn.type = 'button';
@@ -427,12 +354,12 @@ function makeNoteItem(
     shareBtn.title = 'Compartir nota';
     shareBtn.style.cssText = 'background:none;border:none;cursor:pointer;padding:0 4px;opacity:0;transition:opacity 0.2s, color 0.15s;flex-shrink:0;color:var(--c-fg-dim);display:flex;align-items:center;justify-content:center;';
     shareBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="width:11px;height:11px;display:block;opacity:0.85;"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a3 3 0 1 0 3-3z"/></svg>`;
-    
+
     el.addEventListener('mouseenter', () => { shareBtn.style.opacity = '1'; });
     el.addEventListener('mouseleave', () => { shareBtn.style.opacity = '0'; });
     shareBtn.addEventListener('mouseenter', () => { shareBtn.style.color = 'var(--c-fg, #fff)'; });
     shareBtn.addEventListener('mouseleave', () => { shareBtn.style.color = 'var(--c-fg-dim, #888)'; });
-    
+
     shareBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       openSharingModal(note.id, note.title || '(sin título)', courseId);
@@ -441,9 +368,9 @@ function makeNoteItem(
   }
 
   // Click: open as pod in the course workspace
-  el.addEventListener('click', (e) => {
+  el.addEventListener('click', () => {
     window.dispatchEvent(new CustomEvent('musiki:open-db-note', {
-      detail: { noteId: note.id, title: note.title || '(sin título)', split: e.altKey },
+      detail: { noteId: note.id, title: note.title || '(sin título)' },
     }));
   });
 
@@ -456,48 +383,24 @@ function makeNoteItem(
 
   el.addEventListener('contextmenu', e => {
     e.preventDefault();
-    showNoteMenu(e, note, el, reload, currentUserId, courseId);
+    showNoteMenu(e, note);
   });
   return el;
 }
 
-function showNoteMenu(e: MouseEvent, note: NoteItem, el: HTMLElement, reload: () => Promise<void>, currentUserId: string, courseId: string) {
+// Used only for the "Compartidas conmigo" section: those notes are never
+// owned by the viewer (renderSharedSection only feeds it notes whose
+// userId differs from the viewer's), so this menu only ever offers to open
+// the note — rename/share/delete for the viewer's own notes now live in
+// the shared renderer's per-note action menu (see renderNotesTree above).
+function showNoteMenu(e: MouseEvent, note: NoteItem) {
   document.querySelector('.notas-sb-ctx')?.remove();
-  const isOwner = !note.userId || note.userId === currentUserId;
-  const items: [string, () => void][] = [
+  const menu = buildCtxMenu(e.clientX, e.clientY, [
     ['Abrir como pod', () => {
       window.dispatchEvent(new CustomEvent('musiki:open-db-note', {
         detail: { noteId: note.id, title: note.title || '(sin título)' },
       }));
-    }]
-  ];
-  if (isOwner) {
-    items.push(['Renombrar', () => renameNote(note, el, courseId)]);
-    items.push(['Compartir', () => openSharingModal(note.id, note.title || '(sin título)', courseId)]);
-    items.push(['Eliminar', () => deleteNote(note, reload, courseId)]);
-  }
-  const menu = buildCtxMenu(e.clientX, e.clientY, items);
-  document.body.appendChild(menu);
-  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
-}
-
-function showFolderMenu(e: MouseEvent, folder: NoteFolder, notes: NoteItem[], reload: () => Promise<void>, courseId: string, summaryEl: HTMLElement, container: HTMLElement, indent: number) {
-  document.querySelector('.notas-sb-ctx')?.remove();
-  const menu = buildCtxMenu(e.clientX, e.clientY, [
-    ['Nueva nota aquí', () => createNoteInFolder(folder.id, courseId, reload, container, nextDefaultNoteTitle(notes))],
-    ['Nueva carpeta aquí', () => beginInlineFolderCreation(container, courseId, folder.id, indent + 1)],
-    ['Renombrar', () => renameFolder(folder, summaryEl, courseId)],
-    ['Eliminar', () => deleteFolder(folder, reload, courseId)],
-  ]);
-  document.body.appendChild(menu);
-  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
-}
-
-function showRootMenu(e: MouseEvent, container: HTMLElement, courseId: string) {
-  document.querySelector('.notas-sb-ctx')?.remove();
-  const menu = buildCtxMenu(e.clientX, e.clientY, [
-    ['Nueva nota', () => beginRootNoteCreation(container)],
-    ['Nueva carpeta', () => beginInlineFolderCreation(container, courseId)],
+    }],
   ]);
   document.body.appendChild(menu);
   setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
@@ -517,116 +420,6 @@ function buildCtxMenu(x: number, y: number, items: [string, () => void][]): HTML
     menu.appendChild(btn);
   }
   return menu;
-}
-
-function renameNote(note: NoteItem, el: HTMLElement, courseId: string) {
-  const titleSpan = el.querySelector<HTMLElement>('.notas-sb-note-title');
-  if (!titleSpan) return;
-  startInlineRename(titleSpan, note.id, el, courseId);
-}
-
-async function deleteNote(note: NoteItem, reload: () => Promise<void>, courseId: string) {
-  if (!confirm(`¿Eliminar "${note.title || '(sin título)'}"?`)) return;
-  await fetch(`/api/live/notes?id=${note.id}`, { method: 'DELETE' });
-  broadcastNotesSidebarRefresh(courseId);
-  await reload();
-}
-
-function renameFolder(folder: NoteFolder, summaryEl: HTMLElement, courseId: string) {
-  const nameSpan = summaryEl.querySelector<HTMLElement>('.notas-sb-folder-name');
-  if (!nameSpan) return;
-  startInlineFolderRename(nameSpan, folder, courseId);
-}
-
-function startInlineFolderRename(nameSpan: HTMLElement, folder: NoteFolder, courseId: string) {
-  const prev = nameSpan.textContent ?? '';
-  const input = document.createElement('input');
-  input.value = prev;
-  input.placeholder = 'Nombre de la carpeta…';
-  input.style.cssText = 'font:inherit;font-size:inherit;border:none;border-bottom:1px solid var(--c-link,#3b82f6);background:transparent;color:inherit;width:7rem;outline:none;padding:0';
-  nameSpan.replaceWith(input);
-  input.focus();
-  input.select();
-  const commit = async () => {
-    const val = input.value.trim() || prev;
-    input.replaceWith(nameSpan);
-    nameSpan.textContent = val;
-    if (val !== prev) {
-      folder.name = val;
-      await fetch('/api/note-folders', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: folder.id, name: val }),
-      });
-      broadcastNotesSidebarRefresh(courseId);
-    }
-  };
-  input.addEventListener('blur', commit, { once: true });
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-    if (e.key === 'Escape') { input.value = prev; input.blur(); }
-  });
-}
-
-async function deleteFolder(folder: NoteFolder, reload: () => Promise<void>, courseId: string) {
-  if (!confirm('¿Eliminar carpeta? Las notas dentro quedarán sin carpeta.')) return;
-  await fetch(`/api/note-folders?id=${folder.id}`, { method: 'DELETE' });
-  broadcastNotesSidebarRefresh(courseId);
-  await reload();
-}
-
-function nextDefaultNoteTitle(notes: NoteItem[]): string {
-  const existing = new Set(notes.map(note => note.title.toLowerCase()));
-  let index = 1;
-  while (existing.has(`note-${String(index).padStart(2, '0')}`)) index++;
-  return `note-${String(index).padStart(2, '0')}`;
-}
-
-async function createNoteInFolder(folderId: string | null, courseId: string, reload: () => Promise<void>, container?: HTMLElement, defaultTitle = 'note-01') {
-  const res = await fetch('/api/live/notes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: defaultTitle, body: '', courseId, folderId }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => null);
-    if (container) renderNotesTreeError(container, new Error(data?.error || 'No se pudo crear la nota.'));
-    return;
-  }
-  const data = await res.json();
-  const newId = data.note?.id;
-  broadcastNotesSidebarRefresh(courseId);
-  await reload();
-  if (!newId || !container) return;
-  const item = container.querySelector<HTMLElement>(`[data-note-id="${newId}"]`);
-  const titleSpan = item?.querySelector<HTMLElement>('.notas-sb-note-title');
-  if (!titleSpan || !item) return;
-  startInlineRename(titleSpan, newId, item, courseId);
-}
-
-function startInlineRename(titleSpan: HTMLElement, noteId: string, item: HTMLElement, courseId: string) {
-  const prev = titleSpan.textContent ?? '';
-  const input = document.createElement('input');
-  input.value = prev === '(sin título)' ? '' : prev;
-  input.placeholder = 'Nombre de la nota…';
-  input.style.cssText = 'font:inherit;font-size:inherit;border:none;border-bottom:1px solid var(--c-link,#3b82f6);background:transparent;color:inherit;width:100%;outline:none;padding:0';
-  titleSpan.replaceWith(input);
-  input.focus();
-  input.select();
-  const commit = async () => {
-    const val = input.value.trim() || prev;
-    input.replaceWith(titleSpan);
-    titleSpan.textContent = val;
-    item.title = val;
-    await fetch('/api/live/notes', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: noteId, title: val }),
-    });
-    broadcastNotesSidebarRefresh(courseId);
-  };
-  input.addEventListener('blur', commit, { once: true });
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') { input.value = prev; input.blur(); } });
 }
 
 function escHtml(s: string) {
@@ -691,7 +484,7 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    
+
     <div style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-height: 0;">
       <!-- Seccion 1: Selector de nivel de acceso y Filtro -->
       <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -718,7 +511,7 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
              <div style="font-size: 11px; opacity: 0.4; padding: 12px; text-align: center;">Cargando personas...</div>
           </div>
         </div>
-        
+
         <!-- Columna Derecha: Roles y Grupos -->
         <div style="display: flex; flex-direction: column; border: 1px solid var(--c-border, rgba(120,120,140,0.15)); border-radius: 6px; background: rgba(0,0,0,0.08); overflow: hidden;">
           <div style="padding: 6px 10px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: var(--c-fg-dim); border-bottom: 1px solid rgba(120,120,140,0.12); background: rgba(0,0,0,0.15); letter-spacing: 0.05em;">Roles y Grupos</div>
@@ -778,7 +571,7 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
   const renderMembersColumn = () => {
     membersList.innerHTML = '';
     const queryStr = searchInput.value.trim().toLowerCase();
-    
+
     const filteredUsers = allUsers.filter(u => {
       if (!queryStr) return true;
       const roleLabel = u.roleInCourse === 'teacher' ? 'docente' : 'estudiante';
@@ -798,10 +591,10 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
 
     for (const u of filteredUsers) {
       const item = document.createElement('div');
-      
+
       const activeShare = activeShares.find(s => s.targetType === 'user' && String(s.targetId) === String(u.id));
       const isShared = !!activeShare;
-      
+
       item.style.cssText = `
         padding: 6px 10px;
         font-size: 11px;
@@ -814,10 +607,10 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
         border-left: 3px solid ${isShared ? 'var(--c-link, #45d384)' : 'transparent'};
         background: ${isShared ? 'rgba(69,211,132,0.04)' : 'transparent'};
       `;
-      
+
       const roleLabel = u.roleInCourse === 'teacher' ? 'Docente' : 'Estudiante';
       const groupLabel = u.grupo ? ` · Com. ${u.grupo}` : '';
-      
+
       let rightColumnMarkup = '';
       if (isShared) {
         rightColumnMarkup = `<span style="font-size: 9px; color: var(--c-link, #45d384); font-weight: 600; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;">✓ ${getAccessLabel(activeShare.accessLevel)}</span>`;
@@ -832,14 +625,14 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
         </div>
         ${rightColumnMarkup}
       `;
-      
+
       item.addEventListener('mouseenter', () => {
         item.style.background = isShared ? 'rgba(69,211,132,0.08)' : 'rgba(255,255,255,0.05)';
       });
       item.addEventListener('mouseleave', () => {
         item.style.background = isShared ? 'rgba(69,211,132,0.04)' : 'transparent';
       });
-      
+
       item.addEventListener('click', async () => {
         await fetch('/api/live/notes/share', {
           method: 'POST',
@@ -853,7 +646,7 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
         });
         void loadActiveShares();
       });
-      
+
       membersList.appendChild(item);
     }
   };
@@ -861,7 +654,7 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
   const renderGroupsColumn = () => {
     groupsList.innerHTML = '';
     const queryStr = searchInput.value.trim().toLowerCase();
-    
+
     const systemGroups = [
       { id: 'teachers', name: 'Todos los Profesores', icon: '👥' },
       { id: 'students', name: 'Todos los Estudiantes', icon: '👥' }
@@ -884,10 +677,10 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
 
     for (const itemInfo of filteredItems) {
       const item = document.createElement('div');
-      
+
       const targetType = (itemInfo.type === 'teachers' || itemInfo.type === 'students') ? itemInfo.type : 'class';
       const targetId = (itemInfo.type === 'teachers' || itemInfo.type === 'students') ? courseId : itemInfo.id;
-      
+
       const activeShare = activeShares.find(s => s.targetType === targetType && String(s.targetId) === String(targetId));
       const isShared = !!activeShare;
 
@@ -948,7 +741,7 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
       if (!res.ok) throw new Error();
       const data = await res.json();
       activeShares = data.shares ?? [];
-      
+
       activeList.innerHTML = '';
       if (activeShares.length === 0) {
         activeList.innerHTML = '<div style="font-size: 11px; opacity: 0.4; padding: 12px; text-align: center;">Nota privada (no compartida con nadie más)</div>';
@@ -1042,17 +835,17 @@ export function openSharingModal(noteId: string, noteTitle: string, courseId: st
         fetch(`/api/live/notes/share?courseId=${encodeURIComponent(courseId)}&search=`),
         fetch(`/api/live/notes/share?courseId=${encodeURIComponent(courseId)}&groups=true`)
       ]);
-      
+
       if (membersRes.ok) {
         const data = await membersRes.json();
         allUsers = data.users ?? [];
       }
-      
+
       if (groupsRes.ok) {
         const data = await groupsRes.json();
         allGroups = data.classes ?? [];
       }
-      
+
       void loadActiveShares();
     } catch {
       membersList.innerHTML = '<div style="font-size: 11px; color: #c87e7e; padding: 12px; text-align: center;">Error al cargar</div>';

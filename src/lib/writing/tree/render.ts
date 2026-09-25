@@ -7,6 +7,12 @@ export type TreeRenderOptions = {
   showVisibility: boolean; selectedNoteId?: string | null;
   load(): Promise<{ folders: TreeFolder[]; notes: TreeNote[] }>;
   onOpenNote(id: string): void;
+  /** Optional per-note icon (e.g. musiki's concept/draft glyph), prefixed onto the label text. */
+  noteIcon?(note: TreeNote): string | null | undefined;
+  /** Optional per-note suffix (e.g. musiki's "(ownerName)" for notes shared with the viewer), appended onto the label text. */
+  noteSuffix?(note: TreeNote): string | null | undefined;
+  /** Optional extra per-note actions (e.g. musiki's "Compartir") rendered alongside rename/delete in the note's action menu. Only consulted when `canManage`. */
+  noteActions?(note: TreeNote): Array<{ label: string; run: () => void | Promise<void> }>;
   actions: {
     createNote(parentId: string | null): Promise<void>;
     createFolder(parentId: string | null, name: string): Promise<void>;
@@ -38,7 +44,7 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
     if (busy || !alive) return;
     busy = true; content.setAttribute('aria-busy', 'true');
     try { await action(); await refresh(); }
-    catch { status.textContent = l.error; }
+    catch { status.textContent = l.error; await refresh(); }
     finally { busy = false; content.removeAttribute('aria-busy'); }
   }
   function createButtons(parentId: string | null) {
@@ -56,7 +62,14 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
       const siblings = nodes.filter(n => n.kind === node.kind);
       const index = siblings.indexOf(node);
       const li = document.createElement('li'); const row = document.createElement('div'); row.className = 'wt-row';
-      const label = button(title || l.newNote, () => {
+      let labelText = title || l.newNote;
+      if (node.kind === 'note') {
+        const icon = opts.noteIcon?.(node.note);
+        if (icon) labelText = `${icon} ${labelText}`;
+        const suffix = opts.noteSuffix?.(node.note);
+        if (suffix) labelText = `${labelText} ${suffix}`;
+      }
+      const label = button(labelText, () => {
         if (node.kind === 'note') opts.onOpenNote(item.id);
         else { details.open = !details.open; }
       });
@@ -91,6 +104,11 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
         }), button(l.delete, () => {
           if (window.confirm(l.confirmDelete)) void run(() => node.kind === 'folder' ? actions.deleteFolder(item.id) : actions.deleteNote(item.id));
         }));
+        if (node.kind === 'note' && opts.noteActions) {
+          for (const extra of opts.noteActions(node.note)) {
+            controls.append(button(extra.label, () => void run(async () => { await extra.run(); })));
+          }
+        }
         for (const [label, delta] of [[l.up, -1], [l.down, 1]] as const) {
           const move = button(label, () => void run(() => actions.reorder(node.kind, item.id, parentId, index + delta)));
           move.disabled = index + delta < 0 || index + delta >= siblings.length; controls.append(move);
@@ -117,6 +135,12 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
           if (node.kind === 'folder' && d.kind === 'note') {
             const count = node.children.filter(n => n.kind === 'note' && n.note.id !== d.id).length;
             void run(() => actions.reorder('note', d.id, item.id, count));
+          } else if (node.kind === 'folder' && d.kind === 'folder' && d.parentId !== item.id) {
+            // Dropping a folder directly onto another folder's row reparents it as that
+            // folder's last child (distinct from the same-parent reorder branch below,
+            // which only fires when the dragged folder is already a sibling here).
+            const count = node.children.filter(n => n.kind === 'folder' && n.folder.id !== d.id).length;
+            void run(() => actions.reorder('folder', d.id, item.id, count));
           } else if (d.kind === node.kind && (d.kind === 'note' || d.parentId === parentId)) {
             const before = siblings.slice(0, index).filter(n => (n.kind === 'note' ? n.note.id : n.folder.id) !== d.id).length;
             void run(() => actions.reorder(d.kind, d.id, parentId, before));

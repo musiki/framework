@@ -124,3 +124,96 @@ test('reorderCourseItem: courseId=null (root/no-course scope) is honored via IS 
   const existsCall = calls.find((c) => c.text.includes('SELECT id FROM "LiveClassNote"\n'));
   assert.equal(existsCall.params[2], null);
 });
+
+// ---------------------------------------------------------------------------
+// Folder reparenting (fix round 1, decision 2: drag reparenting is allowed,
+// as long as the target is the caller's own folder in the same course scope
+// or root, and not the folder itself or one of its own descendants).
+// ---------------------------------------------------------------------------
+
+test('reorderCourseItem: folder reparent — move to another (owned, same-course) folder sets parentId', async () => {
+  const updates = [];
+  // The dragged-folder exists check and the parent-ownership check share the
+  // same query shape ("SELECT id FROM \"LiveClassNoteFolder\" WHERE ..."),
+  // so both resolving truthy here models folder 'a' (dragged) and folder
+  // 'b' (target) both being USER's own folders in COURSE.
+  const { q, calls } = fakeQuery([
+    ['SELECT id FROM "LiveClassNoteFolder"\n', () => [{ id: 'ok' }]],
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => [{ id: 'a', parentId: null }, { id: 'b', parentId: null }]],
+    [/^SELECT id, position, name AS label FROM "LiveClassNoteFolder"/, () => [{ id: 'c', position: 1024, name: 'C' }]], // siblings already under 'b'
+    [/^UPDATE "LiveClassNoteFolder" SET position/, (params) => { updates.push(params); return []; }],
+    [/^UPDATE "LiveClassNoteFolder" SET "parentId"/, (params) => { updates.push(['parentId', ...params]); return []; }],
+  ]);
+
+  const result = await reorderCourseItem(q, {
+    userId: USER, courseId: COURSE, kind: 'folder', id: 'a', parentId: 'b', targetIndex: 1,
+  });
+
+  assert.ok(calls.some((c) => c.text === 'BEGIN'));
+  assert.ok(calls.some((c) => c.text === 'COMMIT'));
+  assert.ok(result.some((r) => r.id === 'a'));
+  assert.ok(updates.some((u) => u[0] === 'parentId' && u[1] === 'b' && u[2] === 'a'));
+});
+
+test('reorderCourseItem: folder reparent — move to root (parentId null) skips the parent-ownership check', async () => {
+  const updates = [];
+  const { q, calls } = fakeQuery([
+    ['SELECT id FROM "LiveClassNoteFolder"\n', () => [{ id: 'a' }]], // exists check for dragged folder 'a'
+    [/^SELECT id, position, name AS label FROM "LiveClassNoteFolder"/, () => [{ id: 'c', position: 1024, name: 'C' }]], // root siblings
+    [/^UPDATE "LiveClassNoteFolder" SET position/, (params) => { updates.push(params); return []; }],
+    [/^UPDATE "LiveClassNoteFolder" SET "parentId"/, (params) => { updates.push(['parentId', ...params]); return []; }],
+  ]);
+
+  await reorderCourseItem(q, { userId: USER, courseId: COURSE, kind: 'folder', id: 'a', parentId: null, targetIndex: 0 });
+
+  assert.ok(calls.some((c) => c.text === 'COMMIT'));
+  assert.ok(updates.some((u) => u[0] === 'parentId' && u[1] === null && u[2] === 'a'));
+  // No "SELECT id, \"parentId\" FROM ..." cycle-detection call either — that only
+  // runs for kind='folder' with a non-null parentId.
+  assert.ok(!calls.some((c) => c.text.startsWith('SELECT id, "parentId" FROM')));
+});
+
+test("reorderCourseItem: folder reparent — moving a folder to another user's folder is rejected (400), rolled back", async () => {
+  // The exists check (dragged folder 'a', this user) succeeds; the parent
+  // lookup (target folder 'b', owned by a different user) returns empty,
+  // simulating the "userId" filter excluding it.
+  let n = 0;
+  const q = async (text) => {
+    n++;
+    if (text.startsWith('SELECT id FROM "LiveClassNoteFolder"') && n === 1) return { data: [{ id: 'a' }], error: null };
+    if (text.startsWith('SELECT id FROM "LiveClassNoteFolder"')) return { data: [], error: null };
+    return { data: [], error: null };
+  };
+  await assert.rejects(
+    () => reorderCourseItem(q, { userId: USER, courseId: COURSE, kind: 'folder', id: 'a', parentId: 'b', targetIndex: 0 }),
+    (err) => err instanceof CourseOrderError && err.status === 400 && /scope/.test(err.message),
+  );
+});
+
+test('reorderCourseItem: folder reparent — moving a folder into a folder from another course is rejected (400), rolled back', async () => {
+  let n = 0;
+  const q = async (text) => {
+    n++;
+    if (text.startsWith('SELECT id FROM "LiveClassNoteFolder"') && n === 1) return { data: [{ id: 'a' }], error: null }; // dragged folder exists in COURSE
+    if (text.startsWith('SELECT id FROM "LiveClassNoteFolder"')) return { data: [], error: null }; // target folder belongs to a different courseId -> excluded by "courseId" IS NOT DISTINCT FROM
+    return { data: [], error: null };
+  };
+  await assert.rejects(
+    () => reorderCourseItem(q, { userId: USER, courseId: COURSE, kind: 'folder', id: 'a', parentId: 'foreign-course-folder', targetIndex: 0 }),
+    (err) => err instanceof CourseOrderError && err.status === 400,
+  );
+});
+
+test('reorderCourseItem: folder reparent — moving a folder into a Studio space folder is rejected (400), rolled back', async () => {
+  let n = 0;
+  const q = async (text) => {
+    n++;
+    if (text.startsWith('SELECT id FROM "LiveClassNoteFolder"') && n === 1) return { data: [{ id: 'a' }], error: null }; // dragged folder exists, spaceId IS NULL
+    if (text.startsWith('SELECT id FROM "LiveClassNoteFolder"')) return { data: [], error: null }; // target folder is a space folder -> excluded by "spaceId" IS NULL
+    return { data: [], error: null };
+  };
+  await assert.rejects(
+    () => reorderCourseItem(q, { userId: USER, courseId: COURSE, kind: 'folder', id: 'a', parentId: 'space-folder', targetIndex: 0 }),
+    (err) => err instanceof CourseOrderError && err.status === 400,
+  );
+});
