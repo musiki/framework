@@ -2,6 +2,7 @@ import { defineMiddleware } from "astro:middleware";
 import { getSession } from "auth-astro/server";
 import { ensureEvalCatalogSynced } from "./lib/eval-sync";
 import { decideTenantRequest } from "./lib/tenant/request";
+import { DEFAULT_TENANT_ID, TENANTS } from "./lib/tenant/tenants";
 
 const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
   if (!pathname) return false;
@@ -23,11 +24,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const url = context.url;
   const pathname = url.pathname;
 
-  const tenantDecision = decideTenantRequest({
-    host: context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname,
-    pathname,
-    envTenant: import.meta.env.DEV ? process.env.TENANT : undefined,
-  });
+  // Prerendered pages are built once for the default tenant; reading request
+  // headers there only triggers Astro's prerender warnings.
+  const tenantDecision = context.isPrerendered
+    ? { tenant: TENANTS[DEFAULT_TENANT_ID], action: "next" as const }
+    : decideTenantRequest({
+        host: context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname,
+        pathname,
+        envTenant: import.meta.env.DEV ? process.env.TENANT : undefined,
+      });
   context.locals.tenant = tenantDecision.tenant;
   if (tenantDecision.action === "not-found") {
     return context.rewrite("/studio/not-found");
