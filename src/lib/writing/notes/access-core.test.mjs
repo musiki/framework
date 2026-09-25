@@ -187,6 +187,37 @@ test('course: tenantId "so" on a course note (spaceId null) is always null (so r
   assert.equal(access, null);
 });
 
+test('space: folderId pointing at another space\'s folder resolves as private (author edit; supervisor null)', async () => {
+  // note.folderId is 'foreign-folder', but this space's LiveClassNoteFolder rows don't include it
+  // (it belongs to a different space) — effectiveVisibility must fall through to 'private'.
+  const foreignFolderNote = { userId: 'author', courseId: null, spaceId: 's1', visibility: null, folderId: 'foreign-folder' };
+  const routes = [
+    ['"LiveClassNote"', () => [foreignFolderNote]],
+    ['"Space"', () => [{ tenantId: 'so' }]],
+    ['"LiveClassNoteFolder"', () => [
+      { id: 'gtx', parentId: null, visibility: 'supervision' },
+      { id: 'out', parentId: null, visibility: 'committee' },
+    ]],
+  ];
+
+  {
+    const { q } = fakeQuery([
+      ...routes,
+      ['"SpaceMember"', () => [{ role: 'author' }]],
+    ]);
+    const getNoteAccess = createNoteAccessResolver(q);
+    assert.equal(await getNoteAccess('n1', 'author', { tenantId: 'so' }), 'edit');
+  }
+  {
+    const { q } = fakeQuery([
+      ...routes,
+      ['"SpaceMember"', () => [{ role: 'supervisor' }]],
+    ]);
+    const getNoteAccess = createNoteAccessResolver(q);
+    assert.equal(await getNoteAccess('n1', 'super1', { tenantId: 'so' }), null);
+  }
+});
+
 test('space: getNoteAccessDetail reports reviewer on committee as view + versionsOnly', async () => {
   const committeeNote = { userId: 'author', courseId: null, spaceId: 's1', visibility: 'committee', folderId: null };
   const { q } = fakeQuery([
@@ -198,6 +229,30 @@ test('space: getNoteAccessDetail reports reviewer on committee as view + version
   const getNoteAccessDetail = createNoteAccessDetail(q);
   const detail = await getNoteAccessDetail('n1', 'reviewer1', { tenantId: 'so' });
   assert.deepEqual(detail, { access: 'view', versionsOnly: true, spaceId: 's1' });
+});
+
+test('getNoteAccessDetail never reveals spaceId when access is denied', async () => {
+  // wrong tenant
+  {
+    const { q } = fakeQuery(spaceRoutes({ tenantId: 'so', role: 'author' }));
+    const getNoteAccessDetail = createNoteAccessDetail(q);
+    const detail = await getNoteAccessDetail('n1', 'user', { tenantId: 'musiki' });
+    assert.deepEqual(detail, { access: null, versionsOnly: false, spaceId: null });
+  }
+  // non-member
+  {
+    const { q } = fakeQuery(spaceRoutes({ role: undefined }));
+    const getNoteAccessDetail = createNoteAccessDetail(q);
+    const detail = await getNoteAccessDetail('n1', 'user', { tenantId: 'so' });
+    assert.deepEqual(detail, { access: null, versionsOnly: false, spaceId: null });
+  }
+  // member but matrix resolves to null (coordinator on a supervision-visibility folder)
+  {
+    const { q } = fakeQuery(spaceRoutes({ role: 'coordinator' }));
+    const getNoteAccessDetail = createNoteAccessDetail(q);
+    const detail = await getNoteAccessDetail('n1', 'user', { tenantId: 'so' });
+    assert.deepEqual(detail, { access: null, versionsOnly: false, spaceId: null });
+  }
 });
 
 test('space: LiveClassNoteShare rows are ignored for space notes', async () => {

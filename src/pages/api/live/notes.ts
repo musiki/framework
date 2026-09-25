@@ -103,7 +103,8 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
              WHERE (n."userId" = $1::uuid OR
                     (s."targetType" = 'user' AND s."targetId" = $1::text) OR
                     (s."targetType" = 'teachers' AND EXISTS (SELECT 1 FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = n."courseId" AND "roleInCourse" = 'teacher')) OR
-                    (s."targetType" = 'students' AND EXISTS (SELECT 1 FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = n."courseId" AND "roleInCourse" = 'student'))${classCondition})`;
+                    (s."targetType" = 'students' AND EXISTS (SELECT 1 FROM "Enrollment" WHERE "userId" = $1::uuid AND "courseId" = n."courseId" AND "roleInCourse" = 'student'))${classCondition})
+             AND n."spaceId" IS NULL`;
 
   if (noteId) {
     params.push(noteId);

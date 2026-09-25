@@ -111,10 +111,10 @@ export const GET: APIRoute = async ({ url, locals }) => {
   if (noteId) {
     // Verify ownership
     const { data: noteRows } = await query(
-      `SELECT "userId" FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
+      `SELECT "userId", "spaceId" FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
       [noteId]
     );
-    if (!noteRows?.length) return json({ error: 'Note not found' }, 404);
+    if (!noteRows?.length || noteRows[0].spaceId) return json({ error: 'Note not found' }, 404);
     if (noteRows[0].userId !== user.id) return json({ error: 'Forbidden' }, 403);
 
     const { data: shares, error } = await query(
@@ -153,10 +153,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   // Verify ownership
   const { data: noteRows } = await query(
-    `SELECT "userId" FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
+    `SELECT "userId", "spaceId" FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
     [noteId]
   );
-  if (!noteRows?.length) return json({ error: 'Note not found' }, 404);
+  if (!noteRows?.length || noteRows[0].spaceId) return json({ error: 'Note not found' }, 404);
   if (noteRows[0].userId !== user.id) return json({ error: 'Forbidden' }, 403);
 
   // Upsert share record
@@ -194,13 +194,13 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
 
   // Verify ownership via note join
   const { data: shareRows } = await query(
-    `SELECT s."noteId", n."userId"
+    `SELECT s."noteId", n."userId", n."spaceId"
      FROM "LiveClassNoteShare" s
      JOIN "LiveClassNote" n ON s."noteId" = n.id
      WHERE s.id = $1::uuid LIMIT 1`,
     [id]
   );
-  if (!shareRows?.length) return json({ error: 'Share not found' }, 404);
+  if (!shareRows?.length || shareRows[0].spaceId) return json({ error: 'Share not found' }, 404);
   if (shareRows[0].userId !== user.id) return json({ error: 'Forbidden' }, 403);
 
   const { error } = await query(

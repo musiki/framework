@@ -138,7 +138,7 @@ export function createNoteAccessDetail(q: QueryFn) {
       const { data: spaceRows } = await q(`SELECT "tenantId" FROM "Space" WHERE id=$1`, [note.spaceId]);
       const tenantId = spaceRows?.[0]?.tenantId ?? null;
       if (!tenantId || tenantId !== opts.tenantId) {
-        return { access: null, versionsOnly: false, spaceId: note.spaceId };
+        return { access: null, versionsOnly: false, spaceId: null };
       }
 
       const { data: memberRows } = await q(
@@ -147,7 +147,7 @@ export function createNoteAccessDetail(q: QueryFn) {
       );
       const role = memberRows?.[0]?.role;
       if (!isSpaceRole(role)) {
-        return { access: null, versionsOnly: false, spaceId: note.spaceId };
+        return { access: null, versionsOnly: false, spaceId: null };
       }
 
       const { data: folderRows } = await q(
@@ -157,7 +157,7 @@ export function createNoteAccessDetail(q: QueryFn) {
       const foldersById = new Map((folderRows ?? []).map((f: any) => [f.id, f]));
       const visibility = effectiveVisibility(note, foldersById);
       const { access, versionsOnly } = resolveSpaceAccess(role, visibility);
-      return { access, versionsOnly, spaceId: note.spaceId };
+      return { access, versionsOnly, spaceId: access === null ? null : note.spaceId };
     }
 
     if ((opts.tenantId ?? 'musiki') !== 'musiki') {
