@@ -66,36 +66,37 @@ const labels = {
         <button type="submit">{t(locale, 'studio.invite.create')}</button>
       </form>
       <p id="invite-result" hidden></p>
+
+      <script is:inline define:vars={{ spaceId, labels }}>
+        const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        const ruleForm = document.getElementById('rule-form');
+        const warning = document.getElementById('rule-warning');
+        ruleForm?.addEventListener('change', () => {
+          const f = new FormData(ruleForm);
+          warning.hidden = !(f.get('kind') === 'domain' && f.get('role') !== 'guest');
+        });
+        ruleForm?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const f = new FormData(ruleForm);
+          const res = await post('/api/studio/access-rules', { spaceId, kind: f.get('kind'), value: f.get('value'), role: f.get('role') });
+          if (res.ok) location.reload(); else alert(labels.invalid);
+        });
+        document.querySelectorAll('[data-remove]').forEach((btn) => btn.addEventListener('click', async () => {
+          const q = new URLSearchParams({ spaceId, ruleId: btn.dataset.remove });
+          const res = await fetch(`/api/studio/access-rules?${q}`, { method: 'DELETE' });
+          if (res.ok) location.reload();
+        }));
+        const inviteForm = document.getElementById('invite-form');
+        inviteForm?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const f = new FormData(inviteForm);
+          const res = await post('/api/studio/invites', { spaceId, email: f.get('email'), role: f.get('role') });
+          const data = await res.json();
+          const out = document.getElementById('invite-result');
+          out.hidden = false;
+          out.textContent = res.ok ? `${labels.created} ${data.url}` : labels.invalid;
+        });
+      </script>
     </>
   )}
-  <script is:inline define:vars={{ spaceId, labels }}>
-    const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    const ruleForm = document.getElementById('rule-form');
-    const warning = document.getElementById('rule-warning');
-    ruleForm?.addEventListener('change', () => {
-      const f = new FormData(ruleForm);
-      warning.hidden = !(f.get('kind') === 'domain' && f.get('role') !== 'guest');
-    });
-    ruleForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const f = new FormData(ruleForm);
-      const res = await post('/api/studio/access-rules', { spaceId, kind: f.get('kind'), value: f.get('value'), role: f.get('role') });
-      if (res.ok) location.reload(); else alert(labels.invalid);
-    });
-    document.querySelectorAll('[data-remove]').forEach((btn) => btn.addEventListener('click', async () => {
-      const q = new URLSearchParams({ spaceId, ruleId: btn.dataset.remove });
-      const res = await fetch(`/api/studio/access-rules?${q}`, { method: 'DELETE' });
-      if (res.ok) location.reload();
-    }));
-    const inviteForm = document.getElementById('invite-form');
-    inviteForm?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const f = new FormData(inviteForm);
-      const res = await post('/api/studio/invites', { spaceId, email: f.get('email'), role: f.get('role') });
-      const data = await res.json();
-      const out = document.getElementById('invite-result');
-      out.hidden = false;
-      out.textContent = res.ok ? `${labels.created} ${data.url}` : labels.invalid;
-    });
-  </script>
 </StudioLayout>

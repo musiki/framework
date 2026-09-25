@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decideSpaceAccess } from './access.ts';
-import { validateAccessRuleInput, validateInviteInput, emailDomain } from './space-roles.ts';
+import { validateAccessRuleInput, validateInviteInput, emailDomain, isUuid } from './space-roles.ts';
 
 const NOW = new Date('2026-10-01T00:00:00Z');
 const base = { email: 'ana@nmh.no', emailVerified: true, now: NOW, isMember: false, invites: [], rules: [] };
@@ -66,4 +66,12 @@ test('rule and invite input validation', () => {
   assert.equal(validateAccessRuleInput({ kind: 'email', value: 'a@b.no', role: 'author' }).ok, false);
   assert.equal(validateInviteInput({ email: 'A@B.no', role: 'supervisor' }).email, 'a@b.no');
   assert.equal(emailDomain('a@b.no'), 'b.no');
+});
+
+test('isUuid accepts canonical v4-shaped uuids, rejects malformed/missing input', () => {
+  assert.equal(isUuid('3fa85f64-5717-4562-b3fc-2c963f66afa6'), true);
+  assert.equal(isUuid('3FA85F64-5717-4562-B3FC-2C963F66AFA6'), true);
+  for (const bad of ['', 'x', 'not-a-uuid', '3fa85f64-5717-4562-b3fc-2c963f66afa', '3fa85f64571745 62b3fc2c963f66afa6', 'a'.repeat(36)]) {
+    assert.equal(isUuid(bad), false, bad);
+  }
 });

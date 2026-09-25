@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { query } from '../db/pool';
 import { resolveUserIdByEmail } from '../user-email';
-import type { SpaceRole } from './space-roles';
+import { isUuid, type SpaceRole } from './space-roles';
 import type { Tenant, TenantId } from './tenants';
 
 export const INVITE_TTL_DAYS = 14;
@@ -31,6 +31,7 @@ export async function listMemberships(tenantId: TenantId, userId: string): Promi
 }
 
 export async function getMembership(tenantId: TenantId, userId: string, spaceId: string): Promise<Membership | null> {
+  if (!isUuid(spaceId)) return null;
   return (must<Membership>(await query(`${MEMBERSHIP_SQL} AND s."id" = $3`, [tenantId, userId, spaceId]))[0] ?? null);
 }
 
@@ -71,6 +72,11 @@ export async function addRule(input: { spaceId: string; kind: 'email' | 'domain'
   ));
 }
 
-export async function removeRule(spaceId: string, ruleId: string) {
-  must(await query(`DELETE FROM "SpaceAccessRule" WHERE "spaceId" = $1 AND "id" = $2`, [spaceId, ruleId]));
+export async function removeRule(spaceId: string, ruleId: string): Promise<boolean> {
+  if (!isUuid(spaceId) || !isUuid(ruleId)) return false;
+  const deleted = must<{ id: string }>(await query(
+    `DELETE FROM "SpaceAccessRule" WHERE "spaceId" = $1 AND "id" = $2 RETURNING "id"`,
+    [spaceId, ruleId],
+  ));
+  return deleted.length > 0;
 }

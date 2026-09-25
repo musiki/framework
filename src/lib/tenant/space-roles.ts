@@ -7,6 +7,9 @@ export const isSpaceRole = (v: unknown): v is SpaceRole =>
 export const isGrantableRole = (v: unknown): v is SpaceRole =>
   isSpaceRole(v) && v !== 'author';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (value: string): boolean => UUID_RE.test(value);
+
 export const normalizeEmail = (raw: unknown): string => String(raw ?? '').trim().toLowerCase();
 
 export function emailDomain(email: string): string {

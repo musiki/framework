@@ -2,6 +2,7 @@ import type { APIRoute, APIContext } from 'astro';
 import { json } from '../../../lib/forum-server';
 import { validateAccessRuleInput } from '../../../lib/tenant/space-roles';
 import { addRule, getMembership, getStudioUserId, listRules, removeRule, studioEnabled } from '../../../lib/tenant/studio-db';
+import { assertSameOriginJson } from '../../../lib/tenant/studio-http';
 
 export const prerender = false;
 
@@ -22,6 +23,8 @@ export const GET: APIRoute = async (ctx) => {
 };
 
 export const POST: APIRoute = async (ctx) => {
+  const csrf = assertSameOriginJson(ctx.request, { requireJson: true });
+  if (csrf) return csrf;
   const body = await ctx.request.json().catch(() => ({}));
   const spaceId = String(body.spaceId || '');
   const guard = await requireAuthor(ctx, spaceId);
@@ -33,10 +36,13 @@ export const POST: APIRoute = async (ctx) => {
 };
 
 export const DELETE: APIRoute = async (ctx) => {
+  const csrf = assertSameOriginJson(ctx.request);
+  if (csrf) return csrf;
   const spaceId = ctx.url.searchParams.get('spaceId') || '';
   const ruleId = ctx.url.searchParams.get('ruleId') || '';
   const guard = await requireAuthor(ctx, spaceId);
   if ('error' in guard) return guard.error;
-  await removeRule(spaceId, ruleId);
+  const deleted = await removeRule(spaceId, ruleId);
+  if (!deleted) return json({ error: 'Not found' }, 404);
   return json({ ok: true });
 };

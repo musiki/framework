@@ -3,11 +3,14 @@ import { json } from '../../../lib/forum-server';
 import { resolveRequestAuthOrigin } from '../../../lib/auth-origin';
 import { validateInviteInput } from '../../../lib/tenant/space-roles';
 import { createInvite, getMembership, getStudioUserId, INVITE_TTL_DAYS, studioEnabled } from '../../../lib/tenant/studio-db';
+import { assertSameOriginJson } from '../../../lib/tenant/studio-http';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ locals, request }) => {
   if (!studioEnabled(locals.tenant)) return json({ error: 'Not found' }, 404);
+  const csrf = assertSameOriginJson(request, { requireJson: true });
+  if (csrf) return csrf;
   const userId = await getStudioUserId(locals);
   if (!userId) return json({ error: 'Not authenticated' }, 401);
 
