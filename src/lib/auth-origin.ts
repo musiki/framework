@@ -1,4 +1,19 @@
+import { findTenantByHost } from './tenant/resolve.ts';
+import { DEFAULT_TENANT_ID } from './tenant/tenants.ts';
+
 const LOOPBACK_HOST_RE = /^(localhost|127(?:\.\d+){3}|0\.0\.0\.0)$/i;
+
+// An origin whose host is registered to a non-default tenant is authoritative:
+// it must never be replaced by AUTH_URL (which points at musiki).
+const tenantOwnedOrigin = (origin: string): string => {
+  if (!origin) return '';
+  try {
+    const tenant = findTenantByHost(new URL(origin).hostname);
+    return tenant && tenant.id !== DEFAULT_TENANT_ID ? origin : '';
+  } catch {
+    return '';
+  }
+};
 
 const ensureProtocol = (value: string) =>
   value.startsWith('http://') || value.startsWith('https://') ? value : `https://${value}`;
@@ -47,7 +62,10 @@ export const resolveAuthBaseOrigin = (baseUrl?: string): string => {
 
   const configuredOrigin = resolveConfiguredAuthOrigin();
   const detectedBaseOrigin = normalizeOriginCandidate(baseUrl);
-  
+
+  const tenantOrigin = tenantOwnedOrigin(detectedBaseOrigin);
+  if (tenantOrigin) return tenantOrigin.replace(/^http:/, 'https:');
+
   // Prioritize configured origin if it's not a loopback
   const configuredNonLoopbackOrigin =
     configuredOrigin && !isLoopbackOrigin(configuredOrigin) ? configuredOrigin : '';

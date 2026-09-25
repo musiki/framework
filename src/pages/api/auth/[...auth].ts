@@ -4,6 +4,7 @@ import type { APIContext } from "astro";
 import { parseString } from "set-cookie-parser";
 import authConfig from "auth:config";
 import { resolveRequestAuthOrigin } from "../../../lib/auth-origin";
+import { isAuthProviderAllowed } from "../../../lib/tenant/resolve";
 
 const actions: AuthAction[] = [
   "providers",
@@ -58,6 +59,14 @@ const handleAuth = async (context: APIContext) => {
 
   if (!actions.includes(action) || !targetUrl.pathname.startsWith(`${prefix}/`)) {
     return new Response("Not found", { status: 404 });
+  }
+
+  const tenant = context.locals.tenant;
+  if (tenant && (action === "signin" || action === "callback")) {
+    const providerId = targetUrl.pathname.slice(prefix.length + 1).split("/")[1];
+    if (providerId && !isAuthProviderAllowed(tenant, providerId)) {
+      return new Response("Not found", { status: 404 });
+    }
   }
 
   console.log(`[AUTH-DEBUG] Action: ${action}, External: ${externalOrigin.toString()}, Target: ${targetUrl.toString()}`);
