@@ -46,19 +46,23 @@ const studioLinks: { id: StudioSection; href: string; key: MessageKey; icon: str
     <script is:inline>
       (function () {
         var root = document.documentElement;
-        var m = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/);
-        var local = null;
-        try { local = localStorage.getItem('theme'); } catch (e) {}
-        var theme = (m && m[1]) || local || 'light';
-        root.classList.remove('light', 'dark');
-        root.classList.add(theme === 'dark' ? 'dark' : 'light');
-        if (root.hasAttribute('data-sidebar')) {
-          var saved = null;
-          try { saved = localStorage.getItem('so-studio-sidebar'); } catch (e) {}
-          // Remembered on desktop only; the mobile overlay always starts closed.
-          var open = window.matchMedia('(min-width: 1024px)').matches && saved !== 'closed';
-          root.setAttribute('data-sidebar', open ? 'open' : 'closed');
-        }
+        try {
+          var m = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/);
+          var local = null;
+          try { local = localStorage.getItem('theme'); } catch (e) {}
+          var theme = (m && m[1]) || local || 'light';
+          root.classList.remove('light', 'dark');
+          root.classList.add(theme === 'dark' ? 'dark' : 'light');
+        } catch (e) {}
+        try {
+          if (root.hasAttribute('data-sidebar')) {
+            var saved = null;
+            try { saved = localStorage.getItem('so-studio-sidebar'); } catch (e) {}
+            // Remembered on desktop only; the mobile overlay always starts closed.
+            var open = window.matchMedia('(min-width: 1024px)').matches && saved !== 'closed';
+            root.setAttribute('data-sidebar', open ? 'open' : 'closed');
+          }
+        } catch (e) {}
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -210,10 +214,15 @@ const studioLinks: { id: StudioSection; href: string; key: MessageKey; icon: str
       <header class="so-top">
         <div class="so-container">
           {sidebar && (
-            <button type="button" class="so-icon-btn" id="so-sidebar-toggle" aria-controls="so-sidebar"
-              aria-expanded="true" aria-label={t(locale, 'studio.nav.menu')}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-            </button>
+            <>
+              <button type="button" class="so-icon-btn" id="so-sidebar-toggle" aria-controls="so-sidebar"
+                aria-expanded="true" aria-label={t(locale, 'studio.nav.menu')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+              </button>
+              <script is:inline>
+                try { document.getElementById('so-sidebar-toggle')?.setAttribute('aria-expanded', String(document.documentElement.getAttribute('data-sidebar') === 'open')); } catch (e) {}
+              </script>
+            </>
           )}
           <nav class="so-sitenav" aria-label={t(locale, 'site.nav.label')}>
             {siteLinks.map((l) => <a href={l.href}>{t(locale, l.key)}</a>)}
