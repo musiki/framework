@@ -29,3 +29,19 @@ test('redirects to foreign origins fall back to the tenant origin', () => {
     'https://so.zztt.org/studio',
   );
 });
+
+test('comma-separated x-forwarded-host uses the first entry', () => {
+  assert.equal(resolveRequestAuthOrigin(req('so.zztt.org, 10.0.0.1')), 'https://so.zztt.org');
+  assert.equal(resolveRequestAuthOrigin(req('musiki.org.ar, 10.0.0.1')), 'https://musiki.org.ar');
+});
+
+test('dev loopback keeps its port', () => {
+  const r = new Request('http://localhost:4321/api/auth/session', { headers: { host: 'localhost:4321' } });
+  const prev = process.env.AUTH_URL;
+  process.env.AUTH_URL = 'http://localhost:4321';
+  try {
+    assert.equal(resolveRequestAuthOrigin(r), 'http://localhost:4321');
+  } finally {
+    process.env.AUTH_URL = prev;
+  }
+});
