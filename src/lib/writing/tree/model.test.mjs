@@ -6,6 +6,7 @@ import {
   positionBetween,
   needsRenormalize,
   renormalizedPositions,
+  planReorder,
 } from './model.ts';
 
 // ---------------------------------------------------------------------------
@@ -187,42 +188,95 @@ test('buildTree: all-null positions reproduce musiki\'s current sort exactly (fo
 });
 
 // ---------------------------------------------------------------------------
-// dropPosition
+// planReorder
 // ---------------------------------------------------------------------------
 
-test('dropPosition: insert at start among positioned siblings', async () => {
-  const { dropPosition } = await import('./model.ts');
-  const siblings = [100, 200, 300];
-  const pos = dropPosition(siblings, 0);
-  assert.equal(pos, 100 - 1024);
+test('planReorder: all-null siblings (musiki today) -> full renormalization, dragged item lands at target index', () => {
+  // Display order as sortSiblings would produce it for all-null positions:
+  // alphabetical. Drag "c" (currently last) to index 0.
+  const siblings = [
+    { id: 'a', position: null },
+    { id: 'b', position: null },
+    { id: 'c', position: null },
+  ];
+  const plan = planReorder(siblings, 'c', 0);
+
+  // Full renormalization: every sibling gets a fresh position.
+  assert.equal(plan.length, 3);
+  assert.deepEqual(
+    plan.map((p) => p.position),
+    [1024, 2048, 3072],
+  );
+
+  // Re-sorting by the plan's positions must put the dragged item first.
+  const resorted = sortSiblings(plan, (p) => ({ position: p.position, label: p.id }), 'en');
+  assert.equal(resorted[0].id, 'c');
 });
 
-test('dropPosition: insert at end among positioned siblings', async () => {
-  const { dropPosition } = await import('./model.ts');
-  const siblings = [100, 200, 300];
-  const pos = dropPosition(siblings, 3);
-  assert.equal(pos, 300 + 1024);
+test('planReorder: fully positioned siblings with a wide gap -> single assignment for the dragged item', () => {
+  const siblings = [
+    { id: 'a', position: 1024 },
+    { id: 'b', position: 2048 },
+    { id: 'c', position: 3072 },
+  ];
+  // Move "c" to index 1 (between a and b).
+  const plan = planReorder(siblings, 'c', 1);
+  assert.deepEqual(plan, [{ id: 'c', position: (1024 + 2048) / 2 }]);
 });
 
-test('dropPosition: insert in the middle between two positioned siblings', async () => {
-  const { dropPosition } = await import('./model.ts');
-  const siblings = [100, 200, 300];
-  const pos = dropPosition(siblings, 1);
-  assert.equal(pos, 150);
+test('planReorder: tiny gap at the drop point -> falls back to full renormalization', () => {
+  const siblings = [
+    { id: 'a', position: 1024 },
+    { id: 'b', position: 1024 + 1e-10 },
+    { id: 'c', position: 3072 },
+  ];
+  // Move "c" to index 1 (between a and b), where the gap is too tiny.
+  const plan = planReorder(siblings, 'c', 1);
+  assert.equal(plan.length, 3);
+  assert.deepEqual(
+    plan.map((p) => p.position),
+    [1024, 2048, 3072],
+  );
+  assert.deepEqual(plan.map((p) => p.id), ['a', 'c', 'b']);
 });
 
-test('dropPosition: empty siblings -> 1024', async () => {
-  const { dropPosition } = await import('./model.ts');
-  const pos = dropPosition([], 0);
-  assert.equal(pos, 1024);
+test('planReorder: target index clamped to the start (0)', () => {
+  const siblings = [
+    { id: 'a', position: 1024 },
+    { id: 'b', position: 2048 },
+  ];
+  const plan = planReorder(siblings, 'b', -5);
+  assert.deepEqual(plan, [{ id: 'b', position: 1024 - 1024 }]);
 });
 
-test('dropPosition: neighbour is null -> falls back to nearest non-null neighbour', async () => {
-  const { dropPosition } = await import('./model.ts');
-  // siblings sorted as they'd appear: [100, null, null, 300]
-  const siblings = [100, null, null, 300];
-  // inserting at index 2 (between the two nulls): nearest non-null before is 100,
-  // nearest non-null after is 300 -> midpoint 200.
-  const pos = dropPosition(siblings, 2);
-  assert.equal(pos, 200);
+test('planReorder: target index clamped to the end', () => {
+  const siblings = [
+    { id: 'a', position: 1024 },
+    { id: 'b', position: 2048 },
+  ];
+  const plan = planReorder(siblings, 'a', 99);
+  assert.deepEqual(plan, [{ id: 'a', position: 2048 + 1024 }]);
+});
+
+test('planReorder: dragged item comes from another parent (not in the list)', () => {
+  const siblings = [
+    { id: 'a', position: 1024 },
+    { id: 'b', position: 2048 },
+  ];
+  const plan = planReorder(siblings, 'incoming', 1);
+  assert.deepEqual(plan, [{ id: 'incoming', position: (1024 + 2048) / 2 }]);
+});
+
+test('planReorder: dragged item from another parent into all-null siblings -> full renormalization including the incoming item', () => {
+  const siblings = [
+    { id: 'a', position: null },
+    { id: 'b', position: null },
+  ];
+  const plan = planReorder(siblings, 'incoming', 1);
+  assert.equal(plan.length, 3);
+  assert.deepEqual(plan.map((p) => p.id), ['a', 'incoming', 'b']);
+  assert.deepEqual(
+    plan.map((p) => p.position),
+    [1024, 2048, 3072],
+  );
 });

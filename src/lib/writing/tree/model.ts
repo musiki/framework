@@ -206,38 +206,56 @@ export function renormalizedPositions(count: number): number[] {
 }
 
 /**
- * Position for inserting a sibling at `index` among `siblingPositions`,
- * an array of the *already-sorted* siblings' current positions (nulls
- * allowed, in whatever order those siblings actually appear — e.g. from
- * `sortSiblings`/`buildTree` output, where null-position siblings sort
- * after positioned ones).
+ * Plan the position assignment(s) needed to move `draggedId` to
+ * `targetIndex` within `siblingsInDisplayOrder` — the sibling group
+ * exactly as currently displayed (i.e. already run through `sortSiblings`
+ * or the note equivalent), each with its raw `position`.
  *
- * Rule: take `prev` as the nearest non-null position at an index strictly
- * before `index` (scanning backwards), and `next` as the nearest non-null
- * position at an index >= `index` (scanning forwards) — i.e. we look past
- * any immediately-adjacent null-position siblings to find real numeric
- * neighbours, rather than trying to renormalize them first. Then return
- * `positionBetween(prev, next)`. This keeps the helper a one-shot pure
- * function: renormalizing the null-position siblings into real positions
- * is a separate, explicit step (`renormalizedPositions`) a caller can run
- * first if it wants every sibling numerically positioned.
+ * `draggedId` may or may not be present in `siblingsInDisplayOrder`: when
+ * the drag moves an item in from a *different* parent, it won't be, and
+ * this function treats that the same as inserting a brand-new sibling.
+ *
+ * Steps:
+ * 1. Remove `draggedId` from its current slot, if present, giving
+ *    `remaining` (the other siblings, in display order).
+ * 2. Clamp `targetIndex` to `[0, remaining.length]` and insert the dragged
+ *    id there.
+ * 3. If every sibling in `remaining` has a non-null `position` *and* the
+ *    gap the drop lands in doesn't trip `needsRenormalize`, only the
+ *    dragged item needs a new position: `positionBetween` of its new
+ *    neighbours. This is the cheap common case once a sibling group has
+ *    been fully migrated to fractional positions.
+ * 4. Otherwise (any null position among the siblings — in particular
+ *    musiki's current data, where every position is null — or the drop
+ *    would land in too tight a gap) every sibling in the resulting order
+ *    gets reassigned via `renormalizedPositions`, so the displayed order
+ *    is exactly preserved (dragged item included at `targetIndex`)
+ *    without relying on a single `1024` fallback that would otherwise
+ *    always sort the dragged item to the very top ahead of the
+ *    null-position remainder — the bug this replaces `dropPosition` to
+ *    fix.
  */
-export function dropPosition(siblingPositions: (number | null)[], index: number): number {
-  let prev: number | null = null;
-  for (let i = index - 1; i >= 0; i--) {
-    if (siblingPositions[i] !== null) {
-      prev = siblingPositions[i] as number;
-      break;
-    }
+export function planReorder(
+  siblingsInDisplayOrder: { id: string; position: number | null }[],
+  draggedId: string,
+  targetIndex: number,
+): { id: string; position: number }[] {
+  const remaining = siblingsInDisplayOrder.filter((s) => s.id !== draggedId);
+  const clampedIndex = Math.max(0, Math.min(targetIndex, remaining.length));
+
+  const prev = clampedIndex > 0 ? remaining[clampedIndex - 1].position : null;
+  const next = clampedIndex < remaining.length ? remaining[clampedIndex].position : null;
+
+  const allPositioned = remaining.every((s) => s.position !== null);
+  if (allPositioned && !needsRenormalize(prev, next)) {
+    return [{ id: draggedId, position: positionBetween(prev, next) }];
   }
 
-  let next: number | null = null;
-  for (let i = index; i < siblingPositions.length; i++) {
-    if (siblingPositions[i] !== null) {
-      next = siblingPositions[i] as number;
-      break;
-    }
-  }
-
-  return positionBetween(prev, next);
+  const resultingIds = [
+    ...remaining.slice(0, clampedIndex).map((s) => s.id),
+    draggedId,
+    ...remaining.slice(clampedIndex).map((s) => s.id),
+  ];
+  const positions = renormalizedPositions(resultingIds.length);
+  return resultingIds.map((id, i) => ({ id, position: positions[i] }));
 }
