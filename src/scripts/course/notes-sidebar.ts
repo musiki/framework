@@ -1,12 +1,34 @@
 // src/scripts/course/notes-sidebar.ts
 
+import { buildTree, type TreeNode } from '../../lib/writing/tree/model';
+
 export interface NoteFolder {
   id: string; name: string; parentId: string | null; courseId: string | null;
+  position?: number | null;
 }
 export interface NoteItem {
   id: string; title: string; folderId: string | null; updatedAt: string; body?: string;
   userId?: string;
   ownerName?: string;
+  position?: number | null;
+}
+
+// Locale used for the tree order (musiki has always sorted notas in Spanish
+// collation) and for the manual-ordering reorder endpoint's sibling read.
+const TREE_LOCALE = 'es';
+
+async function reorderItem(
+  kind: 'note' | 'folder',
+  id: string,
+  parentId: string | null,
+  targetIndex: number,
+  courseId: string,
+): Promise<void> {
+  await fetch('/api/live/notes/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ courseId, kind, id, parentId, targetIndex }),
+  });
 }
 
 function broadcastNotesSidebarRefresh(courseId: string) {
@@ -132,28 +154,15 @@ export function renderNotesTree(
     }
   };
 
-  const children = new Map<string | null, NoteFolder[]>();
-  for (const f of folders) {
-    const key = f.parentId ?? null;
-    if (!children.has(key)) children.set(key, []);
-    children.get(key)!.push(f);
-  }
-  for (const level of children.values()) {
-    level.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
-  }
-
-  const notesByFolder = new Map<string | null, NoteItem[]>();
-  const visibleFolderIds = new Set(folders.map(folder => folder.id));
-  
   const uidToUse = currentUserId || '';
   const ownedNotes = notes.filter(n => !n.userId || n.userId === uidToUse);
   const sharedNotes = notes.filter(n => n.userId && n.userId !== uidToUse);
 
-  for (const n of ownedNotes) {
-    const key = n.folderId && visibleFolderIds.has(n.folderId) ? n.folderId : null;
-    if (!notesByFolder.has(key)) notesByFolder.set(key, []);
-    notesByFolder.get(key)!.push(n);
-  }
+  // Shared tree model: same ordering rule so and musiki both use (position
+  // first, then locale-aware name/title, then id) — with every position
+  // NULL (today's data) this reproduces the exact previous alphabetical
+  // order. See src/lib/writing/tree/model.ts `buildTree`.
+  const tree = buildTree(folders, ownedNotes, TREE_LOCALE);
 
   // Root drop zone: drop a note here to remove it from its folder
   const rootDrop = document.createElement('div');
@@ -180,11 +189,19 @@ export function renderNotesTree(
   });
   container.appendChild(rootDrop);
 
-  function renderLevel(parentId: string | null, indent: number): HTMLElement {
+  function renderLevel(nodes: TreeNode[], parentId: string | null, indent: number): HTMLElement {
     const frag = document.createElement('div');
     frag.className = 'notas-sb-level';
 
-    for (const folder of (children.get(parentId) ?? [])) {
+    const folderNodes = nodes.filter((n): n is Extract<TreeNode, { kind: 'folder' }> => n.kind === 'folder');
+    const folderSiblingIds = folderNodes.map(n => n.folder.id);
+    const noteNodes = nodes.filter((n): n is Extract<TreeNode, { kind: 'note' }> => n.kind === 'note');
+    const noteSiblingIds = noteNodes.map(n => n.note.id);
+
+    for (const folderNode of folderNodes) {
+      // buildTree carries the original input objects through unchanged —
+      // this cast just recovers musiki's richer NoteFolder shape.
+      const folder = folderNode.folder as unknown as NoteFolder;
       const details = document.createElement('details');
       details.open = true;
       const isSpecialFolder = /^(70[\s-]*conceptos|80[\s-]*recursos|90[\s-]*notas)/i.test(folder.name);
@@ -197,9 +214,20 @@ export function renderNotesTree(
       summary.style.cssText = 'cursor:pointer;list-style:none;';
       summary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:12px;width:10px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">⊟</span><span class="notas-sb-folder-name">${escHtml(folder.name)}</span>`;
 
-      // Folder drop zone
+      // Draggable for manual reordering among sibling folders (same parent only —
+      // reparenting via drag stays out of scope, see deployment status notes).
+      summary.draggable = true;
+      summary.addEventListener('dragstart', e => {
+        e.stopPropagation();
+        e.dataTransfer?.setData('text/x-musiki-folder', folder.id);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+      });
+
+      // Folder drop zone: dropping a note here moves it into the folder;
+      // dropping another folder here reorders it to this folder's slot
+      // among its siblings.
       summary.addEventListener('dragover', e => {
-        if (!e.dataTransfer?.types.includes('text/x-musiki-note')) return;
+        if (!e.dataTransfer?.types.includes('text/x-musiki-note') && !e.dataTransfer?.types.includes('text/x-musiki-folder')) return;
         e.preventDefault();
         summary.style.background = 'rgba(100,180,100,.18)';
       });
@@ -209,20 +237,29 @@ export function renderNotesTree(
         e.stopPropagation();
         summary.style.background = '';
         const noteId = e.dataTransfer?.getData('text/x-musiki-note');
-        if (!noteId) return;
-        await fetch('/api/live/notes', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: noteId, folderId: folder.id }),
-        });
-        broadcastNotesSidebarRefresh(courseId);
-        await reload();
+        if (noteId) {
+          await fetch('/api/live/notes', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: noteId, folderId: folder.id }),
+          });
+          broadcastNotesSidebarRefresh(courseId);
+          await reload();
+          return;
+        }
+        const draggedFolderId = e.dataTransfer?.getData('text/x-musiki-folder');
+        if (draggedFolderId && draggedFolderId !== folder.id) {
+          const targetIndex = folderSiblingIds.slice(0, folderSiblingIds.indexOf(folder.id)).filter(id => id !== draggedFolderId).length;
+          await reorderItem('folder', draggedFolderId, parentId, targetIndex, courseId);
+          broadcastNotesSidebarRefresh(courseId);
+          await reload();
+        }
       });
 
       summary.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); showFolderMenu(e, folder, notes, reload, courseId, summary, container, indent); });
 
       details.appendChild(summary);
-      details.appendChild(renderLevel(folder.id, indent + 1));
+      details.appendChild(renderLevel(folderNode.children, folder.id, indent + 1));
       details.addEventListener('toggle', () => {
         const caret = summary.querySelector<HTMLElement>('.notas-sb-folder-caret');
         if (caret) caret.textContent = details.open ? '▾' : '▸';
@@ -232,9 +269,10 @@ export function renderNotesTree(
       frag.appendChild(details);
     }
 
-    const notesHere = [...(notesByFolder.get(parentId) ?? [])].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-    for (const note of notesHere) {
-      frag.appendChild(makeNoteItem(note, indent, reload, uidToUse, courseId));
+    for (const noteNode of noteNodes) {
+      frag.appendChild(makeNoteItem(noteNode.note as unknown as NoteItem, indent, reload, uidToUse, courseId, {
+        parentId, siblingIds: noteSiblingIds,
+      }));
     }
 
     // Virtual Shared Notes folder at the bottom of the root level
@@ -242,38 +280,38 @@ export function renderNotesTree(
       const sharedDetails = document.createElement('details');
       sharedDetails.open = false;
       sharedDetails.className = 'notas-sb-folder--special shared-notes-folder';
-      
+
       const sharedSummary = document.createElement('summary');
       sharedSummary.className = 'notas-sb-folder';
       sharedSummary.style.cssText = 'cursor:pointer;list-style:none;';
       sharedSummary.innerHTML = `<span class="notas-sb-folder-caret" style="color:var(--c-fg-dim);font-size:12px;width:10px">▸</span><span class="notas-sb-folder-icon" style="color:var(--c-fg-dim);font-size:11px">👥</span><span class="notas-sb-folder-name">Compartidas conmigo</span>`;
-      
+
       const sharedContent = document.createElement('div');
       sharedContent.className = 'notas-sb-level';
-      
+
       const sortedShared = [...sharedNotes].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
       for (const note of sortedShared) {
-        sharedContent.appendChild(makeNoteItem(note, indent + 1, reload, uidToUse, courseId));
+        sharedContent.appendChild(makeNoteItem(note, indent + 1, reload, uidToUse, courseId, null));
       }
-      
+
       sharedDetails.appendChild(sharedSummary);
       sharedDetails.appendChild(sharedContent);
-      
+
       sharedDetails.addEventListener('toggle', () => {
         const caret = sharedSummary.querySelector<HTMLElement>('.notas-sb-folder-caret');
         if (caret) caret.textContent = sharedDetails.open ? '▾' : '▸';
       });
-      
+
       const caret = sharedSummary.querySelector<HTMLElement>('.notas-sb-folder-caret');
       if (caret) caret.textContent = sharedDetails.open ? '▾' : '▸';
-      
+
       frag.appendChild(sharedDetails);
     }
 
     return frag;
   }
 
-  container.appendChild(renderLevel(null, 0));
+  container.appendChild(renderLevel(tree, null, 0));
   const placeholder = document.createElement('button');
   placeholder.type = 'button';
   placeholder.className = 'notas-sb-placeholder';
@@ -311,13 +349,45 @@ export function renderNotesTree(
   };
 }
 
-function makeNoteItem(note: NoteItem, indent: number, reload: () => Promise<void>, currentUserId: string, courseId: string): HTMLElement {
+function makeNoteItem(
+  note: NoteItem,
+  indent: number,
+  reload: () => Promise<void>,
+  currentUserId: string,
+  courseId: string,
+  dropCtx: { parentId: string | null; siblingIds: string[] } | null,
+): HTMLElement {
   const el = document.createElement('div');
   el.className = 'notas-sb-item';
   el.draggable = true;
   el.dataset.noteId = note.id;
   el.style.cssText = `cursor:pointer;border-left:2px solid transparent;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;padding-right:4px;`;
   el.title = note.title || '(sin título)';
+
+  // Manual reordering: dropping a note onto another owned note inserts it
+  // right before the target in that note's folder (cross-folder moves
+  // included — matches the existing folder-summary/root drop behavior).
+  if (dropCtx) {
+    el.addEventListener('dragover', e => {
+      if (!e.dataTransfer?.types.includes('text/x-musiki-note')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.style.background = 'rgba(100,180,100,.12)';
+    });
+    el.addEventListener('dragleave', () => { el.style.background = ''; });
+    el.addEventListener('drop', async e => {
+      const draggedId = e.dataTransfer?.getData('text/x-musiki-note');
+      if (!draggedId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.style.background = '';
+      if (draggedId === note.id) return;
+      const targetIndex = dropCtx.siblingIds.slice(0, dropCtx.siblingIds.indexOf(note.id)).filter(id => id !== draggedId).length;
+      await reorderItem('note', draggedId, dropCtx.parentId, targetIndex, courseId);
+      broadcastNotesSidebarRefresh(courseId);
+      await reload();
+    });
+  }
   
   const ic = getNoteIconInfo(note);
   const scaleStyle = ic.isConcept ? 'transform: scale(0.6); transform-origin: center; display: inline-block;' : '';

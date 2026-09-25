@@ -25,7 +25,7 @@ export const GET: APIRoute = async ({ locals, url }) => {
   const courseId = cleanString(url.searchParams.get('courseId') ?? '', 120) || null;
 
   const params: any[] = [user.id];
-  let sql = `SELECT id, name, "parentId", "courseId", "createdAt"
+  let sql = `SELECT id, name, "parentId", "courseId", "createdAt", "position"
              FROM "LiveClassNoteFolder" WHERE "userId" = $1`;
   if (courseId) { params.push(courseId); sql += ` AND "courseId" = $${params.length}`; }
   sql += ' ORDER BY name ASC';
