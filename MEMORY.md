@@ -1,5 +1,13 @@
 # MEMORY.md — Project Activity Log
 
+<2026-09-25 tenant-layer-so-studio> <br>
+Rama `feat/tenant-layer` (commits `486ffa4`..HEAD sobre `7895735`): capa de tenants en el engine para servir la cara inglesa aislada `so` en so.zztt.org/studio (spec `docs/superpowers/specs/2026-09-25-tenant-layer-design.md`, plan `docs/superpowers/plans/2026-09-25-tenant-layer.md`).
+- `src/lib/tenant/*`: config `TENANTS` (musiki/hem/so), resolución por host, allowlist de rutas (so sólo `/studio`, `/api/studio`, `/api/auth`), `decideAuthRoute` (providers ajenos 404; en so las páginas por defecto de Auth.js redirigen a `/studio/login`).
+- Auth: proveedor `logto-so`, origen por request (so nunca cae en `AUTH_URL` de musiki), `signIn` por tenant con invitaciones y reglas email/dominio; los usuarios creados sólo por so no pueden entrar a musiki (fail-open ante error de DB).
+- DB: migración `Space`, `SpaceMember`, `SpaceInvite`, `SpaceAccessRule` + seed `so-dissertation-space.sql` (aborta si el email no tiene usuario). Dev usa la DB aislada `musiki_staging`.
+- Shell `/studio` en inglés (login, espacios, invitaciones, reglas de acceso) con i18n `en`/`es`.
+- Impacto en musiki: ninguno funcional salvo el rechazo de usuarios sólo-so. Todavía NO desplegado (Caddy, app Logto y migración de producción pendientes, Task 11 del plan).
+
 <2026-07-20 progress-pod-academic-daily> <br>
 Primera plantilla funcional del POD de progreso como “Duolingo académico”, basada en `docs/evaluation/pod-progreso-prototipo.html`, `catedra-recorrido.md`, `Evaluation MOC.md` y `paradigmas-evaluacion.md`:
 - `CourseProgressPod.astro` volvió a ser dueño de markup, CSS y motor cliente. Conserva la estética austera del prototipo: cabecera académica, rúbrica con iconos/barras, camino serpentino agrupado por unidades, estados no leído/leído/completado/evaluado, logros (conexión/coloquio/pares/aporte), obra con halo 4C, leyenda y connectoma Three.js.
