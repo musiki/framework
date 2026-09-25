@@ -20,6 +20,8 @@ const labels = {
   domainWarning: t(locale, 'studio.access.domainWarning'),
   invalid: t(locale, 'studio.access.invalid'),
   created: t(locale, 'studio.invite.created'),
+  // Raw template: {days} is filled in the browser from the API response.
+  expires: t(locale, 'studio.invite.expires'),
 };
 ---
 <StudioLayout title={t(locale, 'studio.access.title')} locale={locale}>
@@ -94,7 +96,9 @@ const labels = {
           const data = await res.json();
           const out = document.getElementById('invite-result');
           out.hidden = false;
-          out.textContent = res.ok ? `${labels.created} ${data.url}` : labels.invalid;
+          out.textContent = res.ok
+            ? `${labels.created} ${data.url} ${labels.expires.replace('{days}', String(data.expiresInDays))}`
+            : labels.invalid;
         });
       </script>
     </>

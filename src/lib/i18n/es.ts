@@ -8,7 +8,6 @@ export const es: Dict = {
     signOut: 'Cerrar sesión',
     mySpaces: 'Tus espacios',
     noSpaces: 'Todavía no sos miembro de ningún espacio.',
-    role: 'Rol',
     settings: 'Configuración de acceso',
     invite: {
       title: 'Invitación',

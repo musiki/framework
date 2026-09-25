@@ -6,7 +6,6 @@ export const en = {
     signOut: 'Sign out',
     mySpaces: 'Your spaces',
     noSpaces: 'You are not a member of any space yet.',
-    role: 'Role',
     settings: 'Access settings',
     invite: {
       title: 'Invitation',

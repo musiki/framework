@@ -2,6 +2,7 @@
 import type { Locale } from '../lib/tenant/tenants';
 interface Props { title: string; locale: Locale }
 const { title, locale } = Astro.props;
+const brand = Astro.locals.tenant.brand.name;
 ---
 <!doctype html>
 <html lang={locale}>
@@ -9,7 +10,7 @@ const { title, locale } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
-    <title>{title} · so</title>
+    <title>{title} · {brand}</title>
     <style is:global>
       :root { --so-bg: #fff; --so-fg: #111; --so-muted: #666; --so-border: #e5e5e5; --so-accent: #111; }
       @media (prefers-color-scheme: dark) {
@@ -27,7 +28,7 @@ const { title, locale } = Astro.props;
   </head>
   <body>
     <div class="so-wrap">
-      <header class="so-top"><a href="/studio">so / studio</a><slot name="nav" /></header>
+      <header class="so-top"><a href="/studio">{brand} / studio</a><slot name="nav" /></header>
       <main><slot /></main>
     </div>
   </body>
