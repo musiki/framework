@@ -1,0 +1,12 @@
+---
+import StudioLayout from '../../layouts/StudioLayout.astro';
+import { t } from '../../lib/i18n';
+export const prerender = false;
+const locale = Astro.locals.tenant.locale;
+Astro.response.status = 404;
+---
+<StudioLayout title={t(locale, 'errors.notFound')} locale={locale}>
+  <h1>{t(locale, 'errors.notFound')}</h1>
+  <p class="so-muted">{t(locale, 'errors.notFoundLead')}</p>
+  <p><a href="/studio">{t(locale, 'errors.backHome')}</a></p>
+</StudioLayout>

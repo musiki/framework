@@ -3,11 +3,13 @@
 /// <reference types="auth-astro" />
 
 import type { Session } from "@auth/core/types";
+import type { Tenant } from "./lib/tenant/tenants";
 
 declare global {
   namespace App {
     interface Locals {
       session: Session | null;
+      tenant: Tenant;
     }
   }
 
