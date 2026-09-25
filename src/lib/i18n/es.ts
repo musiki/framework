@@ -20,6 +20,10 @@ export const es: Dict = {
       created: 'Link de invitación (compartilo con la persona invitada):',
       expires: 'Vence en {days} días.',
     },
+    errors: {
+      accessDenied: 'Esta cuenta no tiene acceso al estudio.',
+      generic: 'No se pudo iniciar sesión. Intentá de nuevo.',
+    },
     access: {
       title: 'Reglas de acceso',
       lead: 'Las personas cuyo email verificado coincide con alguna regla pueden entrar con el rol indicado.',

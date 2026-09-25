@@ -34,3 +34,9 @@ test('no empty strings in any dictionary, and es has every en key', () => {
   }
   for (const [k, v] of leaves(es)) assert.ok(v.trim(), `empty es: ${k}`);
 });
+
+test('studio sign-in error messages', () => {
+  assert.equal(t('en', 'studio.errors.accessDenied'), 'This account does not have access to the studio.');
+  assert.equal(t('en', 'studio.errors.generic'), 'Sign-in failed. Please try again.');
+  assert.notEqual(t('es', 'studio.errors.accessDenied'), t('en', 'studio.errors.accessDenied'));
+});

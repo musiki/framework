@@ -18,6 +18,10 @@ export const en = {
       created: 'Invitation link (share it with the invitee):',
       expires: 'Expires in {days} days.',
     },
+    errors: {
+      accessDenied: 'This account does not have access to the studio.',
+      generic: 'Sign-in failed. Please try again.',
+    },
     access: {
       title: 'Access rules',
       lead: 'People whose verified email matches one of these rules can sign in with the given role.',

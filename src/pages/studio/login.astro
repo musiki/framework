@@ -1,20 +1,27 @@
 ---
 import StudioLayout from '../../layouts/StudioLayout.astro';
-import { SignIn } from 'auth-astro/components';
+import { SignIn, SignOut } from 'auth-astro/components';
 import { t } from '../../lib/i18n';
 import { resolveRequestAuthOrigin } from '../../lib/auth-origin';
-import { studioEnabled } from '../../lib/tenant/studio-db';
+import { studioLoginErrorKey } from '../../lib/tenant/auth-gate';
+import { getStudioUserId, studioEnabled } from '../../lib/tenant/studio-db';
 export const prerender = false;
 
 const tenant = Astro.locals.tenant;
 if (!studioEnabled(tenant)) return Astro.rewrite('/studio/not-found');
-if (Astro.locals.session?.user?.email) return Astro.redirect('/studio');
+// Only a session that resolves to a known user may skip the sign-in page;
+// otherwise /studio would bounce straight back here (redirect loop).
+if (await getStudioUserId(Astro.locals)) return Astro.redirect('/studio');
+const hasSession = Boolean(Astro.locals.session?.user?.email);
 const locale = tenant.locale;
 const callbackUrl = `${resolveRequestAuthOrigin(Astro.request)}/studio`;
 const provider = tenant.authProviders[0];
+const errorKey = studioLoginErrorKey(Astro.url.searchParams.get('error'));
 ---
 <StudioLayout title={t(locale, 'studio.signIn')} locale={locale}>
+  {hasSession && <SignOut slot="nav"><span>{t(locale, 'studio.signOut')}</span></SignOut>}
   <h1>{t(locale, 'studio.signIn')}</h1>
+  {errorKey && <p role="alert">{t(locale, errorKey)}</p>}
   <p class="so-muted">{t(locale, 'studio.signInLead')}</p>
   <SignIn provider={provider} options={{ callbackUrl }}><span>{t(locale, 'studio.signIn')}</span></SignIn>
 </StudioLayout>
