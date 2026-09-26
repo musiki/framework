@@ -38,6 +38,7 @@ const SPANISH_LABELS: TreeLabels = {
   empty: 'Sin notas',
   loading: 'Cargando…',
   error: 'No se pudieron cargar las notas.',
+  actionError: 'No se pudo completar la acción.',
   up: '↑',
   down: '↓',
   actions: 'Acciones',
@@ -121,6 +122,11 @@ function nextDefaultNoteTitle(notes: NoteItem[]): string {
 // create buttons to actually exist in the DOM before clicking them.
 const treeReady = new WeakMap<HTMLElement, Promise<void>>();
 
+// Tracks, per outer sidebar container, the currently-mounted shared tree so a
+// re-render (e.g. after a course switch reuses the same container) destroys
+// the previous tree instance instead of leaking its refresh loop/listeners.
+const mountedTree = new WeakMap<HTMLElement, { destroy(): void }>();
+
 export function beginRootNoteCreation(container: HTMLElement): void {
   const ready = treeReady.get(container) ?? Promise.resolve();
   void ready.then(() => {
@@ -156,6 +162,7 @@ export function renderNotesTree(
   courseId: string,
   currentUserId?: string,
 ) {
+  mountedTree.get(container)?.destroy();
   container.innerHTML = '';
 
   const treeContainer = document.createElement('div');
@@ -228,6 +235,14 @@ export function renderNotesTree(
       label: 'Compartir',
       run: () => openSharingModal(note.id, (note as unknown as NoteItem).title || '(sin título)', courseId),
     }],
+    // The dockview workspace's external-drop handler
+    // (src/scripts/course/dockview-workspace.ts) reads these to open the
+    // note as a db-note pod; folders have nothing to drop onto a pod, so
+    // they carry no payload.
+    dragData: (n): Record<string, string> => n.kind === 'note' ? {
+      'text/x-musiki-note': n.note.id,
+      'text/x-musiki-note-title': (n.note as unknown as NoteItem).title || '',
+    } : {},
     load: async () => {
       const data = pendingInitial ?? await loadNotesTree(courseId);
       pendingInitial = null;
@@ -305,6 +320,7 @@ export function renderNotesTree(
     },
   });
 
+  mountedTree.set(container, tree);
   treeReady.set(container, tree.refresh());
 }
 

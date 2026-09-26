@@ -120,6 +120,12 @@ export async function reorderCourseItem(
   if (beginResult.error) throw toThrowable(beginResult.error);
 
   try {
+    // Serialize concurrent reorders from the same user for the lifetime of this
+    // transaction (auto-released at COMMIT/ROLLBACK) — without this, two
+    // concurrent drags can both read the same sibling snapshot and each plan a
+    // position that collides with the other's write.
+    await runOrThrow(q, 'SELECT pg_advisory_xact_lock(hashtext($1))', [userId]);
+
     if (parentId !== null) {
       const parentRows = await runOrThrow(
         q,
@@ -201,7 +207,15 @@ export async function reorderCourseItem(
     if (commitResult.error) throw toThrowable(commitResult.error);
     return assignments;
   } catch (err) {
-    await checkedQuery(q, 'ROLLBACK');
+    // If ROLLBACK itself fails, the original error is still the one worth
+    // surfacing (e.g. "cannot move folder into its own descendant") — a
+    // rollback failure is a connection/transaction-state problem the caller
+    // handles separately (route releases the client with an error either way).
+    try {
+      await checkedQuery(q, 'ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('[course-order-core] ROLLBACK failed after error:', rollbackErr, 'original error:', err);
+    }
     throw err;
   }
 }

@@ -2,7 +2,7 @@ import type { Dict } from './en.ts';
 
 export const es: Dict = {
   studio: {
-    tree: {"newNote": "Nueva nota", "newFolder": "Nueva carpeta", "rename": "Renombrar", "delete": "Eliminar", "visibility": "Visibilidad", "inherit": "Heredar", "private": "Privado", "supervision": "Supervisión", "committee": "Comité", "public": "Público", "confirmDelete": "¿Eliminar este elemento? Eliminar una carpeta también elimina sus subcarpetas.", "empty": "Sin notas.", "loading": "Cargando…", "error": "No se pudo guardar o cargar el espacio. Intenta de nuevo.", "up": "Subir", "down": "Bajar", "actions": "Acciones", "select": "Selecciona o crea una nota", "trace": "Traza", "edit": "Editar / vista previa", "download": "Descargar", "structure": "Organiza las notas y elige quién puede acceder."},
+    tree: {"newNote": "Nueva nota", "newFolder": "Nueva carpeta", "rename": "Renombrar", "delete": "Eliminar", "visibility": "Visibilidad", "inherit": "Heredar", "private": "Privado", "supervision": "Supervisión", "committee": "Comité", "public": "Público", "confirmDelete": "¿Eliminar este elemento? Eliminar una carpeta también elimina sus subcarpetas.", "empty": "Sin notas.", "loading": "Cargando…", "error": "No se pudo guardar o cargar el espacio. Intenta de nuevo.", "actionError": "No se pudo completar la acción.", "up": "Subir", "down": "Bajar", "actions": "Acciones", "select": "Selecciona o crea una nota", "trace": "Traza", "edit": "Editar / vista previa", "download": "Descargar", "structure": "Organiza las notas y elige quién puede acceder."},
     title: 'Estudio',
     signIn: 'Iniciar sesión',
     signInLead: 'Iniciá sesión para acceder al estudio de escritura.',

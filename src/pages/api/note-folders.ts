@@ -73,7 +73,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   if (parentId !== undefined) {
     if (parentId === id) return json({ error: 'A folder cannot contain itself' }, 400);
     const { data: ownFolder, error: ownFolderError } = await query(
-      `SELECT "courseId" FROM "LiveClassNoteFolder" WHERE id = $1 AND "userId" = $2 LIMIT 1`,
+      `SELECT "courseId" FROM "LiveClassNoteFolder" WHERE id = $1 AND "userId" = $2 AND "spaceId" IS NULL LIMIT 1`,
       [id, user.id],
     );
     if (ownFolderError) return json({ error: ownFolderError.message }, 500);
@@ -91,7 +91,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   params.push(id, user.id);
   const { data, error } = await query(
     `UPDATE "LiveClassNoteFolder" SET ${sets.join(', ')}
-     WHERE "id" = $${params.length - 1} AND "userId" = $${params.length} RETURNING *`,
+     WHERE "id" = $${params.length - 1} AND "userId" = $${params.length} AND "spaceId" IS NULL RETURNING *`,
     params,
   );
   if (error) return json({ error: error.message }, 500);
@@ -106,19 +106,24 @@ export const DELETE: APIRoute = async ({ locals, url }) => {
   if (!id) return json({ error: 'id required' }, 400);
 
   // Deleting a parent cascades its folders; lift notes from every descendant first.
+  // UNION (not UNION ALL) de-dupes the recursive walk: without it, a folder
+  // reachable through more than one parentId chain (e.g. a cycle, or two rows
+  // that both happen to point at it — never valid data, but not something this
+  // query should be able to loop forever or blow up on) would be walked
+  // repeatedly instead of once.
   await query(
     `WITH RECURSIVE descendants AS (
-       SELECT id FROM "LiveClassNoteFolder" WHERE id = $1 AND "userId" = $2
-       UNION ALL
+       SELECT id FROM "LiveClassNoteFolder" WHERE id = $1 AND "userId" = $2 AND "spaceId" IS NULL
+       UNION
        SELECT f.id FROM "LiveClassNoteFolder" f
        JOIN descendants d ON f."parentId" = d.id
-       WHERE f."userId" = $2
+       WHERE f."userId" = $2 AND f."spaceId" IS NULL
      )
      UPDATE "LiveClassNote" SET "folderId" = NULL
-     WHERE "folderId" IN (SELECT id FROM descendants) AND "userId" = $2`,
+     WHERE "folderId" IN (SELECT id FROM descendants) AND "userId" = $2 AND "spaceId" IS NULL`,
     [id, user.id],
   );
-  const { error } = await query(`DELETE FROM "LiveClassNoteFolder" WHERE "id" = $1 AND "userId" = $2`, [id, user.id]);
+  const { error } = await query(`DELETE FROM "LiveClassNoteFolder" WHERE "id" = $1 AND "userId" = $2 AND "spaceId" IS NULL`, [id, user.id]);
   if (error) return json({ error: error.message }, 500);
   return json({ ok: true });
 };

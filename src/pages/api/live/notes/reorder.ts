@@ -65,11 +65,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
     client.release();
     return json({ ok: true, positions });
   } catch (err) {
-    // The transaction failed (the core already issued ROLLBACK on its own
-    // `q` before rethrowing) — release with the error so pg discards this
-    // connection instead of returning a possibly still-mid-rollback
-    // connection to the pool for reuse.
-    client.release(err instanceof Error ? err : new Error(String(err)));
+    if (err instanceof CourseOrderError) {
+      // Either rejected before any BEGIN was issued (the dragged-item
+      // existence/self-parent checks), or the core already rolled back
+      // cleanly on its own `q` before rethrowing — the connection is fine
+      // to return to the pool normally.
+      client.release();
+    } else {
+      // An unexpected DB/transaction-layer error — release with the error so
+      // pg discards this connection instead of returning a possibly still
+      // mid-rollback connection to the pool for reuse.
+      client.release(err instanceof Error ? err : new Error(String(err)));
+    }
     return errorResponse(err);
   }
 };

@@ -102,6 +102,40 @@ test('reorderCourseItem: a failed UPDATE inside the transaction rolls back and r
   assert.ok(!calls.some((c) => c.text === 'COMMIT'));
 });
 
+test('reorderCourseItem: takes a per-user advisory xact lock right after BEGIN, before reading siblings', async () => {
+  const order = [];
+  const { q } = fakeQuery([
+    ['SELECT id FROM "LiveClassNote"\n', () => [{ id: 'n1' }]],
+    ['BEGIN', () => { order.push('BEGIN'); return []; }],
+    ['pg_advisory_xact_lock', (params) => { order.push(['lock', ...params]); return []; }],
+    [/^SELECT id, position, title AS label FROM "LiveClassNote"/, () => { order.push('siblings'); return [{ id: 'n1', position: null, title: 'A' }]; }],
+  ]);
+  await reorderCourseItem(q, { userId: USER, courseId: COURSE, kind: 'note', id: 'n1', parentId: null, targetIndex: 0 });
+  const lockIndex = order.findIndex((e) => Array.isArray(e) && e[0] === 'lock');
+  assert.ok(lockIndex > -1);
+  assert.equal(order[lockIndex][1], USER); // hashtext($1) keyed on the caller's userId
+  assert.ok(order.indexOf('BEGIN') < lockIndex);
+  assert.ok(lockIndex < order.indexOf('siblings'));
+});
+
+test('reorderCourseItem: if ROLLBACK itself fails, the original error is still what gets thrown', async () => {
+  const q = async (text) => {
+    if (text.includes('SELECT id FROM "LiveClassNote"\n')) return { data: [{ id: 'n1' }], error: null };
+    if (text === 'BEGIN') return { data: [], error: null };
+    if (text.includes('pg_advisory_xact_lock')) return { data: [], error: null };
+    if (/^SELECT id, position, title AS label FROM "LiveClassNote"/.test(text)) {
+      return { data: [{ id: 'n1', position: 1024, label: 'A' }], error: null };
+    }
+    if (/^UPDATE "LiveClassNote" SET position/.test(text)) return { data: null, error: new Error('db exploded') };
+    if (text === 'ROLLBACK') return { data: null, error: new Error('rollback also failed') };
+    return { data: [], error: null };
+  };
+  await assert.rejects(
+    () => reorderCourseItem(q, { userId: USER, courseId: COURSE, kind: 'note', id: 'n1', parentId: null, targetIndex: 0 }),
+    /db exploded/, // the ORIGINAL error, not "rollback also failed"
+  );
+});
+
 test('reorderCourseItem: never touches a space row — scope filters always include "spaceId" IS NULL', async () => {
   const { q, calls } = fakeQuery([
     ['SELECT id FROM "LiveClassNote"\n', () => [{ id: 'n1' }]],

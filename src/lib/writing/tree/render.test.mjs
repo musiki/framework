@@ -95,9 +95,58 @@ test('a failing action shows the error label and still reloads the tree', async 
   window.confirm = () => true;
   [...container.querySelectorAll('button')].find(b => b.textContent === 'rename').click();
   await new Promise(r => setTimeout(r, 0));
-  // The error message is shown transiently (status.textContent = l.error) before the
-  // subsequent reload's own status updates take over — what's asserted here is that a
-  // reload actually happened after the failure, not a lingering error string.
+  // The reload happens BEFORE the error label is set (refresh() would otherwise
+  // silently overwrite a status.textContent set beforehand) — asserted below by
+  // checking the final status text is the error label, not blank/loading.
   assert.ok(loads > loadsBeforeRename);
+  const status = container.querySelector('[role="status"]');
+  assert.equal(status.textContent, labels.error);
+  tree.destroy();
+});
+test('a failing action prefers actionError over error when the labels provide it, and it survives the post-failure reload', async () => {
+  const container = setup();
+  const labelsWithActionError = { ...labels, actionError: 'custom-action-error' };
+  const tree = renderTree({ container, labels: labelsWithActionError, locale:'en', canManage:true, showVisibility:false,
+    load: async () => ({ folders: [], notes: [{ id:'n', title:'Alpha', folderId:null }] }),
+    onOpenNote() {}, actions: { renameNote: async () => { throw new Error('boom'); } } });
+  await tree.refresh();
+  window.prompt = () => 'New name';
+  window.confirm = () => true;
+  [...container.querySelectorAll('button')].find(b => b.textContent === 'rename').click();
+  await new Promise(r => setTimeout(r, 0));
+  const status = container.querySelector('[role="status"]');
+  assert.equal(status.textContent, 'custom-action-error');
+  tree.destroy();
+});
+test('dragstart sets a private MIME (not text/plain) plus any dragData hook payload', async () => {
+  const container = setup();
+  const tree = renderTree({ container, labels, locale:'en', canManage:true, showVisibility:false,
+    load: async () => ({folders:[],notes:[{id:'n',title:'Alpha',folderId:null}]}),
+    onOpenNote() {}, dragData: (node) => node.kind === 'note' ? { 'text/x-musiki-note': node.note.id, 'text/x-musiki-note-title': node.note.title } : {},
+    actions: {} });
+  await tree.refresh();
+  const label = container.querySelector('.wt-label');
+  const set = [];
+  const dataTransfer = { setData(k, v) { set.push([k, v]); }, getData() { return ''; } };
+  const dragStart = new window.Event('dragstart', { bubbles: true });
+  Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer });
+  label.dispatchEvent(dragStart);
+  assert.ok(set.some(([k, v]) => k === 'application/x-writing-tree' && v === 'n'));
+  assert.ok(!set.some(([k]) => k === 'text/plain'));
+  assert.ok(set.some(([k, v]) => k === 'text/x-musiki-note' && v === 'n'));
+  assert.ok(set.some(([k, v]) => k === 'text/x-musiki-note-title' && v === 'Alpha'));
+  tree.destroy();
+});
+test('noteActions run directly, not through run() — no forced busy/reload for a side action like Compartir', async () => {
+  const container = setup(); let loads = 0; let ran = false;
+  const tree = renderTree({ container, labels, locale:'en', canManage:true, showVisibility:false,
+    load: async () => { loads++; return { folders: [], notes: [{ id:'n', title:'Alpha', folderId:null }] }; },
+    onOpenNote() {}, noteActions: () => [{ label: 'Compartir', run: () => { ran = true; } }], actions: {} });
+  await tree.refresh();
+  const loadsBeforeShare = loads;
+  [...container.querySelectorAll('button')].find(b => b.textContent === 'Compartir').click();
+  await new Promise(r => setTimeout(r, 0));
+  assert.ok(ran);
+  assert.equal(loads, loadsBeforeShare); // no reload triggered
   tree.destroy();
 });

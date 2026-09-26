@@ -6923,7 +6923,7 @@ function renderLessonsTreeHTML(
             if (!isMobileViewport()) return;
             const target = event.target;
             if (!(target instanceof Element)) return;
-            const navigationLink = target.closest('.lesson-link, .class-toc-link, .course-title-link, .recursos-sidebar-resource-link, .notas-sb-item');
+            const navigationLink = target.closest('.lesson-link, .class-toc-link, .course-title-link, .recursos-sidebar-resource-link, .notas-sb-item, .notas-sb-owned-tree li > .wt-row > .wt-label');
             if (!(navigationLink instanceof HTMLElement)) return;
             applySidebarState('left', false);
           });
