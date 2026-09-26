@@ -316,7 +316,7 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
   if (!id) return json({ error: 'id required' }, 400);
 
   const { error } = await query(
-    `DELETE FROM "LiveClassNote" WHERE "id" = $1::uuid AND "userId" = $2::uuid`,
+    `DELETE FROM "LiveClassNote" WHERE "id" = $1::uuid AND "userId" = $2::uuid AND "spaceId" IS NULL`,
     [id, user.id]
   );
 
