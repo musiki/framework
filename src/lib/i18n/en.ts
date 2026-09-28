@@ -39,6 +39,7 @@ export const en = {
       overview: 'Overview',
       structure: 'Structure',
       editor: 'Editor',
+      plugins: 'Plugins',
       access: 'Access & invites',
       dissertation: 'Dissertation',
       menu: 'Toggle sidebar',
@@ -52,6 +53,20 @@ export const en = {
     editor: {
       title: 'Editor',
       lead: 'The writing editor with textual tracing will open here.',
+    },
+    plugins: {
+      title: 'Plugins',
+      lead: 'Components available to embed in Site pages with a fenced plugin block.',
+      empty: 'No plugins are installed for this site.',
+      options: 'Options',
+      option: 'Option',
+      type: 'Type',
+      default: 'Default',
+      description: 'Description',
+      example: 'Example block',
+      copy: 'Copy',
+      copied: 'Copied!',
+      loadError: 'Could not load the plugin list.',
     },
   },
   site: {

@@ -5,7 +5,7 @@ import type { Membership } from '../lib/tenant/studio-db';
 import '../lib/writing/tree/tree.css';
 import { t, type MessageKey } from '../lib/i18n';
 
-export type StudioSection = 'overview' | 'structure' | 'editor' | 'access';
+export type StudioSection = 'overview' | 'structure' | 'editor' | 'plugins' | 'access';
 interface Props {
   title: string;
   locale: Locale;
@@ -32,6 +32,7 @@ const studioLinks: { id: StudioSection; href: string; key: MessageKey; icon: str
       { id: 'overview', href: '/studio', key: 'studio.nav.overview', icon: 'M3 12l9-8 9 8M5 10v10h14V10' },
       { id: 'structure', href: '/studio/structure', key: 'studio.nav.structure', icon: 'M4 6h16M8 12h12M8 18h12M4 12h.01M4 18h.01' },
       { id: 'editor', href: '/studio/editor', key: 'studio.nav.editor', icon: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4' },
+      { id: 'plugins', href: '/studio/plugins', key: 'studio.nav.plugins', icon: 'M4 7a2 2 0 012-2h3l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V7z' },
       ...(authored
         ? [{ id: 'access' as const, href: `/studio/settings/access?space=${encodeURIComponent(authored.spaceId)}`, key: 'studio.nav.access' as const, icon: 'M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z' }]
         : []),

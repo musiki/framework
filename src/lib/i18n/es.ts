@@ -41,6 +41,7 @@ export const es: Dict = {
       overview: 'Resumen',
       structure: 'Estructura',
       editor: 'Editor',
+      plugins: 'Plugins',
       access: 'Acceso e invitaciones',
       dissertation: 'Tesis',
       menu: 'Mostrar u ocultar la barra lateral',
@@ -54,6 +55,20 @@ export const es: Dict = {
     editor: {
       title: 'Editor',
       lead: 'Acá se va a abrir el editor de escritura con trazado textual.',
+    },
+    plugins: {
+      title: 'Plugins',
+      lead: 'Componentes disponibles para insertar en las páginas del sitio con un bloque de plugin.',
+      empty: 'No hay plugins instalados para este sitio.',
+      options: 'Opciones',
+      option: 'Opción',
+      type: 'Tipo',
+      default: 'Por defecto',
+      description: 'Descripción',
+      example: 'Bloque de ejemplo',
+      copy: 'Copiar',
+      copied: '¡Copiado!',
+      loadError: 'No se pudo cargar la lista de plugins.',
     },
   },
   site: {

@@ -1,0 +1,93 @@
+---
+import StudioLayout from '../../layouts/StudioLayout.astro';
+import { t } from '../../lib/i18n';
+import { getStudioUserId, listMemberships, studioEnabled } from '../../lib/tenant/studio-db';
+import { listPlugins, pluginsDir, type PluginManifest, type PluginOption } from '../../lib/site/plugins';
+export const prerender = false;
+
+const tenant = Astro.locals.tenant;
+if (!studioEnabled(tenant)) return Astro.rewrite('/studio/not-found');
+const locale = tenant.locale;
+const userId = await getStudioUserId(Astro.locals);
+if (!userId) return Astro.redirect('/studio/login');
+const spaces = await listMemberships(tenant.id, userId);
+const email = Astro.locals.session?.user?.email ?? '';
+
+// listPlugins is a pure filesystem read (packages/*/manifest.json) — it
+// never touches the database, so this page's main content renders even
+// if the DB is unreachable (only the sidebar's space list needs it).
+const plugins: PluginManifest[] = await listPlugins(pluginsDir());
+
+function exampleValue(opt: PluginOption): string {
+  const value = opt.example !== undefined ? opt.example : opt.default;
+  if (value === undefined) return '';
+  return String(value);
+}
+
+function blockExample(plugin: PluginManifest): string {
+  const lines = [`\`\`\`plugin ${plugin.name}`];
+  for (const [key, opt] of Object.entries(plugin.options)) {
+    const value = exampleValue(opt);
+    lines.push(value === '' ? `${key}:` : `${key}: ${value}`);
+  }
+  lines.push('```');
+  return lines.join('\n');
+}
+---
+<StudioLayout title={t(locale, 'studio.plugins.title')} locale={locale} sidebar={{ email, spaces, current: 'plugins' }}>
+  <h1>{t(locale, 'studio.plugins.title')}</h1>
+  <p class="so-muted">{t(locale, 'studio.plugins.lead')}</p>
+  {plugins.length === 0 ? (
+    <p class="so-muted">{t(locale, 'studio.plugins.empty')}</p>
+  ) : (
+    <div class="so-plugins">
+      {plugins.map((plugin) => (
+        <section class="so-plugin">
+          <h2>{plugin.name}</h2>
+          <p>{plugin.description}</p>
+          {Object.keys(plugin.options).length > 0 && (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t(locale, 'studio.plugins.option')}</th>
+                  <th>{t(locale, 'studio.plugins.type')}</th>
+                  <th>{t(locale, 'studio.plugins.default')}</th>
+                  <th>{t(locale, 'studio.plugins.description')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(plugin.options).map(([key, opt]) => (
+                  <tr>
+                    <td><code>{key}</code></td>
+                    <td>{opt.type}</td>
+                    <td>{opt.default !== undefined ? String(opt.default) : ''}</td>
+                    <td>{opt.description ?? ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div class="so-plugin-example">
+            <div class="so-plugin-example-head">
+              <span class="so-muted">{t(locale, 'studio.plugins.example')}</span>
+              <button type="button" class="so-plugin-copy" data-copy-target={`plugin-example-${plugin.name}`}
+                data-copied-label={t(locale, 'studio.plugins.copied')}>
+                {t(locale, 'studio.plugins.copy')}
+              </button>
+            </div>
+            <pre id={`plugin-example-${plugin.name}`}><code set:text={blockExample(plugin)} /></pre>
+          </div>
+        </section>
+      ))}
+    </div>
+  )}
+  <script>import '../../scripts/studio/plugins-page';</script>
+  <style is:global>
+    .so-plugins { display: flex; flex-direction: column; gap: 2rem; }
+    .so-plugin table { width: 100%; margin: .75rem 0; }
+    .so-plugin-example { margin-top: .75rem; }
+    .so-plugin-example-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .35rem; }
+    .so-plugin-example pre { margin: 0; padding: .75rem; border: 1px solid var(--so-border); border-radius: .375rem; background: var(--so-surface); overflow-x: auto; }
+    .so-plugin-copy[data-copied="true"] { background: var(--so-surface-hover); }
+  </style>
+</StudioLayout>
