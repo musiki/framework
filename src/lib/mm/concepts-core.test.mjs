@@ -15,6 +15,9 @@ import {
   deleteRelation,
   listConcepts,
   graph,
+  setLabels,
+  getCommonsRole,
+  shouldDestroyClient,
 } from './concepts-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -52,7 +55,14 @@ function fakeQuery(routes) {
   return { q, calls, texts };
 }
 
-const memberRoute = ['"SpaceMember"', ([, userId]) => (ROLES[userId] ? [{ role: ROLES[userId] }] : [])];
+const DISS_SPACE = id(3);
+const SPACE_KIND = { [SPACE]: 'commons', [OTHER_SPACE]: 'commons', [DISS_SPACE]: 'dissertation' };
+// Simulates the DB: a membership only counts when the query joins Space and
+// filters kind = 'commons', and the space really is a commons space.
+const memberRoute = ['"SpaceMember"', ([spaceId, userId], text) =>
+  /JOIN "Space" s ON s\.id = m\."spaceId" AND s\.kind = 'commons'/.test(text) && SPACE_KIND[spaceId] === 'commons' && ROLES[userId]
+    ? [{ role: ROLES[userId] }]
+    : []];
 const conceptRow = (over = {}) => ({
   id: C1, spaceId: SPACE, forumId: FORUM, slug: 'pharmakon', label: 'Pharmakon', labelNb: null,
   status: 'neologism', threadId: THREAD, createdBy: U.author, ...over,
@@ -285,13 +295,13 @@ test('editDefinition: failure after insert rolls back', async () => {
 
 function adoptFixture({ post = {}, failUpdate = false } = {}) {
   const postRow = {
-    id: POST, authorUserId: U.poster, body: '  The post body as definition. ', status: 'published',
-    adoptedAsVersionId: null, spaceId: SPACE, ...post,
+    id: POST, authorUserId: U.poster, authorName: 'Poster', body: '  The post body as definition. ', status: 'published',
+    adoptedAsVersionId: null, spaceId: SPACE, isLocked: false, archivedAt: null, ...post,
   };
   return fakeQuery([
     memberRoute,
     conceptByIdRoute(),
-    ['FROM "ForumPost" p JOIN "ForumThread" t', ([pid]) => (pid === POST ? [postRow] : [])],
+    [/FROM "ForumPost" p\s+JOIN "ForumThread" t/, ([pid]) => (pid === POST ? [postRow] : [])],
     ['INSERT INTO "ConceptVersion"', () => [{ id: id(80), createdAt: 'now' }]],
     ['UPDATE "ForumPost" SET "adoptedAsVersionId"', () => (failUpdate ? { error: new Error('update failed') } : [{ id: POST }])],
   ]);
@@ -300,14 +310,18 @@ function adoptFixture({ post = {}, failUpdate = false } = {}) {
 test('adoptPost: curator adopts → version credited to post author, editedBy curator, fromPostId, post.adoptedAsVersionId', async () => {
   const fx = adoptFixture();
   const out = await adoptPost(fx.q, { conceptId: C1, postId: POST, actorUserId: U.curator, lang: 'en' });
-  assert.deepEqual(out, { versionId: id(80), creditedUserId: U.poster });
+  assert.deepEqual(out, { versionId: id(80), credited: { name: 'Poster', deleted: false } });
+  assert.ok(!JSON.stringify(out).includes(U.poster), 'no raw user id returned');
   const ins = fx.calls.find((c) => c.text.includes('INSERT INTO "ConceptVersion"'));
   assert.deepEqual(ins.params, [C1, 'en', 'The post body as definition.', '[]', U.curator, U.poster, POST]);
   const upd = fx.calls.find((c) => c.text.includes('UPDATE "ForumPost"'));
   assert.deepEqual(upd.params, [id(80), POST]);
   const texts = fx.calls.map((c) => c.text);
   assert.ok(texts.indexOf('BEGIN') < texts.indexOf(ins.text));
-  assert.ok(texts.findIndex((t) => t.includes('FOR UPDATE OF p')) > texts.indexOf('BEGIN'));
+  const conceptLock = texts.findIndex((t) => /FROM "Concept" WHERE id = \$1::uuid LIMIT 1 FOR UPDATE/.test(t));
+  const postLock = texts.findIndex((t) => t.includes('FOR UPDATE OF p'));
+  assert.ok(conceptLock > texts.indexOf('BEGIN'), 'concept row locked inside the transaction');
+  assert.ok(postLock > conceptLock, 'concept locked before post');
   assert.equal(texts.at(-1), 'COMMIT');
 });
 
@@ -322,7 +336,9 @@ test('adoptPost: curator-edited text and nb lang', async () => {
 test('adoptPost: deleted post author → credit NULL (deleted user), still recorded', async () => {
   const fx = adoptFixture({ post: { authorUserId: null } });
   const out = await adoptPost(fx.q, { conceptId: C1, postId: POST, actorUserId: U.curator, lang: 'en' });
-  assert.equal(out.creditedUserId, null);
+  assert.deepEqual(out.credited, { name: null, deleted: true });
+  const ins = fx.calls.find((c) => c.text.includes('INSERT INTO "ConceptVersion"'));
+  assert.equal(ins.params[5], null);
 });
 
 test('adoptPost: members (even the concept author), guests, anonymous denied', async () => {
@@ -335,7 +351,10 @@ test('adoptPost: members (even the concept author), guests, anonymous denied', a
 });
 
 test('adoptPost: post in another space 404; already adopted / not published 409 (rolled back)', async () => {
-  for (const [post, status] of [[{ spaceId: OTHER_SPACE }, 404], [{ adoptedAsVersionId: id(81) }, 409], [{ status: 'hidden' }, 409]]) {
+  for (const [post, status] of [
+    [{ spaceId: OTHER_SPACE }, 404], [{ adoptedAsVersionId: id(81) }, 409], [{ status: 'hidden' }, 409],
+    [{ isLocked: true }, 409], [{ archivedAt: '2026-01-01T00:00:00Z' }, 409],
+  ]) {
     const fx = adoptFixture({ post });
     await rejectsStatus(adoptPost(fx.q, { conceptId: C1, postId: POST, actorUserId: U.curator, lang: 'en' }), status);
     assert.equal(fx.calls.at(-1).text, 'ROLLBACK');
@@ -450,4 +469,68 @@ test('graph: slug nodes, edges only between included nodes, no user fields', asy
   assert.deepEqual(g.edges, [{ source: 'pharmakon', target: 'b', type: 'derives' }]);
   const json = JSON.stringify(g);
   assert.ok(!json.includes(U.member) && !/email|createdBy|userId/i.test(json));
+});
+
+// ---------------------------------------------------------------------------
+// Commons-only roles
+// ---------------------------------------------------------------------------
+
+test('getCommonsRole: a role in a non-commons space never authorizes mm actions', async () => {
+  const fx = fakeQuery([memberRoute]);
+  assert.equal(await getCommonsRole(fx.q, SPACE, U.curator), 'curator');
+  assert.equal(await getCommonsRole(fx.q, DISS_SPACE, U.curator), null);
+  assert.equal(await getCommonsRole(fx.q, SPACE, null), null);
+});
+
+test('mutations on a concept whose space is not commons are denied even for curators/admins', async () => {
+  const fx = fakeQuery([
+    memberRoute,
+    conceptByIdRoute({ [C1]: conceptRow({ spaceId: DISS_SPACE, createdBy: U.admin }) }),
+  ]);
+  await rejectsStatus(editDefinition(fx.q, { conceptId: C1, actorUserId: U.admin, lang: 'en', definition: 'x' }), 403);
+  await rejectsStatus(setStatus(fx.q, { conceptId: C1, actorUserId: U.curator, status: 'assimilated' }), 403);
+  await rejectsStatus(adoptPost(fx.q, { conceptId: C1, postId: POST, actorUserId: U.curator, lang: 'en' }), 403);
+  assert.ok(!fx.calls.some((c) => /INSERT|UPDATE/.test(c.text)));
+});
+
+// ---------------------------------------------------------------------------
+// setLabels
+// ---------------------------------------------------------------------------
+
+function labelFixture({ failThread = false } = {}) {
+  return fakeQuery([
+    memberRoute,
+    conceptByIdRoute(),
+    ['UPDATE "ForumThread" SET title', () => (failThread ? { error: new Error('thread failed') } : [])],
+  ]);
+}
+
+test('setLabels: English label change also retitles the concept thread, in one transaction', async () => {
+  const fx = labelFixture();
+  assert.deepEqual(await setLabels(fx.q, { conceptId: C1, actorUserId: U.author, label: 'Pharmakon (Stiegler)', labelNb: 'Farmakon' }),
+    { label: 'Pharmakon (Stiegler)', labelNb: 'Farmakon' });
+  const thread = fx.calls.find((c) => c.text.includes('UPDATE "ForumThread" SET title'));
+  assert.deepEqual(thread.params, ['Pharmakon (Stiegler)', THREAD, SPACE]);
+  assert.equal(fx.calls.at(-1).text, 'COMMIT');
+});
+
+test('setLabels: nb-only change leaves the thread title alone; non-author member denied; failure rolls back', async () => {
+  let fx = labelFixture();
+  await setLabels(fx.q, { conceptId: C1, actorUserId: U.curator, labelNb: 'Farmakon' });
+  assert.ok(!fx.calls.some((c) => c.text.includes('"ForumThread"')));
+  await rejectsStatus(setLabels(labelFixture().q, { conceptId: C1, actorUserId: U.member, label: 'Y' }), 403);
+  fx = labelFixture({ failThread: true });
+  await assert.rejects(setLabels(fx.q, { conceptId: C1, actorUserId: U.curator, label: 'Y' }));
+  assert.equal(fx.calls.at(-1).text, 'ROLLBACK');
+});
+
+// ---------------------------------------------------------------------------
+// Pooled client release decision
+// ---------------------------------------------------------------------------
+
+test('shouldDestroyClient: domain errors keep the connection, db errors / failed ROLLBACK destroy it', () => {
+  for (const status of [400, 401, 403, 404, 409]) assert.equal(shouldDestroyClient(new ConceptError(status, 'x'), false), false);
+  assert.equal(shouldDestroyClient(new ConceptError(500, 'x'), false), true);
+  assert.equal(shouldDestroyClient(new Error('connection reset'), false), true);
+  assert.equal(shouldDestroyClient(new ConceptError(409, 'x'), true), true);
 });

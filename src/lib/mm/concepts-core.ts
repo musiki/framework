@@ -96,6 +96,16 @@ export async function withTransaction<T>(q: QueryFn, fn: () => Promise<T>): Prom
   }
 }
 
+/**
+ * Whether a pooled client that ran a failed core call must be destroyed rather
+ * than returned to the pool: only expected domain errors (ConceptError < 500,
+ * thrown before BEGIN or after a successful ROLLBACK) leave it clean.
+ */
+export function shouldDestroyClient(err: unknown, rollbackFailed: boolean): boolean {
+  if (rollbackFailed) return true;
+  return !(err instanceof ConceptError && err.status < 500);
+}
+
 const isUniqueViolation = (err: unknown) => (err as { code?: unknown })?.code === '23505';
 
 const userRef = (id: string | null | undefined, name: string | null | undefined): UserRef =>
@@ -174,7 +184,11 @@ export async function getCommonsRole(q: QueryFn, spaceId: string, userId: string
   if (!userId) return null;
   const rows = await run(
     q,
-    `SELECT "role" FROM "SpaceMember" WHERE "spaceId" = $1::uuid AND "userId" = $2::uuid LIMIT 1`,
+    // Only commons-space memberships count: a role in a dissertation (or any
+    // other kind of) space must never authorize an mm action.
+    `SELECT m."role" FROM "SpaceMember" m
+     JOIN "Space" s ON s.id = m."spaceId" AND s.kind = 'commons'
+     WHERE m."spaceId" = $1::uuid AND m."userId" = $2::uuid LIMIT 1`,
     [spaceId, userId],
   );
   const role = rows[0]?.role;
@@ -530,7 +544,7 @@ export async function adoptPost(
     definition?: unknown;
     sources?: unknown;
   },
-): Promise<{ versionId: string; creditedUserId: string | null }> {
+): Promise<{ versionId: string; credited: UserRef }> {
   const concept = await loadConceptById(q, input.conceptId);
   await authorize(q, concept.spaceId, input.actorUserId, 'adoptPost');
   if (!isConceptLang(input.lang)) throw new ConceptError(400, 'invalid lang');
@@ -544,17 +558,23 @@ export async function adoptPost(
       : cleanDefinition(input.definition);
 
   return withTransaction(q, async () => {
-    // Lock the post so two curators cannot adopt it twice.
+    // Lock the concept, then the post (fixed order), so concurrent adoptions
+    // serialize and a post cannot be adopted twice.
+    await loadConceptById(q, concept.id, true);
     const posts = await run(
       q,
-      `SELECT p.id, p."authorUserId", p.body, p.status, p."adoptedAsVersionId", t."spaceId"
-       FROM "ForumPost" p JOIN "ForumThread" t ON t.id = p."threadId"
+      `SELECT p.id, p."authorUserId", p.body, p.status, p."adoptedAsVersionId",
+              t."spaceId", t."isLocked", t."archivedAt", u.name AS "authorName"
+       FROM "ForumPost" p
+       JOIN "ForumThread" t ON t.id = p."threadId"
+       LEFT JOIN "User" u ON u.id = p."authorUserId"
        WHERE p.id = $1::uuid
        FOR UPDATE OF p`,
       [postId],
     );
     const post = posts[0];
     if (!post || post.spaceId !== concept.spaceId) throw new ConceptError(404, 'post not found');
+    if (post.isLocked || post.archivedAt) throw new ConceptError(409, 'thread is locked or archived');
     if (post.status !== 'published') throw new ConceptError(409, 'post is not published');
     if (post.adoptedAsVersionId) throw new ConceptError(409, 'post already adopted');
 
@@ -570,7 +590,7 @@ export async function adoptPost(
     );
     if (!updated.length) throw new ConceptError(500, 'post update matched nothing');
     await touchConcept(q, concept.id);
-    return { versionId: v.id, creditedUserId };
+    return { versionId: v.id, credited: userRef(creditedUserId, post.authorName) };
   });
 }
 
@@ -590,7 +610,7 @@ export async function setStatus(
   return { status: rows[0].status };
 }
 
-/** Labels (en required, nb optional) follow the same rule as definitions. */
+/** Labels (en required, nb optional) follow the same rule as definitions; the thread title follows the English label. One transaction. */
 export async function setLabels(
   q: QueryFn,
   input: { conceptId: string; actorUserId: string | null; label?: unknown; labelNb?: unknown },
@@ -601,8 +621,16 @@ export async function setLabels(
   }));
   const label = input.label === undefined ? concept.label : cleanLabel(input.label);
   const labelNb = input.labelNb === undefined ? concept.labelNb : cleanOptionalLabel(input.labelNb, 'labelNb');
-  await run(q, `UPDATE "Concept" SET label = $1, "labelNb" = $2 WHERE id = $3::uuid`, [label, labelNb, concept.id]);
-  return { label, labelNb };
+  // The concept's discussion thread is titled by its English label; keep them in step.
+  return withTransaction(q, async () => {
+    await run(q, `UPDATE "Concept" SET label = $1, "labelNb" = $2 WHERE id = $3::uuid`, [label, labelNb, concept.id]);
+    if (label !== concept.label && concept.threadId) {
+      await run(q, `UPDATE "ForumThread" SET title = $1 WHERE id = $2::uuid AND "spaceId" = $3::uuid`, [
+        label, concept.threadId, concept.spaceId,
+      ]);
+    }
+    return { label, labelNb };
+  });
 }
 
 // ---------------------------------------------------------------------------
