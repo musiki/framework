@@ -96,23 +96,34 @@ export function cleanTemplater(
   );
 }
 
+// gray-matter supports a `---js` / `---javascript` frontmatter delimiter
+// language whose default engine parses the block with `eval` — vault notes
+// are untrusted-ish free text, so that engine must never run here. Passing
+// these no-op engines disables js/javascript evaluation (an unrecognized
+// `---js` block just yields no data instead of executing). Passing *any*
+// options object (even `{}`, as before) also opts a call out of
+// gray-matter's own content-keyed cache — keep that property, see the note
+// below.
+export const SAFE_ENGINES = { js: () => ({}), javascript: () => ({}) };
+
 /** Parses frontmatter with gray-matter, retrying once with Templater
  * expressions cleaned out if the raw markdown doesn't parse as YAML.
  * Returns `null` (never throws) if both attempts fail. */
 function parseFrontmatterRobust(markdown: string): Record<string, unknown> | null {
-  // `{}` (any options object, even empty) opts both calls out of
-  // gray-matter's own content-keyed cache. Without it, a first call that
-  // throws still poisons the cache with the pre-parse (dataless) file
-  // object under that content string, so an identical-content retry
-  // (e.g. cleanTemplater is a no-op because there's no Templater tag)
-  // would silently return `{}` instead of re-throwing.
+  // Passing `{ engines: ... }` (any options object, even empty) opts both
+  // calls out of gray-matter's own content-keyed cache. Without it, a
+  // first call that throws still poisons the cache with the pre-parse
+  // (dataless) file object under that content string, so an
+  // identical-content retry (e.g. cleanTemplater is a no-op because
+  // there's no Templater tag) would silently return `{}` instead of
+  // re-throwing.
   try {
-    return matter(markdown, {}).data ?? {};
+    return matter(markdown, { engines: SAFE_ENGINES }).data ?? {};
   } catch {
     // fall through
   }
   try {
-    return matter(cleanTemplater(markdown), {}).data ?? {};
+    return matter(cleanTemplater(markdown), { engines: SAFE_ENGINES }).data ?? {};
   } catch {
     return null;
   }

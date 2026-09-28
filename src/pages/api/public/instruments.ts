@@ -1,7 +1,6 @@
 import type { APIRoute } from 'astro';
 import { query } from '../../../lib/db/pool';
-import { json } from '../../../lib/forum-server';
-import { loadPublicInstruments } from '../../../lib/instruments/instruments-db.ts';
+import { handlePublicInstrumentsRequest } from '../../../lib/instruments/instruments-db.ts';
 
 export const prerender = false;
 
@@ -12,22 +11,21 @@ export const prerender = false;
 // (`routes: 'all'`), 404 on any other tenant (e.g. mm, not configured yet)
 // — this handler double-checks the tenant itself so it 404s even if it were
 // ever reached from a tenant whose `routes` happens to allow the path.
+//
+// The dissertation data itself always lives in the `so` tenant's space
+// (see INSTRUMENTS_SOURCE_TENANT in instruments-db.ts) regardless of which
+// of the two allowed hosts served the request — all of the gating and
+// data-sourcing logic lives in the testable, q-injected
+// `handlePublicInstrumentsRequest`; this route is just Astro plumbing
+// around it.
 export const GET: APIRoute = async ({ locals }) => {
-  if (locals.tenant.id !== 'so' && locals.tenant.id !== 'musiki') return json({ error: 'Not found' }, 404);
+  const { status, body } = await handlePublicInstrumentsRequest(query, locals.tenant.id);
 
-  let instruments;
-  try {
-    instruments = await loadPublicInstruments(query, { tenantId: locals.tenant.id });
-  } catch (err) {
-    console.error('[api/public/instruments] failed to load public instruments:', err);
-    return json({ error: 'Internal error' }, 500);
-  }
-
-  return new Response(JSON.stringify({ generatedAt: new Date().toISOString(), instruments }), {
-    status: 200,
+  return new Response(JSON.stringify(body), {
+    status,
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
+      ...(status === 200 ? { 'Cache-Control': 'no-store' } : {}),
     },
   });
 };

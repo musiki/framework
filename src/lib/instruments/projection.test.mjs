@@ -87,6 +87,23 @@ This sentence must never leave the studio and describes the daxophone in prose.`
   assert.ok(!json.includes('describes the daxophone in prose'));
 });
 
+test('projectInstrument: a `---js` frontmatter block is never executed (gray-matter eval hardening)', () => {
+  const globalKey = '__soog_projection_pwned__';
+  delete globalThis[globalKey];
+  const body = `---js\nglobalThis.${globalKey} = true; ({ type: 'instrument', title: 'Pwned' })\n---\nbody text`;
+
+  try {
+    const result = projectInstrument(note(body));
+    // The unrecognized `---js` block must yield no data at all, so the
+    // note fails the `type === 'instrument'` check and is dropped, not
+    // silently evaluated into a valid instrument.
+    assert.equal(result, null);
+    assert.equal(globalThis[globalKey], undefined);
+  } finally {
+    delete globalThis[globalKey];
+  }
+});
+
 test('projectInstrument: [[X|Y]] wikilink reduces to the target X, not the alias Y', () => {
   const body = `---
 type: instrument

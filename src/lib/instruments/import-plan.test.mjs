@@ -134,3 +134,29 @@ test('planInstrumentImport: processes a mixed batch preserving input order', () 
   assert.equal(steps[1].type, 'other');
   assert.equal(steps[2].type, 'instrument');
 });
+
+test('planInstrumentImport: a `---js` frontmatter block is never executed (gray-matter eval hardening)', () => {
+  const globalKey = '__soog_import_plan_pwned__';
+  delete globalThis[globalKey];
+  const files = [
+    {
+      folder: 'Instruments',
+      name: 'Pwned.md',
+      markdown: `---js\nglobalThis.${globalKey} = true; ({ type: 'instrument' })\n---\nbody text`,
+    },
+  ];
+
+  try {
+    const steps = planInstrumentImport(files, []);
+    assert.equal(globalThis[globalKey], undefined);
+    // The unrecognized `---js` block yields no data, so `type` reads as
+    // undefined -> bucketed 'none', still created (studio is the source of
+    // truth on import), never bucketed as if the eval'd `type: 'instrument'`
+    // had actually taken effect through some other path.
+    assert.equal(steps.length, 1);
+    assert.equal(steps[0].action, 'create');
+    assert.equal(steps[0].type, 'none');
+  } finally {
+    delete globalThis[globalKey];
+  }
+});

@@ -7,7 +7,7 @@
 // import script alike.
 
 import matter from 'gray-matter';
-import { cleanTemplater } from './projection.ts';
+import { cleanTemplater, SAFE_ENGINES } from './projection.ts';
 
 export type CasesSubfolder = 'Instruments' | 'Instruments (fictional)';
 
@@ -62,17 +62,19 @@ function firstLine(message: string): string {
  * distinct, actionable skip reason, not silently folded into
  * `not-instrument`. */
 function readType(markdown: string): { type: unknown } | { error: string } {
-  // `{}` opts both calls out of gray-matter's content-keyed cache — see
-  // the matching comment in projection.ts's parseFrontmatterRobust for why
-  // that cache would otherwise turn the retry into a silent, wrong
-  // "no type" result instead of a genuine parse-error.
+  // `{ engines: SAFE_ENGINES }` opts both calls out of gray-matter's
+  // content-keyed cache (see the matching comment in projection.ts's
+  // parseFrontmatterRobust for why that cache would otherwise turn the
+  // retry into a silent, wrong "no type" result instead of a genuine
+  // parse-error) and also disables the `---js`/`---javascript` eval
+  // engine — vault files being imported are untrusted-ish free text.
   try {
-    return { type: matter(markdown, {}).data?.type };
+    return { type: matter(markdown, { engines: SAFE_ENGINES }).data?.type };
   } catch {
     // fall through to the Templater-cleaned retry
   }
   try {
-    return { type: matter(cleanTemplater(markdown), {}).data?.type };
+    return { type: matter(cleanTemplater(markdown), { engines: SAFE_ENGINES }).data?.type };
   } catch (e) {
     const error = e instanceof Error && e.message ? firstLine(e.message) : 'frontmatter parse error';
     return { error };

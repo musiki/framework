@@ -1,6 +1,6 @@
 /*!
- * soog-dashboard 0.1.0
- * SOOG_DASHBOARD_VERSION = '0.1.0'
+ * soog-dashboard 0.1.1
+ * SOOG_DASHBOARD_VERSION = '0.1.1'
  *
  * <soog-dashboard> — framework-free custom element showing the SOOG / MOAIE
  * dashboard (instrument chips, MOAIE radar, interface-profile radar,
@@ -19,7 +19,7 @@
  *   labels   JSON object overriding UI strings (see DEFAULT_LABELS)
  */
 
-export const SOOG_DASHBOARD_VERSION = '0.1.0';
+export const SOOG_DASHBOARD_VERSION = '0.1.1';
 export const CHART_JS_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
 export const DEFAULT_SRC = '/api/public/instruments';
 export const DEFAULT_N = 4;
@@ -376,6 +376,11 @@ export class SoogDashboard extends Base {
   // ── data ─────────────────────────────────────────────────────────────
   async _load() {
     const gen = ++this._gen;
+    // A previous load's chart failure (Chart.js failed to load) must not
+    // stick around after a reload — e.g. an attribute change re-triggers
+    // _load() with a fresh `src`/`mode` that may render charts fine this
+    // time, or fail again and want to show the message again either way.
+    this._chartFailed = false;
     const L = this.labels;
     const root = this._reset();
     const src = this.getAttribute('src') ?? DEFAULT_SRC;
@@ -730,6 +735,10 @@ export class SoogDashboard extends Base {
     const reg = this._registry;
     const scored = reg.filter((r) => r.scored);
     root.appendChild(this._el('h2', null, this.heading));
+    // With no scored instruments there is nothing to plot — a canvas with
+    // no datasets just renders a blank radar. Show the empty-state message
+    // instead, the same as full mode does when there is nothing to show.
+    if (!scored.length) { this._parts = null; this._message(root, L.empty, false); return; }
     const w = this._el('div', 'radar small');
     const c1 = this._el('canvas');
     c1.setAttribute('role', 'img');

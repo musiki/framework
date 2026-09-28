@@ -15,6 +15,15 @@ export type SiteFrontmatter = {
 
 const ALLOWED_LAYOUTS = new Set(['page', 'home', 'blog', 'tags']);
 
+// gray-matter supports a `---js` / `---javascript` frontmatter delimiter
+// language whose default engine parses the block with `eval` — site
+// content is authored content, not trusted code, so that engine must never
+// run here. These no-op engines make an unrecognized `---js` block yield
+// no data instead of executing it. Passing any options object (even `{}`)
+// also opts the call out of gray-matter's content-keyed cache, which is
+// fine here since this module doesn't rely on that cache.
+const SAFE_ENGINES = { js: () => ({}), javascript: () => ({}) };
+
 /**
  * Parse the leading `---`-delimited YAML frontmatter block from `markdown`.
  * Returns the validated, known frontmatter keys plus the markdown body with
@@ -24,7 +33,7 @@ const ALLOWED_LAYOUTS = new Set(['page', 'home', 'blog', 'tags']);
 export function parseFrontmatter(markdown: string): { data: SiteFrontmatter; body: string } {
   let parsed: { data: Record<string, unknown>; content: string };
   try {
-    parsed = matter(markdown);
+    parsed = matter(markdown, { engines: SAFE_ENGINES });
   } catch {
     // Malformed YAML: treat as no frontmatter at all.
     return { data: {}, body: markdown };

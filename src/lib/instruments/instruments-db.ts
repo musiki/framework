@@ -15,6 +15,21 @@ import { projectInstrument, type PublicInstrument } from './projection.ts';
 type FolderRow = { id: string; parentId: string | null; name: string; visibility: string | null };
 type NoteRow = { id: string; folderId: string | null; title: string; body: string; visibility: string | null };
 
+/** The dissertation data behind `/api/public/instruments` always lives in
+ * the `so` tenant's space, regardless of which host the request came in
+ * on — the `musiki` default tenant has no `dissertation` space of its own,
+ * so loading with the *request* tenant's id there would always yield `[]`.
+ * Every caller of `loadPublicInstruments` for this endpoint must pass this
+ * constant, never `locals.tenant.id`. */
+export const INSTRUMENTS_SOURCE_TENANT: TenantId = 'so';
+
+/** Which request-tenant hosts may reach the public instruments endpoint at
+ * all (the data source is always {@link INSTRUMENTS_SOURCE_TENANT}
+ * regardless of which of these hosts served the request). */
+export function isInstrumentsHostAllowed(tenantId: string): boolean {
+  return tenantId === 'so' || tenantId === 'musiki';
+}
+
 /** Every folder id reachable from `rootId` by walking child links, excluding `rootId` itself. */
 function collectDescendantIds(rootId: string, folders: FolderRow[]): Set<string> {
   const byParent = new Map<string | null, FolderRow[]>();
@@ -82,19 +97,25 @@ export async function loadPublicInstruments(
 
   const foldersById = new Map(folders.map((f) => [f.id, f]));
   const descendantFolderIds = collectDescendantIds(casesFolder.id, folders);
+  // The Cases root itself plus every descendant folder — the full set of
+  // folder ids a note must live directly under to be in scope. Computed
+  // before the query so the filter runs in SQL, not by pulling every note
+  // in the space into JS and discarding most of them.
+  const caseFolderIds = [casesFolder.id, ...descendantFolderIds];
 
   const { data: noteRows, error: noteErr } = await q(
     // Never select "userId" (or any other author/email column) here — this
     // module backs the public, unauthenticated /api/public/instruments
-    // endpoint.
-    `SELECT id, "folderId", title, body, visibility FROM "LiveClassNote" WHERE "spaceId" = $1`,
-    [spaceId],
+    // endpoint. Filtering by folderId here (not in JS after a
+    // SELECT * of the space) means notes outside the Cases tree are never
+    // even requested from the database.
+    `SELECT id, "folderId", title, body, visibility FROM "LiveClassNote" WHERE "spaceId" = $1 AND "folderId" = ANY($2::uuid[])`,
+    [spaceId, caseFolderIds],
   );
   if (noteErr) throw noteErr instanceof Error ? noteErr : new Error(String((noteErr as any)?.message || noteErr));
   const notes: NoteRow[] = noteRows ?? [];
 
   const instruments: PublicInstrument[] = notes
-    .filter((n) => n.folderId === casesFolder.id || (n.folderId !== null && descendantFolderIds.has(n.folderId)))
     .filter((n) => effectiveVisibility(n, foldersById as Map<string, { id: string; parentId: string | null; visibility?: string | null }>) === 'public')
     .map((n) =>
       projectInstrument(
@@ -107,4 +128,37 @@ export async function loadPublicInstruments(
   instruments.sort((a, b) => a.title.localeCompare(b.title, 'en'));
 
   return instruments;
+}
+
+export type PublicInstrumentsResponse =
+  | { status: 200; body: { generatedAt: string; instruments: PublicInstrument[] } }
+  | { status: 404 | 500; body: { error: string } };
+
+/**
+ * Pure, q-injected core of `GET /api/public/instruments`: gates on the
+ * *request* tenant (`requestTenantId`, i.e. which host the request came in
+ * on) via {@link isInstrumentsHostAllowed}, then always loads instrument
+ * data from {@link INSTRUMENTS_SOURCE_TENANT}'s space — never from
+ * `requestTenantId`'s own space. This is what makes a `musiki`-host
+ * request return the `so` studio's data instead of always `[]` (the
+ * `musiki` tenant has no `dissertation` space of its own).
+ *
+ * Returns a plain `{status, body}` pair (no `Response`/Astro types) so the
+ * route handler and its host-sourcing behavior are testable with a fake
+ * `q` and no Astro request machinery.
+ */
+export async function handlePublicInstrumentsRequest(
+  q: QueryFn,
+  requestTenantId: string,
+): Promise<PublicInstrumentsResponse> {
+  if (!isInstrumentsHostAllowed(requestTenantId)) {
+    return { status: 404, body: { error: 'Not found' } };
+  }
+  try {
+    const instruments = await loadPublicInstruments(q, { tenantId: INSTRUMENTS_SOURCE_TENANT });
+    return { status: 200, body: { generatedAt: new Date().toISOString(), instruments } };
+  } catch (err) {
+    console.error('[api/public/instruments] failed to load public instruments:', err);
+    return { status: 500, body: { error: 'Internal error' } };
+  }
 }
