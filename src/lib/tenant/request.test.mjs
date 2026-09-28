@@ -105,3 +105,27 @@ test('musiki and so never get a rewrite for mm-looking paths', () => {
 test('dev override to mm applies', () => {
   assert.equal(decideTenantRequest({ host: 'localhost:4321', pathname: '/', envTenant: 'mm' }).rewrite, '/mm-app/');
 });
+
+test('allowlist applies to the decoded path too (router matches decodeURI)', () => {
+  for (const p of ['/api/public/%6Dm/x', '/api/public/%6dm/x', '/api/public/m%6D', '/api/public/%6D%6D/concepts.json', '/%73tudio']) {
+    assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: p }).action, 'not-found', p);
+  }
+  assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/api/public/instruments' }).action, 'next');
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/%61pi/mm/x' }).action, 'not-found');
+});
+
+test('undecodable paths are not-found on scoped tenants', () => {
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/f/%E0%A4%A' }).action, 'not-found');
+  assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/studio/%E0%A4%A' }).action, 'not-found');
+});
+
+test('mm: encoded non-ascii concept slugs still rewrite raw', () => {
+  const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: '/c/caf%C3%A9' });
+  assert.equal(d.action, 'next');
+  assert.equal(d.rewrite, '/mm-app/c/caf%C3%A9');
+});
+
+test('musiki unaffected by the decoded-path check', () => {
+  assert.equal(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/api/public/%6Dm/x' }).action, 'next');
+  assert.equal(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/f/%E0%A4%A' }).action, 'next');
+});

@@ -30,7 +30,17 @@ export function decideTenantRequest(input: {
   // Real build assets (/_astro/*) are served by the static handler before SSR;
   // any /_* request reaching middleware would fall to musiki's catch-all.
   if (input.pathname.startsWith('/_')) return { tenant, action: 'not-found' };
-  if (!isRouteAllowed(tenant, input.pathname)) return { tenant, action: 'not-found' };
+  // Astro's router matches decodeURI(pathname): the allowlist must hold for
+  // the raw path AND its decoded form (e.g. /api/public/%6Dm → /api/public/mm).
+  let decoded: string;
+  try {
+    decoded = decodeURI(input.pathname);
+  } catch {
+    return { tenant, action: 'not-found' };
+  }
+  if (!isRouteAllowed(tenant, input.pathname) || !isRouteAllowed(tenant, decoded)) {
+    return { tenant, action: 'not-found' };
+  }
   // mm page paths coincide with musiki pages (/, /about, /admin): they are
   // served only through the rewrite, never falling through to musiki.
   if (tenant.id === 'mm' && isMmPagePath(input.pathname)) {
