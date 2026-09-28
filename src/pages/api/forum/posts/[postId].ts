@@ -9,6 +9,7 @@ import {
 import { renderForumMarkdown } from '../../../../lib/forum-markdown';
 import { broadcastForumEvent } from '../../../../lib/forum-broadcast';
 import { query } from '../../../../lib/db/pool';
+import * as forumSql from '../../../../lib/forum-queries.ts';
 
 const POST_BODY_MAX = 4000;
 
@@ -50,20 +51,13 @@ function resolveForumErrorMessage(error: any, fallback: string): string {
 async function getPostContext(
   postId: string,
 ): Promise<{ post: PostRow; thread: ThreadRow } | null> {
-  const { data: postRows, error: postError } = await query(
-    `SELECT id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt" 
-     FROM "ForumPost" WHERE id = $1`,
-    [postId]
-  );
+  const { data: postRows, error: postError } = await forumSql.selectPostForEdit(query, postId);
 
   if (postError) throw postError;
   const post = postRows?.[0] as PostRow | undefined;
   if (!post) return null;
 
-  const { data: threadRows, error: threadError } = await query(
-    `SELECT id, "courseId", "createdByUserId", "isLocked" FROM "ForumThread" WHERE id = $1`,
-    [post.threadId]
-  );
+  const { data: threadRows, error: threadError } = await forumSql.selectThreadOfPost(query, post.threadId);
 
   if (threadError) throw threadError;
   const thread = threadRows?.[0] as ThreadRow | undefined;
@@ -122,10 +116,12 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
       return json({ error: 'Thread is locked' }, 403);
     }
 
-    const { data: updatedRaw, error: updateError } = await query(
-      `UPDATE "ForumPost" SET body = $1, status = $2, "updatedAt" = $3 WHERE id = $4 
-       RETURNING id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt"`,
-      [body, 'published', new Date().toISOString(), postId]
+    const { data: updatedRaw, error: updateError } = await forumSql.updatePostBodyStatus(
+      query,
+      postId,
+      body,
+      'published',
+      new Date().toISOString(),
     );
 
     if (updateError) throw updateError;
@@ -202,18 +198,11 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
 
     const now = new Date().toISOString();
 
-    const { data: updatedRaw, error: updateError } = await query(
-      `UPDATE "ForumPost" SET body = $1, status = $2, "updatedAt" = $3 WHERE id = $4 
-       RETURNING id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt"`,
-      ['', 'deleted', now, postId]
-    );
+    const { data: updatedRaw, error: updateError } = await forumSql.updatePostBodyStatus(query, postId, '', 'deleted', now);
 
     if (updateError) throw updateError;
 
-    const { error: threadUpdateError } = await query(
-      `UPDATE "ForumThread" SET "updatedAt" = $1 WHERE id = $2`,
-      [now, context.thread.id]
-    );
+    const { error: threadUpdateError } = await forumSql.touchThread(query, context.thread.id, now);
 
     if (threadUpdateError) throw threadUpdateError;
 

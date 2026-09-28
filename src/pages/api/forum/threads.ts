@@ -8,6 +8,7 @@ import {
 } from '../../../lib/forum-server';
 import { canonicalizeCourseId, getCourseAliases } from '../../../lib/course-alias';
 import { query } from '../../../lib/db/pool';
+import * as forumSql from '../../../lib/forum-queries.ts';
 
 const THREAD_TITLE_MAX = 140;
 const THREAD_BODY_MAX = 4000;
@@ -44,15 +45,7 @@ function toDisplayName(author?: AuthorRow): string {
   return 'Usuario';
 }
 
-function pickNewestTimestamp(current: string | null, candidate: string | null): string | null {
-  if (!current) return candidate;
-  if (!candidate) return current;
-  const currentTime = new Date(current).getTime();
-  const candidateTime = new Date(candidate).getTime();
-  if (Number.isNaN(currentTime)) return candidate;
-  if (Number.isNaN(candidateTime)) return current;
-  return candidateTime > currentTime ? candidate : current;
-}
+const pickNewestTimestamp = forumSql.pickNewestTimestamp;
 
 function resolveForumErrorMessage(error: any, fallback: string): string {
   const message = typeof error?.message === 'string' ? error.message : '';
@@ -80,13 +73,10 @@ async function ensureBoardExists(
   const normalized = normalizeBoardSlug(boardSlug);
   if (!normalized) return false;
 
-  const { data: board, error: boardError } = await query(
-    `SELECT "id" FROM "ForumBoard" 
-     WHERE "courseId" = ANY($1) 
-     AND "slug" = $2 
-     AND "isArchived" = false 
-     LIMIT 1`,
-    [courseAliases.length > 0 ? courseAliases : [courseId], normalized]
+  const { data: board, error: boardError } = await forumSql.selectActiveBoardId(
+    query,
+    forumSql.courseIdsFor(courseId, courseAliases),
+    normalized,
   );
 
   if (boardError) throw boardError;
@@ -96,10 +86,7 @@ async function ensureBoardExists(
 async function loadAuthorMap(authorIds: string[]): Promise<Map<string, AuthorRow>> {
   if (authorIds.length === 0) return new Map();
 
-  const { data: authors, error: authorsError } = await query(
-    `SELECT "id", "name", "email", "image" FROM "User" WHERE "id" = ANY($1)`,
-    [authorIds]
-  );
+  const { data: authors, error: authorsError } = await forumSql.selectUsersByIds(query, authorIds);
 
   if (authorsError) throw authorsError;
 
@@ -145,14 +132,11 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
     const forumScopeKey = resolveForumScopeKey({ lessonSlug, boardSlug });
 
-    const { data: threadsRaw, error: threadsError } = await query(
-      `SELECT "id", "title", "createdByUserId", "createdAt", "updatedAt", "isPinned", "isLocked" 
-       FROM "ForumThread" 
-       WHERE "courseId" = ANY($1) 
-       AND "lessonSlug" = $2 
-       ORDER BY "isPinned" DESC, "updatedAt" DESC 
-       LIMIT $3`,
-      [courseAliases.length > 0 ? courseAliases : [courseId], forumScopeKey, THREAD_LIMIT]
+    const { data: threadsRaw, error: threadsError } = await forumSql.listThreadsByScope(
+      query,
+      forumSql.courseIdsFor(courseId, courseAliases),
+      forumScopeKey,
+      THREAD_LIMIT,
     );
 
     if (threadsError) throw threadsError;
@@ -175,13 +159,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
     );
 
     if (threadIds.length > 0) {
-      const { data: posts, error: postsError } = await query(
-        `SELECT "threadId", "createdAt", "parentPostId" 
-         FROM "ForumPost" 
-         WHERE "threadId" = ANY($1) 
-         AND ("status" IS NULL OR "status" <> 'deleted')`,
-        [threadIds]
-      );
+      const { data: posts, error: postsError } = await forumSql.selectThreadPostActivity(query, threadIds);
 
       if (postsError) throw postsError;
 
@@ -301,23 +279,28 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const now = new Date().toISOString();
     const threadId = crypto.randomUUID();
 
-    const { error: threadInsertError } = await query(
-      `INSERT INTO "ForumThread" ("id", "courseId", "lessonSlug", "title", "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt") 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [threadId, courseId, forumScopeKey, title, dbUser.id, false, false, now, now]
-    );
+    const { error: threadInsertError } = await forumSql.insertThread(query, {
+      id: threadId,
+      courseId,
+      lessonSlug: forumScopeKey,
+      title,
+      createdByUserId: dbUser.id,
+      now,
+    });
 
     if (threadInsertError) throw threadInsertError;
 
-    const { data: firstPostRows, error: firstPostError } = await query(
-      `INSERT INTO "ForumPost" ("id", "threadId", "authorUserId", "parentPostId", "body", "status", "createdAt", "updatedAt") 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING "id", "createdAt"`,
-      [crypto.randomUUID(), threadId, dbUser.id, null, firstPostBody, 'published', now, now]
-    );
+    const { data: firstPostRows, error: firstPostError } = await forumSql.insertFirstPost(query, {
+      id: crypto.randomUUID(),
+      threadId,
+      authorUserId: dbUser.id,
+      body: firstPostBody,
+      now,
+    });
     const firstPost = firstPostRows?.[0];
 
     if (firstPostError) {
-      await query(`DELETE FROM "ForumThread" WHERE "id" = $1`, [threadId]);
+      await forumSql.deleteNewThread(query, threadId);
       throw firstPostError;
     }
 

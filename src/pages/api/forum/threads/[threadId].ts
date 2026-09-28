@@ -6,6 +6,7 @@ import {
   json,
 } from '../../../../lib/forum-server';
 import { query } from '../../../../lib/db/pool';
+import * as forumSql from '../../../../lib/forum-queries.ts';
 
 const THREAD_TITLE_MAX = 140;
 
@@ -31,11 +32,7 @@ function resolveForumErrorMessage(error: any, fallback: string): string {
 async function getThreadOrNull(
   threadId: string,
 ): Promise<ThreadRow | null> {
-  const { data, error } = await query(
-    `SELECT id, "courseId", title, "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt" 
-     FROM "ForumThread" WHERE id = $1`,
-    [threadId]
-  );
+  const { data, error } = await forumSql.selectThreadForEdit(query, threadId);
 
   if (error) throw error;
   return data?.[0] || null;
@@ -100,15 +97,7 @@ export const PATCH: APIRoute = async ({ request, params, locals }) => {
     if (hasTitleUpdate) updateData.title = title;
     if (hasPinnedUpdate) updateData.isPinned = isPinned;
 
-    const cols = Object.keys(updateData);
-    const vals = Object.values(updateData);
-    const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
-    
-    const { data: updatedRaw, error: updateError } = await query(
-      `UPDATE "ForumThread" SET ${setSql} WHERE id = $${cols.length + 1} 
-       RETURNING id, "courseId", title, "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt"`,
-      [...vals, threadId]
-    );
+    const { data: updatedRaw, error: updateError } = await forumSql.updateThread(query, threadId, updateData);
 
     if (updateError) throw updateError;
 
@@ -159,10 +148,7 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
       return json({ error: 'Only the thread author or a teacher can delete this thread' }, 403);
     }
 
-    const { error: deleteError } = await query(
-      `DELETE FROM "ForumThread" WHERE id = $1`,
-      [threadId]
-    );
+    const { error: deleteError } = await forumSql.deleteThread(query, threadId);
 
     if (deleteError) throw deleteError;
 

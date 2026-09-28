@@ -9,6 +9,7 @@ import {
 import { renderForumMarkdown } from '../../../../../lib/forum-markdown';
 import { broadcastForumEvent } from '../../../../../lib/forum-broadcast';
 import { query } from '../../../../../lib/db/pool';
+import * as forumSql from '../../../../../lib/forum-queries.ts';
 
 const POST_BODY_MAX = 4000;
 const POSTS_LIMIT = 500;
@@ -30,10 +31,7 @@ function resolveForumErrorMessage(error: any, fallback: string): string {
 }
 
 async function getThreadOrNull(threadId: string): Promise<ThreadRow | null> {
-  const { data, error } = await query(
-    `SELECT id, "courseId", "lessonSlug", "createdByUserId", "isLocked" FROM "ForumThread" WHERE id = $1`,
-    [threadId]
-  );
+  const { data, error } = await forumSql.selectThreadForPosts(query, threadId);
   if (error || !data?.[0]) return null;
   return data[0];
 }
@@ -63,15 +61,7 @@ export const GET: APIRoute = async ({ params, locals, request }) => {
       return json({ error: 'Forbidden' }, 403);
     }
 
-    const { data: postsRaw, error: postsError } = await query(
-      `SELECT p.*, u.name as "authorName", u.email as "authorEmail", u.image as "authorImage", u.role as "authorRole"
-       FROM "ForumPost" p
-       LEFT JOIN "User" u ON p."authorUserId" = u.id
-       WHERE p."threadId" = $1 
-       ORDER BY p."createdAt" ASC 
-       LIMIT $2`,
-      [threadId, POSTS_LIMIT]
-    );
+    const { data: postsRaw, error: postsError } = await forumSql.listThreadPosts(query, threadId, POSTS_LIMIT);
 
     if (postsError) throw postsError;
 
@@ -154,19 +144,13 @@ export const POST: APIRoute = async ({ params, locals, request }) => {
     }
 
     const now = new Date().toISOString();
-    const { data: inserted, error: insertError } = await query(
-      `INSERT INTO "ForumPost" (
-        "threadId", "authorUserId", "body", "parentPostId", "createdAt", "updatedAt"
-      ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [
-        threadId,
-        dbUser.id,
-        body,
-        parentPostId || null,
-        now,
-        now,
-      ]
-    );
+    const { data: inserted, error: insertError } = await forumSql.insertReply(query, {
+      threadId,
+      authorUserId: dbUser.id,
+      body,
+      parentPostId: parentPostId || null,
+      now,
+    });
 
     if (insertError) {
       console.error('Forum post insert error:', insertError);

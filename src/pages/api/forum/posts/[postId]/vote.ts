@@ -7,6 +7,7 @@ import {
 } from '../../../../../lib/forum-server';
 import { broadcastForumEvent } from '../../../../../lib/forum-broadcast';
 import { query } from '../../../../../lib/db/pool';
+import * as forumSql from '../../../../../lib/forum-queries.ts';
 
 type PostRow = {
   id: string;
@@ -53,19 +54,13 @@ function parseVoteValue(value: unknown): number | null {
 async function getPostContext(
   postId: string,
 ): Promise<{ post: PostRow; thread: ThreadRow } | null> {
-  const { data: postRows, error: postError } = await query(
-    `SELECT "id", "threadId" FROM "ForumPost" WHERE "id" = $1 LIMIT 1`,
-    [postId]
-  );
+  const { data: postRows, error: postError } = await forumSql.selectPostForVote(query, postId);
   const post = postRows?.[0];
 
   if (postError) throw postError;
   if (!post) return null;
 
-  const { data: threadRows, error: threadError } = await query(
-    `SELECT "id", "courseId" FROM "ForumThread" WHERE "id" = $1 LIMIT 1`,
-    [post.threadId]
-  );
+  const { data: threadRows, error: threadError } = await forumSql.selectThreadForVote(query, post.threadId);
   const thread = threadRows?.[0];
 
   if (threadError) throw threadError;
@@ -81,10 +76,7 @@ async function getVoteSnapshot(
   postId: string,
   currentUserId: string,
 ): Promise<ReactionSnapshot> {
-  const { data: votes, error: votesError } = await query(
-    `SELECT "userId", "value" FROM "ForumPostVote" WHERE "postId" = $1`,
-    [postId]
-  );
+  const { data: votes, error: votesError } = await forumSql.selectVotes(query, postId);
 
   if (votesError) throw votesError;
 
@@ -148,19 +140,11 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
     }
 
     if (voteValue === 0) {
-      const { error: deleteError } = await query(
-        `DELETE FROM "ForumPostVote" WHERE "postId" = $1 AND "userId" = $2`,
-        [postId, dbUser.id]
-      );
+      const { error: deleteError } = await forumSql.deleteVote(query, postId, dbUser.id);
 
       if (deleteError) throw deleteError;
     } else {
-      const { error: upsertError } = await query(
-        `INSERT INTO "ForumPostVote" ("postId", "userId", "value") 
-         VALUES ($1, $2, $3) 
-         ON CONFLICT ("postId", "userId") DO UPDATE SET "value" = $3`,
-        [postId, dbUser.id, voteValue]
-      );
+      const { error: upsertError } = await forumSql.upsertVote(query, postId, dbUser.id, voteValue);
 
       if (upsertError) throw upsertError;
     }
