@@ -16,6 +16,7 @@ import {
   setFolderVisibility,
   reorderSpaceItem,
   ensureOkaFolders,
+  isUnderSite,
 } from './space-notes-core.ts';
 
 const SPACE = 's1';
@@ -562,8 +563,28 @@ test('reorderSpaceItem: uses buildTree\'s exact display order (fix round 1, find
 // ensureOkaFolders
 // ---------------------------------------------------------------------------
 
-test('ensureOkaFolders: inserts GTX and Output once, then does nothing once they exist', async () => {
+test('ensureOkaFolders: inserts GTX, Output and Site once, then does nothing once they exist', async () => {
   let existing = [];
+  const inserts = [];
+  const { q } = fakeQuery([
+    ['SELECT name FROM "LiveClassNoteFolder"', () => existing],
+    ['INSERT INTO "LiveClassNoteFolder"', (params) => { inserts.push(params); return []; }],
+  ]);
+
+  await ensureOkaFolders(q, { spaceId: SPACE, authorId: 'author1' });
+  assert.deepEqual(inserts.map((p) => p[0]).sort(), ['GTX', 'Output', 'Site']);
+  const site = inserts.find((p) => p[0] === 'Site');
+  assert.equal(site[3], 'public'); // visibility
+  assert.equal(site[4], 3072); // position, after Output's 2048
+
+  existing = [{ name: 'GTX' }, { name: 'Output' }, { name: 'Site' }];
+  inserts.length = 0;
+  await ensureOkaFolders(q, { spaceId: SPACE, authorId: 'author1' });
+  assert.deepEqual(inserts, []);
+});
+
+test('ensureOkaFolders: adds Site for a space that already has GTX/Output, without touching them', async () => {
+  const existing = [{ name: 'GTX' }, { name: 'Output' }];
   const inserts = [];
   const { q } = fakeQuery([
     ['SELECT name FROM "LiveClassNoteFolder"', () => existing],
@@ -571,12 +592,135 @@ test('ensureOkaFolders: inserts GTX and Output once, then does nothing once they
   ]);
 
   await ensureOkaFolders(q, { spaceId: SPACE, authorId: 'author1' });
-  assert.deepEqual(inserts.sort(), ['GTX', 'Output']);
+  assert.deepEqual(inserts, ['Site']);
+});
 
-  existing = [{ name: 'GTX' }, { name: 'Output' }];
-  inserts.length = 0;
-  await ensureOkaFolders(q, { spaceId: SPACE, authorId: 'author1' });
-  assert.deepEqual(inserts, []);
+// ---------------------------------------------------------------------------
+// onSiteChange — mutations under (or leaving/entering) Site fire the
+// injected trigger; everything else leaves it untouched.
+// ---------------------------------------------------------------------------
+
+const SITE_FOLDER_QUERY = /^SELECT id, "parentId", name FROM "LiveClassNoteFolder"/;
+
+// f-site is the root Site folder; f-research is nested under it; f-gtx is
+// an unrelated root (GTX-style) folder.
+const SITE_FOLDERS = [
+  { id: 'f-site', parentId: null, name: 'Site' },
+  { id: 'f-research', parentId: 'f-site', name: 'Research' },
+  { id: 'f-gtx', parentId: null, name: 'GTX' },
+];
+
+test('isUnderSite: true for the Site folder itself and its descendants, false otherwise', async () => {
+  const { q } = fakeQuery([[SITE_FOLDER_QUERY, () => SITE_FOLDERS]]);
+  assert.equal(await isUnderSite(q, SPACE, 'f-site'), true);
+  assert.equal(await isUnderSite(q, SPACE, 'f-research'), true);
+  assert.equal(await isUnderSite(q, SPACE, 'f-gtx'), false);
+  assert.equal(await isUnderSite(q, SPACE, null), false);
+  assert.equal(await isUnderSite(q, SPACE, 'missing'), false);
+});
+
+test('createSpaceNote: fires onSiteChange for a note under Site, not for one under GTX', async () => {
+  let fired = 0;
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder"', () => [{ id: 'f-research' }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['INSERT INTO "LiveClassNote"', () => [{ id: 'n1' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await createSpaceNote(q, { spaceId: SPACE, userId: 'u1', folderId: 'f-research', title: 'T', body: 'B', onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: q2 } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder"', () => [{ id: 'f-gtx' }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['INSERT INTO "LiveClassNote"', () => [{ id: 'n2' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await createSpaceNote(q2, { spaceId: SPACE, userId: 'u1', folderId: 'f-gtx', title: 'T', body: 'B', onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
+});
+
+test('updateSpaceNote: fires onSiteChange when moving a note into Site, and when moving one out', async () => {
+  let fired = 0;
+  const { q: qIn } = fakeQuery([
+    ['SELECT id, "folderId", visibility FROM "LiveClassNote"', () => [{ id: 'n1', folderId: 'f-gtx', visibility: null }]],
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder"', () => [{ id: 'f-site' }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['UPDATE "LiveClassNote"', () => [{ id: 'n1', folderId: 'f-site' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await updateSpaceNote(qIn, { spaceId: SPACE, userId: 'u1', noteId: 'n1', patch: { folderId: 'f-site' }, onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: qOut } = fakeQuery([
+    ['SELECT id, "folderId", visibility FROM "LiveClassNote"', () => [{ id: 'n1', folderId: 'f-site', visibility: null }]],
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder"', () => [{ id: 'f-gtx' }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['UPDATE "LiveClassNote"', () => [{ id: 'n1', folderId: 'f-gtx' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await updateSpaceNote(qOut, { spaceId: SPACE, userId: 'u1', noteId: 'n1', patch: { folderId: 'f-gtx' }, onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: qUnrelated } = fakeQuery([
+    ['SELECT id, "folderId", visibility FROM "LiveClassNote"', () => [{ id: 'n1', folderId: 'f-gtx', visibility: null }]],
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['UPDATE "LiveClassNote"', () => [{ id: 'n1', body: 'x' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await updateSpaceNote(qUnrelated, { spaceId: SPACE, userId: 'u1', noteId: 'n1', patch: { body: 'x' }, onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
+});
+
+test('deleteSpaceNote: fires onSiteChange only when the deleted note was under Site', async () => {
+  let fired = 0;
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['DELETE FROM "LiveClassNote"', () => [{ id: 'n1', folderId: 'f-research' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await deleteSpaceNote(q, { spaceId: SPACE, userId: 'u1', noteId: 'n1', onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: q2 } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['DELETE FROM "LiveClassNote"', () => [{ id: 'n2', folderId: 'f-gtx' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await deleteSpaceNote(q2, { spaceId: SPACE, userId: 'u1', noteId: 'n2', onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
+});
+
+test('moveSpaceFolder: fires onSiteChange moving a folder into Site or out of it', async () => {
+  let fired = 0;
+  const { q: qIn } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => [{ id: 'f-x', parentId: 'f-gtx' }, { id: 'f-gtx', parentId: null }, { id: 'f-site', parentId: null }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['UPDATE "LiveClassNoteFolder"', (params) => [{ id: 'f-x', parentId: params[0] }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await moveSpaceFolder(qIn, { spaceId: SPACE, userId: 'u1', folderId: 'f-x', parentId: 'f-site', onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: qUnrelated } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => [{ id: 'f-x', parentId: null }, { id: 'f-gtx', parentId: null }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['UPDATE "LiveClassNoteFolder"', (params) => [{ id: 'f-x', parentId: params[0] }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await moveSpaceFolder(qUnrelated, { spaceId: SPACE, userId: 'u1', folderId: 'f-x', parentId: 'f-gtx', onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
 });
 
 test('a failed database write cannot report a successful note save', async () => {

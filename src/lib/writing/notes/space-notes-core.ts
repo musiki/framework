@@ -77,6 +77,42 @@ async function requireAuthor(q: QueryFn, spaceId: string, userId: string): Promi
   if (!canManageSpace(role)) throw new SpaceNotesError(403, 'author only');
 }
 
+/**
+ * Callback mutations use to fire-and-forget a so-web rebuild request when
+ * the item they touched is (or was) under the space's root `Site` folder.
+ * Injected as a plain function rather than imported from `rebuild.ts`
+ * directly, so this module stays pure/q-injected and tests can pass a spy
+ * to assert it was (or wasn't) called; `space-notes.ts` wires the real
+ * `requestSiteRebuild` in for every mutation it re-exports.
+ */
+export type OnSiteChange = () => void;
+
+/**
+ * Walks `folderId`'s ancestor chain (within `spaceId`) and returns whether
+ * it is the space's root `Site` folder or a descendant of it. `folderId`
+ * itself may be the Site folder's own id (used by callers checking "does
+ * this parentId/folderId put the item under Site").
+ */
+export async function isUnderSite(q: QueryFn, spaceId: string, folderId: string | null): Promise<boolean> {
+  if (!folderId) return false;
+  const { data } = await checkedQuery(q,
+    `SELECT id, "parentId", name FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`,
+    [spaceId],
+  );
+  const foldersById = new Map((data ?? []).map((f: any) => [f.id, f]));
+  let id: string | null = folderId;
+  const seen = new Set<string>();
+  while (id) {
+    if (seen.has(id)) break;
+    seen.add(id);
+    const folder = foldersById.get(id);
+    if (!folder) break;
+    if (folder.parentId === null && folder.name === 'Site') return true;
+    id = folder.parentId;
+  }
+  return false;
+}
+
 async function assertFolderInSpace(q: QueryFn, spaceId: string, folderId: string): Promise<void> {
   const rows = await runOrThrow(
     q,
@@ -240,7 +276,16 @@ export async function createSpaceNote(
     title,
     body,
     lang,
-  }: { spaceId: string; userId: string; folderId: string | null; title: string; body: string; lang?: string | null },
+    onSiteChange,
+  }: {
+    spaceId: string;
+    userId: string;
+    folderId: string | null;
+    title: string;
+    body: string;
+    lang?: string | null;
+    onSiteChange?: OnSiteChange;
+  },
 ): Promise<Record<string, any> | null> {
   await requireAuthor(q, spaceId, userId);
   if (folderId) await assertFolderInSpace(q, spaceId, folderId);
@@ -254,6 +299,7 @@ export async function createSpaceNote(
      RETURNING *`,
     [userId, spaceId, folderId ?? null, title, body, lang ?? null, position],
   );
+  if (folderId && (await isUnderSite(q, spaceId, folderId))) onSiteChange?.();
   return data?.[0] ?? null;
 }
 
@@ -271,7 +317,8 @@ export async function updateSpaceNote(
     userId,
     noteId,
     patch,
-  }: { spaceId: string; userId: string; noteId: string; patch: UpdateSpaceNotePatch },
+    onSiteChange,
+  }: { spaceId: string; userId: string; noteId: string; patch: UpdateSpaceNotePatch; onSiteChange?: OnSiteChange },
 ): Promise<Record<string, any> | null> {
   // Membership is checked before the note lookup so a non-member always
   // gets a uniform 403, whether or not `noteId` exists in this space —
@@ -348,16 +395,27 @@ export async function updateSpaceNote(
     `UPDATE "LiveClassNote" SET ${sets.join(', ')} WHERE id = $${params.length - 1} AND "spaceId" = $${params.length} RETURNING *`,
     params,
   );
+
+  const before = current.folderId ?? null;
+  const after = patch.folderId !== undefined ? patch.folderId : before;
+  const wasUnderSite = await isUnderSite(q, spaceId, before);
+  const isUnderSiteNow = after === before ? wasUnderSite : await isUnderSite(q, spaceId, after);
+  if (wasUnderSite || isUnderSiteNow) onSiteChange?.();
+
   return data?.[0] ?? null;
 }
 
 export async function deleteSpaceNote(
   q: QueryFn,
-  { spaceId, userId, noteId }: { spaceId: string; userId: string; noteId: string },
+  { spaceId, userId, noteId, onSiteChange }: { spaceId: string; userId: string; noteId: string; onSiteChange?: OnSiteChange },
 ): Promise<true> {
   await requireAuthor(q, spaceId, userId);
-  const { data } = await checkedQuery(q, `DELETE FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 RETURNING id`, [noteId, spaceId]);
+  const { data } = await checkedQuery(q,
+    `DELETE FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 RETURNING id, "folderId"`,
+    [noteId, spaceId],
+  );
   if (!data?.length) throw new SpaceNotesError(404, 'note not found');
+  if (await isUnderSite(q, spaceId, data[0].folderId ?? null)) onSiteChange?.();
   return true;
 }
 
@@ -373,7 +431,15 @@ export async function createSpaceFolder(
     parentId,
     name,
     visibility,
-  }: { spaceId: string; userId: string; parentId: string | null; name: string; visibility?: Visibility | null },
+    onSiteChange,
+  }: {
+    spaceId: string;
+    userId: string;
+    parentId: string | null;
+    name: string;
+    visibility?: Visibility | null;
+    onSiteChange?: OnSiteChange;
+  },
 ): Promise<Record<string, any> | null> {
   await requireAuthor(q, spaceId, userId);
   if (parentId) await assertFolderInSpace(q, spaceId, parentId);
@@ -388,12 +454,19 @@ export async function createSpaceFolder(
      RETURNING *`,
     [name, parentId ?? null, userId, spaceId, visibility ?? null, position],
   );
+  if (parentId && (await isUnderSite(q, spaceId, parentId))) onSiteChange?.();
   return data?.[0] ?? null;
 }
 
 export async function renameSpaceFolder(
   q: QueryFn,
-  { spaceId, userId, folderId, name }: { spaceId: string; userId: string; folderId: string; name: string },
+  {
+    spaceId,
+    userId,
+    folderId,
+    name,
+    onSiteChange,
+  }: { spaceId: string; userId: string; folderId: string; name: string; onSiteChange?: OnSiteChange },
 ): Promise<Record<string, any>> {
   await requireAuthor(q, spaceId, userId);
   const { data } = await checkedQuery(q,
@@ -401,14 +474,25 @@ export async function renameSpaceFolder(
     [name, folderId, spaceId],
   );
   if (!data?.length) throw new SpaceNotesError(404, 'folder not found');
+  if (await isUnderSite(q, spaceId, folderId)) onSiteChange?.();
   return data[0];
 }
 
 export async function moveSpaceFolder(
   q: QueryFn,
-  { spaceId, userId, folderId, parentId }: { spaceId: string; userId: string; folderId: string; parentId: string | null },
+  {
+    spaceId,
+    userId,
+    folderId,
+    parentId,
+    onSiteChange,
+  }: { spaceId: string; userId: string; folderId: string; parentId: string | null; onSiteChange?: OnSiteChange },
 ): Promise<Record<string, any> | null> {
   await requireAuthor(q, spaceId, userId);
+
+  // Read before any UPDATE runs, so this reflects the folder's position
+  // prior to the move ("was under Site").
+  const wasUnderSite = await isUnderSite(q, spaceId, folderId);
 
   const allFolders = await runOrThrow(q, `SELECT id, "parentId" FROM "LiveClassNoteFolder" WHERE "spaceId" = $1`, [spaceId]);
   const rows: { id: string; parentId: string | null }[] = allFolders;
@@ -448,14 +532,21 @@ export async function moveSpaceFolder(
     params,
   );
   if (error) throw toThrowable(error);
+
+  // "after" state: the new parentId's ancestry doesn't depend on folderId's
+  // own row, so this is safe to check post-UPDATE too.
+  const isUnderSiteNow = parentId !== null && (await isUnderSite(q, spaceId, parentId));
+  if (wasUnderSite || isUnderSiteNow) onSiteChange?.();
+
   return data?.[0] ?? null;
 }
 
 export async function deleteSpaceFolder(
   q: QueryFn,
-  { spaceId, userId, folderId }: { spaceId: string; userId: string; folderId: string },
+  { spaceId, userId, folderId, onSiteChange }: { spaceId: string; userId: string; folderId: string; onSiteChange?: OnSiteChange },
 ): Promise<true> {
   await requireAuthor(q, spaceId, userId);
+  const wasUnderSite = await isUnderSite(q, spaceId, folderId);
   // A single DELETE is enough: LiveClassNoteFolder.parentId cascades (subfolders
   // are removed with it) and LiveClassNote.folderId is ON DELETE SET NULL, so
   // every direct note of the folder (and of each cascaded subfolder) detaches
@@ -463,12 +554,19 @@ export async function deleteSpaceFolder(
   // those FK actions and re-implements them by hand; this table already has them.
   const { data } = await checkedQuery(q, `DELETE FROM "LiveClassNoteFolder" WHERE id = $1 AND "spaceId" = $2 RETURNING id`, [folderId, spaceId]);
   if (!data?.length) throw new SpaceNotesError(404, 'folder not found');
+  if (wasUnderSite) onSiteChange?.();
   return true;
 }
 
 export async function setFolderVisibility(
   q: QueryFn,
-  { spaceId, userId, folderId, visibility }: { spaceId: string; userId: string; folderId: string; visibility: Visibility | null },
+  {
+    spaceId,
+    userId,
+    folderId,
+    visibility,
+    onSiteChange,
+  }: { spaceId: string; userId: string; folderId: string; visibility: Visibility | null; onSiteChange?: OnSiteChange },
 ): Promise<Record<string, any>> {
   await requireAuthor(q, spaceId, userId);
   if (visibility !== null && !isVisibility(visibility)) throw new SpaceNotesError(400, 'invalid visibility');
@@ -478,6 +576,7 @@ export async function setFolderVisibility(
     [visibility, folderId, spaceId],
   );
   if (!data?.length) throw new SpaceNotesError(404, 'folder not found');
+  if (await isUnderSite(q, spaceId, folderId)) onSiteChange?.();
   return data[0];
 }
 
@@ -495,6 +594,7 @@ export async function reorderSpaceItem(
     parentId,
     targetIndex,
     locale = 'en',
+    onSiteChange,
   }: {
     spaceId: string;
     userId: string;
@@ -504,6 +604,7 @@ export async function reorderSpaceItem(
     targetIndex: number;
     /** UI locale driving the display-order tie-break — so passes 'en', musiki 'es'. */
     locale?: string;
+    onSiteChange?: OnSiteChange;
   },
 ): Promise<{ id: string; position: number }[]> {
   await requireAuthor(q, spaceId, userId);
@@ -522,6 +623,16 @@ export async function reorderSpaceItem(
   // planned reorder as if it had happened.
   const existsRows = await runOrThrow(q, `SELECT id FROM ${table} WHERE id = $1 AND "spaceId" = $2 LIMIT 1`, [id, spaceId]);
   if (!existsRows.length) throw new SpaceNotesError(404, `${kind} not found`);
+
+  // "before" state, read prior to BEGIN: for a folder, the dragged item's
+  // own current ancestry; for a note, its current folder's ancestry.
+  let wasUnderSite: boolean;
+  if (kind === 'folder') {
+    wasUnderSite = await isUnderSite(q, spaceId, id);
+  } else {
+    const priorRows = await runOrThrow(q, `SELECT "folderId" FROM "LiveClassNote" WHERE id = $1 AND "spaceId" = $2 LIMIT 1`, [id, spaceId]);
+    wasUnderSite = await isUnderSite(q, spaceId, priorRows[0]?.folderId ?? null);
+  }
 
   const beginResult = await checkedQuery(q, 'BEGIN');
   if (beginResult.error) throw toThrowable(beginResult.error);
@@ -584,6 +695,10 @@ export async function reorderSpaceItem(
 
     const commitResult = await checkedQuery(q, 'COMMIT');
     if (commitResult.error) throw toThrowable(commitResult.error);
+
+    const isUnderSiteNow = parentId !== null && (await isUnderSite(q, spaceId, parentId));
+    if (wasUnderSite || isUnderSiteNow) onSiteChange?.();
+
     return assignments;
   } catch (err) {
     await checkedQuery(q, 'ROLLBACK');
@@ -598,6 +713,7 @@ export async function reorderSpaceItem(
 const OKA_FOLDERS: { name: string; visibility: Visibility; position: number }[] = [
   { name: 'GTX', visibility: 'supervision', position: 1024 },
   { name: 'Output', visibility: 'committee', position: 2048 },
+  { name: 'Site', visibility: 'public', position: 3072 },
 ];
 
 export async function ensureOkaFolders(

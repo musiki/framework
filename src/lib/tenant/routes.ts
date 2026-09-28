@@ -3,6 +3,7 @@ import type { RouteFamily, Tenant } from './tenants.ts';
 export const ROUTE_FAMILY_PREFIXES: Record<RouteFamily, string[]> = {
   studio: ['/studio'],
   'api:studio': ['/api/studio'],
+  'api:public': ['/api/public'],
   auth: ['/api/auth'],
 };
 

@@ -1,8 +1,16 @@
 import { query, getClient } from '../../db/pool';
 import * as core from './space-notes-core.ts';
 import type { QueryFn } from './access-core.ts';
+import { requestSiteRebuild } from '../../site/rebuild.ts';
 
 export { SpaceNotesError } from './space-notes-core.ts';
+
+// Fire-and-forget: `requestSiteRebuild` never throws and does its I/O
+// without the caller waiting on it, so every mutation below wires this in
+// as its `onSiteChange` unless the caller already supplied one (tests).
+const triggerRebuild = () => {
+  void requestSiteRebuild();
+};
 
 export const getMemberRole = (spaceId: string, userId: string) => core.getMemberRole(query, spaceId, userId);
 
@@ -10,22 +18,29 @@ export const listSpaceTree = (args: Parameters<typeof core.listSpaceTree>[1]) =>
 
 export const getSpaceNote = (args: Parameters<typeof core.getSpaceNote>[1]) => core.getSpaceNote(query, args);
 
-export const createSpaceNote = (args: Parameters<typeof core.createSpaceNote>[1]) => core.createSpaceNote(query, args);
+export const createSpaceNote = (args: Parameters<typeof core.createSpaceNote>[1]) =>
+  core.createSpaceNote(query, { onSiteChange: triggerRebuild, ...args });
 
-export const updateSpaceNote = (args: Parameters<typeof core.updateSpaceNote>[1]) => core.updateSpaceNote(query, args);
+export const updateSpaceNote = (args: Parameters<typeof core.updateSpaceNote>[1]) =>
+  core.updateSpaceNote(query, { onSiteChange: triggerRebuild, ...args });
 
-export const deleteSpaceNote = (args: Parameters<typeof core.deleteSpaceNote>[1]) => core.deleteSpaceNote(query, args);
+export const deleteSpaceNote = (args: Parameters<typeof core.deleteSpaceNote>[1]) =>
+  core.deleteSpaceNote(query, { onSiteChange: triggerRebuild, ...args });
 
-export const createSpaceFolder = (args: Parameters<typeof core.createSpaceFolder>[1]) => core.createSpaceFolder(query, args);
+export const createSpaceFolder = (args: Parameters<typeof core.createSpaceFolder>[1]) =>
+  core.createSpaceFolder(query, { onSiteChange: triggerRebuild, ...args });
 
-export const renameSpaceFolder = (args: Parameters<typeof core.renameSpaceFolder>[1]) => core.renameSpaceFolder(query, args);
+export const renameSpaceFolder = (args: Parameters<typeof core.renameSpaceFolder>[1]) =>
+  core.renameSpaceFolder(query, { onSiteChange: triggerRebuild, ...args });
 
-export const moveSpaceFolder = (args: Parameters<typeof core.moveSpaceFolder>[1]) => core.moveSpaceFolder(query, args);
+export const moveSpaceFolder = (args: Parameters<typeof core.moveSpaceFolder>[1]) =>
+  core.moveSpaceFolder(query, { onSiteChange: triggerRebuild, ...args });
 
-export const deleteSpaceFolder = (args: Parameters<typeof core.deleteSpaceFolder>[1]) => core.deleteSpaceFolder(query, args);
+export const deleteSpaceFolder = (args: Parameters<typeof core.deleteSpaceFolder>[1]) =>
+  core.deleteSpaceFolder(query, { onSiteChange: triggerRebuild, ...args });
 
 export const setFolderVisibility = (args: Parameters<typeof core.setFolderVisibility>[1]) =>
-  core.setFolderVisibility(query, args);
+  core.setFolderVisibility(query, { onSiteChange: triggerRebuild, ...args });
 
 export const ensureOkaFolders = (args: Parameters<typeof core.ensureOkaFolders>[1]) => core.ensureOkaFolders(query, args);
 
@@ -48,7 +63,7 @@ export async function reorderSpaceItem(
     }
   };
   try {
-    const result = await core.reorderSpaceItem(q, args);
+    const result = await core.reorderSpaceItem(q, { onSiteChange: triggerRebuild, ...args });
     client.release();
     return result;
   } catch (err) {

@@ -1,7 +1,7 @@
 export type TenantId = 'musiki' | 'hem' | 'so';
 export type Locale = 'es' | 'fr' | 'en';
 export type SpaceKind = 'course' | 'dissertation';
-export type RouteFamily = 'studio' | 'api:studio' | 'auth';
+export type RouteFamily = 'studio' | 'api:studio' | 'api:public' | 'auth';
 export type TenantTheme = 'default' | 'invulne' | 'so';
 
 export type Tenant = {
@@ -45,7 +45,7 @@ export const TENANTS: Record<TenantId, Tenant> = {
     locale: 'en',
     brand: { name: 'so', theme: 'so' },
     spaceKinds: ['dissertation'],
-    routes: ['studio', 'api:studio', 'auth'],
+    routes: ['studio', 'api:studio', 'api:public', 'auth'],
     authProviders: ['logto-so'],
     homePath: '/studio',
   },

@@ -13,12 +13,12 @@ test('musiki allows everything', () => {
   }
 });
 
-test('so allows only studio, studio api and auth', () => {
-  for (const p of ['/studio', '/studio/', '/studio/settings/access', '/api/studio/me', '/api/auth/session']) {
+test('so allows only studio, studio api, public site api and auth', () => {
+  for (const p of ['/studio', '/studio/', '/studio/settings/access', '/api/studio/me', '/api/auth/session', '/api/public/site']) {
     assert.equal(isRouteAllowed(so, p), true, p);
   }
   for (const p of ['/', '/cursos', '/foro', '/dashboard', '/login', '/api/enroll', '/api/graph-data',
-    '/studiox', '/api/studiox', '/api/authz', '/api/notes/list']) {
+    '/studiox', '/api/studiox', '/api/authz', '/api/notes/list', '/api/publicx']) {
     assert.equal(isRouteAllowed(so, p), false, p);
   }
 });
@@ -37,7 +37,7 @@ function sampleRoute(file) {
   rel = rel.replace(/\/index$/, '') || '/';
   return rel.replace(/\[\.\.\.[^\]]+\]/g, 'x/y').replace(/\[[^\]]+\]/g, 'x');
 }
-const ALLOWED_PREFIXES = ['/studio', '/api/studio', '/api/auth'];
+const ALLOWED_PREFIXES = ['/studio', '/api/studio', '/api/public', '/api/auth'];
 const underAllowed = (r) => ALLOWED_PREFIXES.some((p) => r === p || r.startsWith(p + '/'));
 
 test('route sweep: no musiki route is reachable from so', () => {
