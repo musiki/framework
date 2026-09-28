@@ -17,6 +17,7 @@ import {
   reorderSpaceItem,
   ensureOkaFolders,
   isUnderSite,
+  isNoteUnderSite,
 } from './space-notes-core.ts';
 
 const SPACE = 's1';
@@ -893,4 +894,23 @@ test('a failed database write cannot report a successful note save', async () =>
     return { data: [], error: null };
   };
   await assert.rejects(createSpaceNote(q, { spaceId: 's1', userId: 'u1', folderId: null, title: 'Test', body: '' }), /write failed/);
+});
+
+test('isNoteUnderSite: resolves the note\'s space/folder, true only under Site', async () => {
+  const notes = {
+    'n-site': { spaceId: SPACE, folderId: 'f-research' },
+    'n-gtx': { spaceId: SPACE, folderId: 'f-gtx' },
+    'n-root': { spaceId: SPACE, folderId: null },
+    'n-class': { spaceId: null, folderId: 'f-research' },
+  };
+  const { q } = fakeQuery([
+    ['SELECT "spaceId", "folderId" FROM "LiveClassNote"', ([id]) => (notes[id] ? [notes[id]] : [])],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  assert.equal(await isNoteUnderSite(q, 'n-site'), true);
+  assert.equal(await isNoteUnderSite(q, 'n-gtx'), false);
+  assert.equal(await isNoteUnderSite(q, 'n-root'), false);
+  assert.equal(await isNoteUnderSite(q, 'n-class'), false);
+  assert.equal(await isNoteUnderSite(q, 'missing'), false);
+  assert.equal(await isNoteUnderSite(q, ''), false);
 });

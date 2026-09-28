@@ -113,6 +113,25 @@ export async function isUnderSite(q: QueryFn, spaceId: string, folderId: string 
   return false;
 }
 
+/**
+ * Whether note `noteId` lives (via its folder) under its space's root
+ * `Site` folder. For mutations that don't go through this module but still
+ * change a note's content — e.g. restoring a version via the shared
+ * musiki `/api/live/notes/versions` handler, which the studio re-exports —
+ * so their studio wrapper can request a so-web rebuild. A note without a
+ * space (plain musiki class note) or a folder is never under Site.
+ */
+export async function isNoteUnderSite(q: QueryFn, noteId: string): Promise<boolean> {
+  if (!noteId) return false;
+  const { data } = await checkedQuery(q,
+    `SELECT "spaceId", "folderId" FROM "LiveClassNote" WHERE id = $1::uuid LIMIT 1`,
+    [noteId],
+  );
+  const row = data?.[0];
+  if (!row?.spaceId || !row.folderId) return false;
+  return isUnderSite(q, row.spaceId, row.folderId);
+}
+
 async function assertFolderInSpace(q: QueryFn, spaceId: string, folderId: string): Promise<void> {
   const rows = await runOrThrow(
     q,
