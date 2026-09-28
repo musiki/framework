@@ -2,6 +2,8 @@
 -- definition versions, concept relations, and musiki forum generalization (course XOR space).
 -- Additive and idempotent: safe to apply more than once. Spec §3–§4 of
 -- docs/superpowers/specs/2026-09-28-mm-concept-machine-design.md.
+-- Follow-up: 20260929090100_mm_followup.sql (Concept* user FKs → nullable ON DELETE SET NULL,
+-- table ownership → app). Apply both.
 BEGIN;
 
 -- ── Space: settings + commons kind ─────────────────────────────────────────────
