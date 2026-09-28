@@ -154,3 +154,34 @@ test('open-join never applies to dissertation spaces or unknown spaces', () => {
   const d = decideSpaceAccess({ ...base, spaces: [{ id: 's1', kind: 'dissertation', openJoin: true }] });
   assert.equal(d.allowed, false);
 });
+
+import { loadSpaceAccessContext, SPACES_SQL } from './access-context.ts';
+
+test('open-join skips blocked spaces but invites still work', () => {
+  const d = decideSpaceAccess({ ...base, spaces: [commons({ openJoin: true })], blockedSpaceIds: ['s1'] });
+  assert.deepEqual(d, { allowed: false, reason: 'no-grant' });
+  const i = decideSpaceAccess({ ...base, spaces: [commons({ openJoin: true })], blockedSpaceIds: ['s1'], invites: [invite({ role: 'member' })] });
+  assert.equal(i.grants[0].via, 'invite');
+});
+
+test('openJoin SQL only accepts a JSON boolean true', () => {
+  assert.match(SPACES_SQL, /'openJoin' = 'true'::jsonb/);
+  assert.doesNotMatch(SPACES_SQL, /::boolean/);
+});
+
+test('context loader maps rows and blocks', async () => {
+  const q = async (text) => text.includes('SpaceMemberBlock')
+    ? { data: [{ spaceId: 's1' }], error: null }
+    : { data: [{ id: 's1', kind: 'commons', openJoin: true }, { id: 's2', kind: 'course', openJoin: true }], error: null };
+  const c = await loadSpaceAccessContext(q, 't', 'u1');
+  assert.deepEqual(c, { spaces: [{ id: 's1', kind: 'commons', openJoin: true }, { id: 's2', kind: 'dissertation', openJoin: true }], blockedSpaceIds: ['s1'] });
+});
+
+test('context loader falls back on undefined column/table, rethrows others', async () => {
+  for (const code of ['42703', '42P01']) {
+    const q = async () => ({ data: null, error: { code } });
+    assert.deepEqual(await loadSpaceAccessContext(q, 't', 'u1'), { spaces: [], blockedSpaceIds: [] });
+  }
+  const bad = async () => ({ data: null, error: { code: '22P02' } });
+  await assert.rejects(() => loadSpaceAccessContext(bad, 't', 'u1'));
+});

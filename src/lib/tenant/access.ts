@@ -20,6 +20,8 @@ export function decideSpaceAccess(input: {
   spaces?: SpaceInfo[];
   /** Spaces the user already belongs to (open-join never re-grants these). */
   memberSpaceIds?: string[];
+  /** Spaces the user was removed from: open-join skips them (invites/rules still work). */
+  blockedSpaceIds?: string[];
 }): AccessDecision {
   const email = normalizeEmail(input.email);
   if (!email) return { allowed: false, reason: 'no-email' };
@@ -51,8 +53,9 @@ export function decideSpaceAccess(input: {
 
   // Open-join: commons spaces only, verified email (checked above), no other grant, not already a member.
   const members = new Set(input.memberSpaceIds ?? []);
+  const blocked = new Set(input.blockedSpaceIds ?? []);
   for (const sp of info.values()) {
-    if (sp.kind === 'commons' && sp.openJoin === true && !bySpace.has(sp.id) && !members.has(sp.id)) {
+    if (sp.kind === 'commons' && sp.openJoin === true && !bySpace.has(sp.id) && !members.has(sp.id) && !blocked.has(sp.id)) {
       add({ spaceId: sp.id, role: 'member', via: 'open-join' });
     }
   }

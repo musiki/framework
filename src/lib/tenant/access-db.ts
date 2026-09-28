@@ -1,6 +1,7 @@
 import { getClient, query } from '../db/pool';
 import { resolveUserIdByEmail } from '../user-email';
-import { decideSpaceAccess, shouldRejectMusikiSignIn, type AccessRuleRow, type InviteRow, type SpaceInfo } from './access';
+import { decideSpaceAccess, shouldRejectMusikiSignIn, type AccessRuleRow, type InviteRow } from './access';
+import { loadSpaceAccessContext } from './access-context';
 import { emailDomain, normalizeEmail } from './space-roles';
 import { DEFAULT_TENANT_ID, type TenantId } from './tenants';
 
@@ -39,13 +40,7 @@ export async function authorizeTenantSignIn(
       )).length > 0
     : false;
 
-  const spaces = must<{ id: string; kind: string; openJoin: boolean }>(await query(
-    `SELECT s."id", s."kind", COALESCE((s."settings"->>'openJoin')::boolean, false) AS "openJoin"
-       FROM "Space" s WHERE s."tenantId" = $1`,
-    [tenantId],
-  )).map((r): SpaceInfo => ({
-    id: r.id, kind: r.kind === 'commons' ? 'commons' : 'dissertation', openJoin: r.openJoin === true,
-  }));
+  const { spaces, blockedSpaceIds } = await loadSpaceAccessContext(query, tenantId, userId);
   const memberSpaceIds = userId
     ? must<{ spaceId: string }>(await query(
         `SELECT m."spaceId" FROM "SpaceMember" m JOIN "Space" s ON s."id" = m."spaceId"
@@ -55,7 +50,7 @@ export async function authorizeTenantSignIn(
     : [];
 
   const decision = decideSpaceAccess({
-    email, emailVerified: input.emailVerified, now: new Date(), isMember, invites, rules, spaces, memberSpaceIds,
+    email, emailVerified: input.emailVerified, now: new Date(), isMember, invites, rules, spaces, memberSpaceIds, blockedSpaceIds,
   });
   if (!decision.allowed) {
     console.warn(`[TENANT-SIGNIN] ${tenantId} rejected ${email}: ${decision.reason}`);

@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import { query } from '../db/pool';
 import { resolveUserIdByEmail } from '../user-email';
-import { isUuid, type AnySpaceRole, type SpaceRole } from './space-roles';
+import { isUuid, type AnySpaceRole } from './space-roles';
 import type { Tenant, TenantId } from './tenants';
 
 export const INVITE_TTL_DAYS = 14;
 
-export type Membership = { spaceId: string; slug: string; title: string; lang: string; role: SpaceRole };
-export type RuleRow = { id: string; kind: 'email' | 'domain'; value: string; role: SpaceRole; createdAt: string };
+export type Membership = { spaceId: string; slug: string; title: string; lang: string; role: AnySpaceRole };
+export type RuleRow = { id: string; kind: 'email' | 'domain'; value: string; role: AnySpaceRole; createdAt: string };
 
 const must = <T>(res: { data: T[] | null; error: any }): T[] => {
   if (res.error) throw new Error(res.error.message || 'Database error');
