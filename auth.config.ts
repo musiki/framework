@@ -76,6 +76,28 @@ const logtoSoProvider = LOGTO_ISSUER && LOGTO_SO_CLIENT_ID
     }]
   : [];
 
+const LOGTO_MM_CLIENT_ID = getEnv('LOGTO_MM_CLIENT_ID');
+const logtoMmProvider = LOGTO_ISSUER && LOGTO_MM_CLIENT_ID
+  ? [{
+      id: "logto-mm",
+      name: "MishMash Concept Machine",
+      type: "oidc" as const,
+      issuer: LOGTO_ISSUER,
+      clientId: LOGTO_MM_CLIENT_ID,
+      clientSecret: getEnv('LOGTO_MM_CLIENT_SECRET'),
+      authorization: { params: { scope: "openid profile email" } },
+      checks: ["pkce", "state"] as ("pkce" | "state")[],
+      onProfile(profile: Record<string, unknown>) {
+        return {
+          id: profile.sub,
+          name: (profile.name as string) ?? (profile.username as string),
+          email: profile.email,
+          image: profile.picture,
+        };
+      },
+    }]
+  : [];
+
 // so-provisioned users (no enrollment, no elevated role, only foreign-tenant
 // spaces) must not reach musiki. Any failure here allows the sign-in.
 const rejectForeignTenantOnlyUser = async (userId: string, email: string): Promise<boolean> => {
@@ -117,6 +139,7 @@ export default defineConfig({
   providers: [
     ...logtoProvider,
     ...logtoSoProvider,
+    ...logtoMmProvider,
     Google({
       clientId: getEnv('GOOGLE_CLIENT_ID'),
       clientSecret: getEnv('GOOGLE_CLIENT_SECRET'),

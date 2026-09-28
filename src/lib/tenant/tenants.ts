@@ -1,8 +1,8 @@
-export type TenantId = 'musiki' | 'hem' | 'so';
+export type TenantId = 'musiki' | 'hem' | 'so' | 'mm';
 export type Locale = 'es' | 'fr' | 'en';
-export type SpaceKind = 'course' | 'dissertation';
-export type RouteFamily = 'studio' | 'api:studio' | 'api:public' | 'auth';
-export type TenantTheme = 'default' | 'invulne' | 'so';
+export type SpaceKind = 'course' | 'dissertation' | 'commons';
+export type RouteFamily = 'studio' | 'api:studio' | 'api:public' | 'auth' | 'mm' | 'api:mm' | 'api:public-mm';
+export type TenantTheme = 'default' | 'invulne' | 'so' | 'mm';
 
 export type Tenant = {
   id: TenantId;
@@ -13,6 +13,7 @@ export type Tenant = {
   routes: 'all' | RouteFamily[];
   authProviders: string[];    // Auth.js provider ids, unique across tenants
   homePath: string;           // post-login landing path
+  loginPath?: string;         // tenant sign-in page for non-'all' tenants (default '/studio/login')
 };
 
 export const DEFAULT_TENANT_ID: TenantId = 'musiki';
@@ -48,5 +49,19 @@ export const TENANTS: Record<TenantId, Tenant> = {
     routes: ['studio', 'api:studio', 'api:public', 'auth'],
     authProviders: ['logto-so'],
     homePath: '/studio',
+  },
+  // MishMash Concept Machine. Public URLs (/, /f, /c, /graph, /about, /join,
+  // /admin) are rewritten by middleware to internal /mm-app/* pages
+  // (see mapMmPath in routes.ts). Never shows musiki branding.
+  mm: {
+    id: 'mm',
+    hosts: ['mm.zztt.org'],
+    locale: 'en',
+    brand: { name: 'MishMash Concept Machine', theme: 'mm' },
+    spaceKinds: ['commons'],
+    routes: ['mm', 'api:mm', 'api:public-mm', 'auth'],
+    authProviders: ['logto-mm'],
+    homePath: '/',
+    loginPath: '/join',
   },
 };

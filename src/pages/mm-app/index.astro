@@ -1,0 +1,23 @@
+---
+// Internal page for mm.zztt.org "/" (middleware rewrites public mm paths to
+// /mm-app/*; this mount is never reachable by URL). Placeholder until the
+// MishMash shell lands (Task 9). Plain HTML: no musiki layout or branding.
+// Do not Astro.rewrite() to another /mm-app path from here: that re-runs the
+// middleware, which 404s /mm-app/*.
+export const prerender = false;
+const isMm = Astro.locals.tenant?.id === 'mm';
+if (!isMm) Astro.response.status = 404;
+const title = isMm ? 'MishMash Concept Machine' : 'Not found';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title}</title>
+  </head>
+  <body>
+    {isMm ? <h1>MishMash Concept Machine — coming soon</h1> : <h1>Not found</h1>}
+  </body>
+</html>

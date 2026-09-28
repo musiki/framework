@@ -1,0 +1,24 @@
+---
+// mm 404: serves /mm-app/not-found (middleware's not-found target for the mm
+// tenant) and any unknown /mm-app/* path. Without this, musiki's root
+// catch-all (src/pages/[...slug].astro) would render musiki content for
+// unknown mm paths. Specific mm pages win over this rest route.
+// Plain HTML, no musiki branding; renders inline (no Astro.rewrite, which
+// would re-run middleware on /mm-app/* and 404-loop).
+export const prerender = false;
+Astro.response.status = 404;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Not found</title>
+  </head>
+  <body>
+    <h1>Not found</h1>
+    <p>This page does not exist.</p>
+    <p><a href="/">Back to the Concept Machine</a></p>
+  </body>
+</html>

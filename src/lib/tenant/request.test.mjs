@@ -31,3 +31,49 @@ test('so-dev host: prerendered routes obey allowlist', () => {
   assert.equal(decideTenantRequest({ host: 'so-dev.zztt.org', pathname: '/slides/some-slug' }).action, 'not-found');
   assert.equal(decideTenantRequest({ host: 'so-dev.zztt.org', pathname: '/public-search.json' }).action, 'not-found');
 });
+
+test('mm host: public pages are rewritten to the internal mount, with internal target', () => {
+  const cases = [['/', '/mm-app/'], ['/f/stiegler', '/mm-app/f/stiegler'], ['/c/x', '/mm-app/c/x'],
+    ['/graph', '/mm-app/graph'], ['/about', '/mm-app/about'], ['/join', '/mm-app/join'], ['/admin', '/mm-app/admin']];
+  for (const [p, target] of cases) {
+    const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: p });
+    assert.equal(d.tenant.id, 'mm');
+    assert.equal(d.action, 'next', p);
+    assert.equal(d.rewrite, target, p);
+  }
+});
+
+test('mm host: apis and auth pass without rewrite', () => {
+  for (const p of ['/api/mm/concepts', '/api/public/mm/concepts.json', '/api/auth/session', '/_astro/x.js']) {
+    const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: p });
+    assert.equal(d.action, 'next', p);
+    assert.equal(d.rewrite, undefined, p);
+  }
+});
+
+test('mm host: musiki and so routes are not-found', () => {
+  for (const p of ['/cursos', '/foro', '/dashboard', '/login', '/studio', '/studio/login', '/api/studio/me',
+    '/api/public/instruments', '/search.json', '/slides/x', '/f/../../cursos']) {
+    assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).action, 'not-found', p);
+  }
+});
+
+test('/mm-app/* is not-found on every host', () => {
+  for (const host of ['mm.zztt.org', 'musiki.org.ar', 'so.zztt.org', 'localhost:4321']) {
+    for (const p of ['/mm-app', '/mm-app/', '/mm-app/f/x', '/MM-APP/', '/mm%2Dapp/']) {
+      const d = decideTenantRequest({ host, pathname: p });
+      assert.equal(d.action, 'not-found', `${host}${p}`);
+      assert.equal(d.rewrite, undefined);
+    }
+  }
+});
+
+test('musiki and so never get a rewrite for mm-looking paths', () => {
+  assert.deepEqual(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/about' }).rewrite, undefined);
+  assert.equal(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/about' }).action, 'next');
+  assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/about' }).action, 'not-found');
+});
+
+test('dev override to mm applies', () => {
+  assert.equal(decideTenantRequest({ host: 'localhost:4321', pathname: '/', envTenant: 'mm' }).rewrite, '/mm-app/');
+});

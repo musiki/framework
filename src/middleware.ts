@@ -35,8 +35,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
       });
   context.locals.tenant = tenantDecision.tenant;
   if (tenantDecision.action === "not-found") {
+    // mm renders its own plain 404 (no musiki/so chrome). next(path) serves
+    // the internal page without re-running this middleware.
+    if (tenantDecision.tenant.id === "mm") return next("/mm-app/not-found");
+    if (tenantDecision.tenant.routes === "all") {
+      // Only /mm-app/* reaches here on full-route tenants: musiki's 404 page, with a real 404 status.
+      const notFound = await context.rewrite("/404");
+      return new Response(notFound.body, { status: 404, headers: notFound.headers });
+    }
     return context.rewrite("/studio/not-found");
   }
+  // mm public pages are served from the internal /mm-app/* mount. Applied via
+  // next(path) at the end so the rest of this middleware still runs and the
+  // internal path never goes through the tenant check (which 404s it).
+  const internalPath = "rewrite" in tenantDecision && tenantDecision.rewrite
+    ? `${tenantDecision.rewrite}${url.search}`
+    : null;
+  const proceed = () => (internalPath ? next(internalPath) : next());
 
   // Skip header access and session check for known static or prerendered paths (search.json, assets, etc)
   const isStaticLike = 
@@ -47,7 +62,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     /\.[a-z0-9]+$/i.test(pathname);
 
   if (isStaticLike) {
-    return next();
+    return proceed();
   }
   
   // Get hostname from forwarded headers or request URL
@@ -94,5 +109,5 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  return next();
+  return proceed();
 });
