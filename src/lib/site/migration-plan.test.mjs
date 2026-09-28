@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planMigration, noteSlug } from './migration-plan.ts';
+import matter from 'gray-matter';
+import { buildSiteModel } from './site-model.ts';
+import { positionBetween } from '../writing/tree/model.ts';
 
 // ---------------------------------------------------------------------------
 // noteSlug
@@ -113,6 +116,111 @@ test('planMigration: re-running the same manifest against the resulting tree ski
   const secondRun = planMigration(manifest, existingAfter);
   assert.ok(secondRun.every((s) => s.action === 'skip-folder' || s.action === 'skip-note'));
   assert.equal(secondRun.length, manifest.items.length);
+});
+
+// ---------------------------------------------------------------------------
+// end-to-end: planMigration(...) -> simulated apply -> buildSiteModel(...)
+// reproduces the required header menu (Task 7 finding 4).
+// ---------------------------------------------------------------------------
+
+// Mirrors the shape of so-web's scripts/site-migration.json (titles,
+// parents, frontmatter) without reading that file from disk, so this test
+// is self-contained and does not depend on the sibling so-web repo/worktree
+// being checked out at a particular path.
+const soWebManifestFixture = {
+  items: [
+    { kind: 'folder', title: 'Home', parent: null },
+    { kind: 'note', title: 'Speculative Organology', parent: 'Home', frontmatter: { slug: 'index', layout: 'home', description: 'Composing instruments, objects and environments.' }, markdownFile: 'home-index.md' },
+
+    { kind: 'folder', title: 'Research', parent: null },
+    { kind: 'note', title: 'Research', parent: 'Research', frontmatter: { slug: 'index' }, markdownFile: 'research-index.md' },
+    { kind: 'note', title: 'The Speculative Organological Model', parent: 'Research', frontmatter: { slug: 'speculative-instruments' }, markdownFile: 'research-speculative-instruments.md' },
+    { kind: 'note', title: 'SOOG: writing instrumental relations', parent: 'Research', frontmatter: { slug: 'soog' }, markdownFile: 'research-soog.md' },
+    { kind: 'note', title: 'Materials, resonance and interaction', parent: 'Research', frontmatter: { slug: 'sonic-materialities' }, markdownFile: 'research-sonic-materialities.md' },
+    { kind: 'note', title: 'Biome Consurgens', parent: 'Research', frontmatter: { slug: 'biome-consurgens' }, markdownFile: 'research-biome-consurgens.md' },
+    { kind: 'note', title: 'M5live', parent: 'Research', frontmatter: { slug: 'm5live' }, markdownFile: 'research-m5live.md' },
+
+    { kind: 'folder', title: 'Blog', parent: null },
+    { kind: 'note', title: 'Blog', parent: 'Blog', frontmatter: { slug: 'index', layout: 'blog' }, markdownFile: 'blog-index.md' },
+
+    { kind: 'folder', title: 'Tools', parent: null },
+    { kind: 'note', title: 'Tools', parent: 'Tools', frontmatter: { slug: 'index' }, markdownFile: 'tools-index.md' },
+
+    { kind: 'folder', title: 'CV', parent: null },
+    { kind: 'note', title: 'Luciano Azzigotti — Research profile', parent: 'CV', frontmatter: { slug: 'index' }, markdownFile: 'cv-index.md' },
+
+    { kind: 'folder', title: 'About', parent: null },
+    { kind: 'note', title: 'About', parent: 'About', frontmatter: { slug: 'index' }, markdownFile: 'about-index.md' },
+
+    { kind: 'folder', title: 'Tags', parent: null },
+    { kind: 'note', title: 'Tags', parent: 'Tags', frontmatter: { slug: 'index', layout: 'tags' }, markdownFile: 'tags-index.md' },
+  ],
+};
+
+/**
+ * Simulates applying a create-only plan (no skip steps, matching an empty
+ * starting tree — the same precondition the script's own applyPlan runs
+ * under on first run) to build a fake `{ siteFolderId, folders, notes }`
+ * tree for `buildSiteModel`, using the same `positionBetween` sibling
+ * ordering `createSpaceFolder`/`createSpaceNote` use, and the same
+ * frontmatter-serialization shape (`matter.stringify`) the script's
+ * `applyPlan` writes to each note's body.
+ */
+function simulateApply(steps) {
+  const SITE_ID = 'site';
+  const folders = [];
+  const notes = [];
+  const folderIdByTitle = new Map();
+  const lastPositionByParent = new Map(); // parentId -> last position
+  let nextId = 1;
+
+  const takePosition = (parentKey) => {
+    const prev = lastPositionByParent.get(parentKey) ?? null;
+    const position = positionBetween(prev, null);
+    lastPositionByParent.set(parentKey, position);
+    return position;
+  };
+
+  for (const step of steps) {
+    assert.ok(step.action === 'create-folder' || step.action === 'create-note', `unexpected step for an empty starting tree: ${step.action}`);
+
+    if (step.action === 'create-folder') {
+      const parentId = step.parent === null ? SITE_ID : folderIdByTitle.get(step.parent);
+      assert.ok(parentId, `parent folder "${step.parent}" not found/created yet`);
+      const id = `folder-${nextId++}`;
+      folders.push({ id, parentId, name: step.title, position: takePosition(parentId) });
+      folderIdByTitle.set(step.title, id);
+      continue;
+    }
+
+    const parentId = folderIdByTitle.get(step.parent);
+    assert.ok(parentId, `parent folder "${step.parent}" not found/created yet`);
+    const id = `note-${nextId++}`;
+    const body = matter.stringify(`# ${step.title}\n\nplaceholder body.\n`, step.frontmatter);
+    notes.push({ id, folderId: parentId, title: step.title, body, position: takePosition(parentId) });
+  }
+
+  return { siteFolderId: SITE_ID, folders, notes };
+}
+
+test('end-to-end: applying planMigration(so-web manifest, empty tree) yields the required header menu', () => {
+  const steps = planMigration(soWebManifestFixture, emptyTree);
+  const tree = simulateApply(steps);
+  const model = buildSiteModel(tree);
+
+  assert.deepEqual(
+    model.menu.map((m) => m.title),
+    ['Home', 'Research', 'Blog', 'Tools', 'CV', 'About', 'Tags'],
+  );
+
+  const homeItem = model.menu.find((m) => m.title === 'Home');
+  assert.equal(homeItem.path, '/');
+
+  const researchPaths = model.pages.filter((p) => p.path.startsWith('/research/')).map((p) => p.path);
+  assert.deepEqual(
+    researchPaths.sort(),
+    ['/research/biome-consurgens', '/research/m5live', '/research/soog', '/research/sonic-materialities', '/research/speculative-instruments'].sort(),
+  );
 });
 
 test('planMigration: preserves manifest order across folders and notes (folders-first is a manifest-authoring convention, not enforced here)', () => {

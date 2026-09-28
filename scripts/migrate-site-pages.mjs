@@ -97,10 +97,11 @@ function loadDotEnvIfNeeded() {
 }
 
 function parseArgs(argv) {
-  const args = { dryRun: false };
+  const args = { dryRun: false, allowExisting: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--dry-run') args.dryRun = true;
+    else if (arg === '--allow-existing') args.allowExisting = true;
     else if (arg === '--manifest') args.manifest = argv[++i];
     else if (arg === '--author-email') args.authorEmail = argv[++i];
     else if (arg === '--help' || arg === '-h') {
@@ -118,11 +119,18 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(
     [
-      'Usage: node scripts/migrate-site-pages.mjs --manifest <path> --author-email <email> [--dry-run]',
+      'Usage: node scripts/migrate-site-pages.mjs --manifest <path> --author-email <email> [--dry-run] [--allow-existing]',
       '',
       '  --manifest <path>      path to scripts/site-migration.json (so-web repo)',
       '  --author-email <email> email of the so space author (must have role "author")',
       '  --dry-run              read-only: prints the plan, makes no changes',
+      '  --allow-existing       proceed even if the Site root already has folders/',
+      '                         notes not named in the manifest (default: refuse)',
+      '',
+      'The end-of-run rebuild trigger (requestSiteRebuild) only does anything on a',
+      'host where SO_REBUILD_TRIGGER (or the default /opt/so/.rebuild-requested)',
+      'is watched by the so-web rebuild watcher — i.e. the VPS. Elsewhere it just',
+      'touches/creates that local file harmlessly.',
     ].join('\n'),
   );
 }
@@ -155,7 +163,7 @@ async function resolveAuthorId(query, spaceId, email) {
   let userId = ueRows?.[0]?.userId;
 
   if (!userId) {
-    const { data: uRows, error: uErr } = await query(`SELECT id FROM "User" WHERE email ILIKE $1 LIMIT 1`, [normalized]);
+    const { data: uRows, error: uErr } = await query(`SELECT id FROM "User" WHERE lower(email) = $1 LIMIT 1`, [normalized]);
     if (uErr) throw asError(uErr);
     userId = uRows?.[0]?.id;
   }
@@ -232,6 +240,31 @@ async function loadSiteFolderTree(query, spaceId) {
   return { siteFolderId: siteFolder.id, folderIdByPath, existing: { folders: existingFolders, notes: existingNotes } };
 }
 
+/**
+ * Refuses to proceed (unless --allow-existing) when the Site root already
+ * has folders or root-level notes this manifest doesn't know about — a
+ * signal that the Site tree has content from somewhere else (manual studio
+ * edits, a different migration, a partially-run manifest with a since-
+ * edited title) that a name/slug-keyed idempotency check could otherwise
+ * silently coexist with in a confusing way. Only checks the Site root
+ * (this migration's own folders + planMigration's idempotency check inside
+ * each section already handles children safely).
+ */
+function assertSiteRootMatchesManifest(manifest, existing) {
+  const manifestRootFolderTitles = new Set(manifest.items.filter((item) => item.kind === 'folder' && item.parent === null).map((item) => item.title));
+
+  const unexpectedFolders = existing.folders.filter((f) => f.parentName === null && !manifestRootFolderTitles.has(f.name)).map((f) => f.name);
+  const unexpectedNotes = existing.notes.filter((n) => n.folderName === '(site-root)').map((n) => n.slug);
+
+  if (unexpectedFolders.length === 0 && unexpectedNotes.length === 0) return;
+
+  const lines = ['Site root already contains folders/notes this manifest does not know about:'];
+  if (unexpectedFolders.length > 0) lines.push(`  folders: ${unexpectedFolders.join(', ')}`);
+  if (unexpectedNotes.length > 0) lines.push(`  root notes (slug): ${unexpectedNotes.join(', ')}`);
+  lines.push('Refusing to proceed (idempotency here is by name/slug, not id, so unrelated', 'content could otherwise be silently left in place or collide). Pass --allow-existing', 'to proceed anyway once you have confirmed this is expected.');
+  throw new Error(lines.join('\n'));
+}
+
 // ---------------------------------------------------------------------------
 // apply plan
 // ---------------------------------------------------------------------------
@@ -257,12 +290,16 @@ async function applyPlan(query, steps, { spaceId, authorId, siteFolderId, folder
       if (step.parent !== null && !parentId) {
         throw new Error(`create-folder "${step.title}": parent folder "${step.parent}" was not found or created yet`);
       }
+      // No explicit visibility: omitting it (-> null) lets the folder
+      // inherit from its parent (ultimately Site), same as every other
+      // Site folder — so setting Site private (or any ancestor) actually
+      // unpublishes these pages, instead of a hardcoded 'public' here
+      // silently overriding that.
       const folder = await createSpaceFolder(query, {
         spaceId,
         userId: authorId,
         parentId: parentId ?? null,
         name: step.title,
-        visibility: 'public',
       });
       folderIdByPath.set(step.title, folder.id);
       console.log(formatStep(step));
@@ -285,7 +322,6 @@ async function applyPlan(query, steps, { spaceId, authorId, siteFolderId, folder
 // ---------------------------------------------------------------------------
 
 async function main() {
-  loadDotEnvIfNeeded();
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     printHelp();
@@ -308,6 +344,11 @@ async function main() {
   }
 
   const { siteFolderId, folderIdByPath, existing } = await loadSiteFolderTree(query, spaceId);
+
+  if (!args.allowExisting) {
+    assertSiteRootMatchesManifest(manifest, existing);
+  }
+
   const steps = planMigration(manifest, existing);
 
   console.log(`${args.dryRun ? '[dry-run] ' : ''}so/${SPACE_SLUG}: plan for ${manifest.items.length} manifest item(s):`);
@@ -324,9 +365,11 @@ async function main() {
   if (!siteFolderId) throw new Error('Site folder missing after ensureOkaFolders — this should not happen');
   await applyPlan(query, steps, { spaceId, authorId, siteFolderId, folderIdByPath, manifestDir });
 
-  // Fire-and-forget, same as every other Site mutation (see
-  // space-notes.ts's triggerRebuild) — never throws, never blocks.
-  void requestSiteRebuild();
+  // requestSiteRebuild() itself never throws (errors are caught and
+  // logged inside it) — awaiting it just makes sure the trigger file is
+  // actually touched/created before this one-time script exits, rather
+  // than racing process.exit() against an in-flight fs write.
+  await requestSiteRebuild();
 
   console.log('done.');
 }
