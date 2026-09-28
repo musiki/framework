@@ -723,6 +723,168 @@ test('moveSpaceFolder: fires onSiteChange moving a folder into Site or out of it
   assert.equal(fired, 0);
 });
 
+test('createSpaceFolder: fires onSiteChange for a subfolder created under Site, not under GTX', async () => {
+  let fired = 0;
+  const { q: qIn } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder"', () => [{ id: 'f-research' }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['INSERT INTO "LiveClassNoteFolder"', () => [{ id: 'f-new' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await createSpaceFolder(qIn, { spaceId: SPACE, userId: 'u1', parentId: 'f-research', name: 'Sub', onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: qOut } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder"', () => [{ id: 'f-gtx' }]],
+    ['SELECT MAX', () => [{ maxPosition: null }]],
+    ['INSERT INTO "LiveClassNoteFolder"', () => [{ id: 'f-new2' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await createSpaceFolder(qOut, { spaceId: SPACE, userId: 'u1', parentId: 'f-gtx', name: 'Sub', onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
+});
+
+test('renameSpaceFolder: fires onSiteChange for a Site folder, not for one outside Site', async () => {
+  let fired = 0;
+  const { q: qIn } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['UPDATE "LiveClassNoteFolder"', () => [{ id: 'f-research', name: 'New name' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await renameSpaceFolder(qIn, { spaceId: SPACE, userId: 'u1', folderId: 'f-research', name: 'New name', onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: qOut } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['UPDATE "LiveClassNoteFolder"', () => [{ id: 'f-gtx', name: 'New name' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await renameSpaceFolder(qOut, { spaceId: SPACE, userId: 'u1', folderId: 'f-gtx', name: 'New name', onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
+});
+
+test('deleteSpaceFolder: fires onSiteChange when deleting a Site subfolder, not for one outside Site', async () => {
+  let fired = 0;
+  const { q: qIn } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['DELETE FROM "LiveClassNoteFolder"', () => [{ id: 'f-research' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await deleteSpaceFolder(qIn, { spaceId: SPACE, userId: 'u1', folderId: 'f-research', onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: qOut } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['DELETE FROM "LiveClassNoteFolder"', () => [{ id: 'f-gtx' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await deleteSpaceFolder(qOut, { spaceId: SPACE, userId: 'u1', folderId: 'f-gtx', onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
+});
+
+test('setFolderVisibility: fires onSiteChange for a Site folder, not for one outside Site', async () => {
+  let fired = 0;
+  const { q: qIn } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['UPDATE "LiveClassNoteFolder"', () => [{ id: 'f-research', visibility: 'private' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await setFolderVisibility(qIn, { spaceId: SPACE, userId: 'u1', folderId: 'f-research', visibility: 'private', onSiteChange: () => fired++ });
+  assert.equal(fired, 1);
+
+  fired = 0;
+  const { q: qOut } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['UPDATE "LiveClassNoteFolder"', () => [{ id: 'f-gtx', visibility: 'private' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await setFolderVisibility(qOut, { spaceId: SPACE, userId: 'u1', folderId: 'f-gtx', visibility: 'private', onSiteChange: () => fired++ });
+  assert.equal(fired, 0);
+});
+
+// ---------------------------------------------------------------------------
+// reorderSpaceItem — onSiteChange
+// ---------------------------------------------------------------------------
+
+test('reorderSpaceItem: fires onSiteChange moving a folder into Site', async () => {
+  let fired = 0;
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder" WHERE', () => [{ id: 'f-gtx' }]], // existsRows + assertFolderInSpace(parentId)
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => [{ id: 'f-gtx', parentId: null }, { id: 'f-site', parentId: null }]],
+    [/^SELECT id, position, name AS label FROM "LiveClassNoteFolder"/, () => []],
+    [/^UPDATE "LiveClassNoteFolder" SET position/, () => []],
+    [/^UPDATE "LiveClassNoteFolder" SET "parentId"/, () => []],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await reorderSpaceItem(q, {
+    spaceId: SPACE, userId: 'u1', kind: 'folder', id: 'f-gtx', parentId: 'f-site', targetIndex: 0, onSiteChange: () => fired++,
+  });
+  assert.equal(fired, 1);
+});
+
+test('reorderSpaceItem: fires onSiteChange moving a folder out of Site', async () => {
+  let fired = 0;
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder" WHERE', () => [{ id: 'f-research' }]], // existsRows + assertFolderInSpace(parentId)
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => [{ id: 'f-research', parentId: 'f-site' }, { id: 'f-gtx', parentId: null }]],
+    [/^SELECT id, position, name AS label FROM "LiveClassNoteFolder"/, () => []],
+    [/^UPDATE "LiveClassNoteFolder" SET position/, () => []],
+    [/^UPDATE "LiveClassNoteFolder" SET "parentId"/, () => []],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await reorderSpaceItem(q, {
+    spaceId: SPACE, userId: 'u1', kind: 'folder', id: 'f-research', parentId: 'f-gtx', targetIndex: 0, onSiteChange: () => fired++,
+  });
+  assert.equal(fired, 1);
+});
+
+test('reorderSpaceItem: does not fire onSiteChange when the item stays outside Site', async () => {
+  let fired = 0;
+  const { q } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder" WHERE', () => [{ id: 'f-gtx2' }]],
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => [{ id: 'f-gtx2', parentId: null }, { id: 'f-gtx', parentId: null }]],
+    [/^SELECT id, position, name AS label FROM "LiveClassNoteFolder"/, () => []],
+    [/^UPDATE "LiveClassNoteFolder" SET position/, () => []],
+    [/^UPDATE "LiveClassNoteFolder" SET "parentId"/, () => []],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await reorderSpaceItem(q, {
+    spaceId: SPACE, userId: 'u1', kind: 'folder', id: 'f-gtx2', parentId: 'f-gtx', targetIndex: 0, onSiteChange: () => fired++,
+  });
+  assert.equal(fired, 0);
+});
+
+test('reorderSpaceItem: a rolled-back reorder never fires onSiteChange, even for an item under Site', async () => {
+  // f-research (under Site) is moved into f-sub, which is f-research's own
+  // descendant -> rejected (400) inside the transaction and rolled back.
+  // wasUnderSite is true (computed before BEGIN), but the trigger must only
+  // fire after a successful COMMIT.
+  let fired = 0;
+  const { q, calls } = fakeQuery([
+    ['"SpaceMember"', () => [{ role: 'author' }]],
+    ['SELECT id FROM "LiveClassNoteFolder" WHERE', () => [{ id: 'f-sub' }]], // existsRows + assertFolderInSpace(parentId='f-sub')
+    ['SELECT id, "parentId" FROM "LiveClassNoteFolder"', () => [{ id: 'f-research', parentId: 'f-site' }, { id: 'f-sub', parentId: 'f-research' }]],
+    [SITE_FOLDER_QUERY, () => SITE_FOLDERS],
+  ]);
+  await assert.rejects(
+    () => reorderSpaceItem(q, {
+      spaceId: SPACE, userId: 'u1', kind: 'folder', id: 'f-research', parentId: 'f-sub', targetIndex: 0, onSiteChange: () => fired++,
+    }),
+    (err) => err instanceof SpaceNotesError && err.status === 400,
+  );
+  assert.equal(fired, 0);
+  assert.ok(calls.some((c) => c.text === 'ROLLBACK'));
+  assert.ok(!calls.some((c) => c.text === 'COMMIT'));
+});
+
 test('a failed database write cannot report a successful note save', async () => {
   const q = async (sql) => {
     if (sql.includes('"SpaceMember"')) return { data: [{ role: 'author' }], error: null };

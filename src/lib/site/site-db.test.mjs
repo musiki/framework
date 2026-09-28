@@ -24,6 +24,10 @@ function fixture() {
     { id: 'f-output', parentId: null, name: 'Output', visibility: 'committee', position: 2048 },
     { id: 'f-site', parentId: null, name: 'Site', visibility: 'public', position: 3072 },
     { id: 'f-research', parentId: 'f-site', name: 'Research', visibility: null, position: 100 },
+    // A subfolder under the (public) Site tree that is itself explicitly
+    // private — its own visibility overrides the inherited "public" from
+    // Site, per effectiveVisibility's nearest-ancestor rule.
+    { id: 'f-hidden', parentId: 'f-site', name: 'Hidden', visibility: 'private', position: 300 },
   ];
   const notes = [
     { id: 'n-home', folderId: 'f-site', title: 'Home', body: '---\nslug: index\n---\nWelcome', visibility: null, position: 10, userId: 'u1' },
@@ -32,6 +36,7 @@ function fixture() {
     { id: 'n-private', folderId: 'f-site', title: 'Private under Site', body: 'shh', visibility: 'private', position: 20, userId: 'u1' },
     { id: 'n-research-pub', folderId: 'f-research', title: 'Public research', body: 'hello', visibility: null, position: 10, userId: 'u1' },
     { id: 'n-research-draft', folderId: 'f-research', title: 'Draft research', body: '---\ndraft: true\n---\nnope', visibility: null, position: 20, userId: 'u1' },
+    { id: 'n-hidden', folderId: 'f-hidden', title: 'Hidden note', body: 'shh, folder is private', visibility: null, position: 10, userId: 'u1' },
   ];
   return fakeQuery([
     ['"Space"', () => [{ id: SPACE_ID }]],
@@ -61,6 +66,17 @@ test('loadPublicSite: excludes drafts', async () => {
   const titles = model.pages.map((p) => p.title);
   assert.ok(!titles.includes('Draft research'));
   assert.ok(titles.includes('Public research'));
+});
+
+test('loadPublicSite: a folder-level "private" visibility under Site hides its notes and itself, even though Site is public', async () => {
+  const q = fixture();
+  const model = await loadPublicSite(q, { tenantId: 'so' });
+  const titles = model.pages.map((p) => p.title);
+  assert.ok(!titles.includes('Hidden note'));
+  // The folder itself has no publishable pages left, so it never surfaces
+  // as a menu group either.
+  const menuTitles = JSON.stringify(model.menu);
+  assert.ok(!menuTitles.includes('Hidden'));
 });
 
 test('loadPublicSite: output never contains user ids or other author fields', async () => {
