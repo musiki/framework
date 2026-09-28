@@ -150,3 +150,15 @@ test('noteActions run directly, not through run() — no forced busy/reload for 
   assert.equal(loads, loadsBeforeShare); // no reload triggered
   tree.destroy();
 });
+test('create controls are compact glyph icons whose accessible name is the label', async () => {
+  const container = setup(); let created;
+  const tree = renderTree({ container, labels, locale:'en', canManage:true, showVisibility:false,
+    load: async () => ({folders:[],notes:[]}), onOpenNote() {},
+    actions: { createNote: async (parentId) => { created = parentId; } } });
+  await tree.refresh();
+  const icons = [...container.querySelectorAll('.wt-create .wt-icon')];
+  assert.deepEqual(icons.map(b => [b.textContent, b.getAttribute('aria-label'), b.title]),
+    [['+', 'newNote', 'newNote'], ['⊟+', 'newFolder', 'newFolder']]);
+  icons[0].click(); await new Promise(r => setTimeout(r, 0)); assert.equal(created, null);
+  tree.destroy();
+});

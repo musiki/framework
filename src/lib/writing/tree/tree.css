@@ -6,7 +6,9 @@
 .writing-tree .wt-label[aria-current] { font-weight: 700; background: var(--so-surface, #eee); }
 .writing-tree .wt-row small { opacity: .65; font-size: .65rem; }
 .writing-tree .wt-create { display: flex; gap: .25rem; margin: .4rem 0; flex-wrap: wrap; }
-.writing-tree .wt-create button { font-size: .7rem; padding: .25rem .4rem; }
+.writing-tree .wt-create { gap: .1rem; margin: .2rem 0; }
+.writing-tree .wt-create .wt-icon { border: 0; background: none; color: inherit; cursor: pointer; opacity: .6; font-size: .8rem; line-height: 1; padding: .15rem .3rem; }
+.writing-tree .wt-create .wt-icon:hover { opacity: 1; }
 .writing-tree .wt-actions { position: relative; }
 .writing-tree .wt-actions > summary { cursor: pointer; padding: 0 .4rem; list-style: none; }
 .writing-tree .wt-actions > div { display: flex; flex-wrap: wrap; gap: .3rem; padding: .4rem; border: 1px solid var(--tree-border); }

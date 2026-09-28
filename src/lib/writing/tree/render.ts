@@ -61,7 +61,14 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
   }
   function createButtons(parentId: string | null) {
     const bar = document.createElement('div'); bar.className = 'wt-create';
-    bar.append(button(l.newNote, () => void run(() => actions.createNote(parentId))), button(l.newFolder, () => {
+    // Compact glyph buttons (same glyphs as musiki's notes sidebar) so the
+    // create controls don't compete with the tree; the label stays the
+    // accessible name and tooltip.
+    const iconButton = (glyph: string, label: string, action: () => void) => {
+      const el = button(glyph, action); el.className = 'wt-icon';
+      el.setAttribute('aria-label', label); el.title = label; return el;
+    };
+    bar.append(iconButton('+', l.newNote, () => void run(() => actions.createNote(parentId))), iconButton('⊟+', l.newFolder, () => {
       const name = window.prompt(l.newFolder)?.trim();
       if (name) void run(() => actions.createFolder(parentId, name));
     })); return bar;
