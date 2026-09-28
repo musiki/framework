@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { query } from '../db/pool';
 import { resolveUserIdByEmail } from '../user-email';
-import { isUuid, type SpaceRole } from './space-roles';
+import { isUuid, type AnySpaceRole, type SpaceRole } from './space-roles';
 import type { Tenant, TenantId } from './tenants';
 
 export const INVITE_TTL_DAYS = 14;
@@ -35,7 +35,7 @@ export async function getMembership(tenantId: TenantId, userId: string, spaceId:
   return (must<Membership>(await query(`${MEMBERSHIP_SQL} AND s."id" = $3`, [tenantId, userId, spaceId]))[0] ?? null);
 }
 
-export async function createInvite(input: { spaceId: string; email: string; role: SpaceRole; createdBy: string }) {
+export async function createInvite(input: { spaceId: string; email: string; role: AnySpaceRole; createdBy: string }) {
   const token = crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
   must(await query(
@@ -63,7 +63,7 @@ export async function listRules(spaceId: string): Promise<RuleRow[]> {
   ));
 }
 
-export async function addRule(input: { spaceId: string; kind: 'email' | 'domain'; value: string; role: SpaceRole; createdBy: string }) {
+export async function addRule(input: { spaceId: string; kind: 'email' | 'domain'; value: string; role: AnySpaceRole; createdBy: string }) {
   must(await query(
     `INSERT INTO "SpaceAccessRule" ("spaceId", "kind", "value", "role", "createdBy")
      VALUES ($1, $2, $3, $4, $5)
