@@ -67,7 +67,7 @@ CREATE TABLE "ConceptRelation" (
   UNIQUE ("sourceId","targetId",type), CHECK ("sourceId" <> "targetId")
 );
 -- musiki forum generalization (additive)
-ALTER TABLE "ForumBoard"  ALTER COLUMN "courseId" DROP NOT NULL; ADD "spaceId" uuid NULL → Space; ADD "settings" jsonb DEFAULT '{}';  -- settings.zoteroCollection, settings.bibLibraryId
+ALTER TABLE "ForumBoard"  ALTER COLUMN "courseId" DROP NOT NULL; ADD "spaceId" uuid NULL → Space; ADD "settings" jsonb DEFAULT '{}';  -- settings.zoteroCollection, settings.seshatLibraryId, settings.ownerEmail
 ALTER TABLE "ForumThread" ALTER COLUMN "courseId" DROP NOT NULL; ALTER COLUMN "lessonSlug" DROP NOT NULL; ADD "spaceId" uuid NULL → Space; ADD "boardId" uuid NULL → ForumBoard;
 ALTER TABLE "ForumPost"   ADD "move" text NULL CHECK (move IN ('comment','proposes','contrasts','combines','exemplifies','problematises','synthesises')); ADD "adoptedAsVersionId" uuid NULL → ConceptVersion ON DELETE SET NULL;
 -- course XOR space on ForumBoard and ForumThread; indexes on spaceId

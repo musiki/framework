@@ -48,7 +48,8 @@ export class ForumError extends Error {
 }
 
 export type UserRef = { name: string | null; deleted: boolean };
-export type Render = (markdown: string) => Promise<string>;
+/** `post` identifies the rendered post (id + updatedAt) so callers can cache renders. */
+export type Render = (markdown: string, post?: { id: string; updatedAt: string | null }) => Promise<string>;
 
 const TITLE_MIN = 3;
 const FORUM_TITLE_MAX = 90;
@@ -446,7 +447,11 @@ export async function listThreads(
             (SELECT max(p."createdAt") FROM "ForumPost" p WHERE p."threadId" = t.id AND p.status = 'published') AS "lastPostAt"
      FROM "ForumThread" t
      LEFT JOIN "User" u ON u.id = t."createdByUserId"
-     LEFT JOIN "Concept" c ON c."threadId" = t.id AND c."spaceId" = t."spaceId"
+     LEFT JOIN LATERAL (
+       SELECT c.slug, c.label FROM "Concept" c
+       WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId"
+       ORDER BY c."createdAt" ASC, c.id ASC LIMIT 1
+     ) c ON true
      WHERE t."spaceId" = $1::uuid AND t."boardId" = $2::uuid AND t."archivedAt" IS NULL
      ORDER BY t."isPinned" DESC, t."updatedAt" DESC, t.id DESC
      LIMIT ${THREAD_LIST_LIMIT}`,
@@ -552,9 +557,9 @@ const escapeHtml = (s: string) =>
 
 const plainRender: Render = async (md) => `<p>${escapeHtml(md)}</p>`;
 
-async function safeRender(render: Render, body: string): Promise<string> {
+async function safeRender(render: Render, body: string, post?: { id: string; updatedAt: string | null }): Promise<string> {
   try {
-    return await render(body);
+    return await render(body, post);
   } catch (err) {
     console.error('[mm/forum-core] markdown render failed:', err);
     return plainRender(body);
@@ -583,18 +588,22 @@ export async function listPosts(
     q,
     `SELECT t.id, t.title, t."isPinned", t."isLocked", t."createdAt", t."updatedAt", t."archivedAt",
             t."createdByUserId", u.name AS "createdByName",
-            b.id AS "forumId", b.slug AS "forumSlug", b.title AS "forumTitle",
+            b.id AS "forumId", b.slug AS "forumSlug", b.title AS "forumTitle", b."isArchived" AS "forumArchived",
             c.slug AS "conceptSlug", c.label AS "conceptLabel"
      FROM "ForumThread" t
      LEFT JOIN "User" u ON u.id = t."createdByUserId"
      LEFT JOIN "ForumBoard" b ON b.id = t."boardId" AND b."spaceId" = t."spaceId"
-     LEFT JOIN "Concept" c ON c."threadId" = t.id AND c."spaceId" = t."spaceId"
+     LEFT JOIN LATERAL (
+       SELECT c.slug, c.label FROM "Concept" c
+       WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId"
+       ORDER BY c."createdAt" ASC, c.id ASC LIMIT 1
+     ) c ON true
      WHERE t.id = $1::uuid AND t."spaceId" = $2::uuid
      LIMIT 1`,
     [threadId, spaceId],
   );
   const t = threads[0];
-  if (!t || t.archivedAt) return null;
+  if (!t || t.archivedAt || t.forumArchived) return null;
 
   const role = await viewerRole(q, spaceId, viewerUserId);
   const canModerate = can(role, 'moderate');
@@ -645,7 +654,7 @@ export async function listPosts(
       move: isPostMove(p.move) ? p.move : null,
       status,
       body,
-      bodyHtml: body ? await safeRender(render, body) : '',
+      bodyHtml: body ? await safeRender(render, body, { id: p.id, updatedAt: p.updatedAt ?? null }) : '',
       author: userRef(p.authorUserId, p.authorName),
       own: !!viewerUserId && p.authorUserId === viewerUserId,
       votes: v?.votes ?? emptyVotes(),
@@ -681,31 +690,43 @@ export async function listPosts(
   };
 }
 
+/** A thread of the space that is open: not archived, and its forum not archived. */
 async function loadSpaceThread(q: QueryFn, spaceId: string, threadId: unknown) {
   const id = requireUuid(threadId, 'thread');
   const rows = await run(
     q,
-    `SELECT id, "isLocked", "archivedAt" FROM "ForumThread" WHERE id = $1::uuid AND "spaceId" = $2::uuid LIMIT 1`,
+    `SELECT t.id, t."isLocked", t."archivedAt", b."isArchived" AS "forumArchived"
+     FROM "ForumThread" t LEFT JOIN "ForumBoard" b ON b.id = t."boardId"
+     WHERE t.id = $1::uuid AND t."spaceId" = $2::uuid LIMIT 1`,
     [id, spaceId],
   );
   const t = rows[0];
-  if (!t || t.archivedAt) throw new ForumError(404, 'thread not found');
+  if (!t || t.archivedAt || t.forumArchived) throw new ForumError(404, 'thread not found');
   return t;
 }
 
-async function loadSpacePost(q: QueryFn, spaceId: string, postId: unknown, forUpdate = false) {
+/** A post of the space with its thread/forum archive state. */
+async function loadSpacePost(q: QueryFn, spaceId: string, postId: unknown) {
   const id = requireUuid(postId, 'post');
   const rows = await run(
     q,
-    `SELECT p.id, p."threadId", p.status
+    `SELECT p.id, p."threadId", p.status, t."archivedAt" AS "threadArchived", b."isArchived" AS "forumArchived"
      FROM "ForumPost" p JOIN "ForumThread" t ON t.id = p."threadId"
+     LEFT JOIN "ForumBoard" b ON b.id = t."boardId"
      WHERE p.id = $1::uuid AND t."spaceId" = $2::uuid
-     LIMIT 1${forUpdate ? ' FOR UPDATE OF p' : ''}`,
+     LIMIT 1`,
     [id, spaceId],
   );
   if (!rows.length) throw new ForumError(404, 'post not found');
   return rows[0];
 }
+
+/** SQL predicate: the post `$postParam` is published in an open thread/forum of space `$spaceParam`. */
+const OPEN_PUBLISHED_POST = (postParam: string, spaceParam: string) =>
+  `EXISTS (SELECT 1 FROM "ForumPost" op JOIN "ForumThread" ot ON ot.id = op."threadId"
+            LEFT JOIN "ForumBoard" ob ON ob.id = ot."boardId"
+            WHERE op.id = ${postParam}::uuid AND op.status = 'published' AND ot."spaceId" = ${spaceParam}::uuid
+              AND ot."archivedAt" IS NULL AND ob."isArchived" IS NOT TRUE)`;
 
 /**
  * Members+: a post (optionally a reply, optionally with a move) in a thread of
@@ -773,17 +794,29 @@ export async function vote(
     throw new ForumError(400, 'value must be 0, 1, 2 or 3');
   }
   const post = await loadSpacePost(q, spaceId, input.postId);
+  if (post.threadArchived || post.forumArchived) throw new ForumError(404, 'post not found');
   if (post.status !== 'published') throw new ForumError(409, 'post is not published');
 
+  // Writes re-check the post (published, open thread/forum, this space) in the
+  // same statement, so a concurrent hide/archive cannot be raced.
   if (value === 0) {
-    await run(q, `DELETE FROM "ForumPostVote" WHERE "postId" = $1::uuid AND "userId" = $2::uuid`, [post.id, input.actorUserId]);
-  } else {
     await run(
       q,
-      `INSERT INTO "ForumPostVote" ("postId", "userId", value) VALUES ($1::uuid, $2::uuid, $3)
-       ON CONFLICT ("postId", "userId") DO UPDATE SET value = EXCLUDED.value`,
-      [post.id, input.actorUserId, value],
+      `DELETE FROM "ForumPostVote" WHERE "postId" = $1::uuid AND "userId" = $2::uuid
+       AND ${OPEN_PUBLISHED_POST('$1', '$3')}`,
+      [post.id, input.actorUserId, spaceId],
     );
+  } else {
+    const written = await run(
+      q,
+      `INSERT INTO "ForumPostVote" ("postId", "userId", value)
+       SELECT $1::uuid, $2::uuid, $3::smallint
+       WHERE ${OPEN_PUBLISHED_POST('$1', '$4')}
+       ON CONFLICT ("postId", "userId") DO UPDATE SET value = EXCLUDED.value
+       RETURNING value`,
+      [post.id, input.actorUserId, value, spaceId],
+    );
+    if (!written.length) throw new ForumError(409, 'post is not open for votes');
   }
 
   const rows = await run(q, `SELECT "userId", value FROM "ForumPostVote" WHERE "postId" = $1::uuid`, [post.id]);
@@ -818,17 +851,17 @@ export async function moderatePost(
   if (action === 'hide' && post.status !== 'published') throw new ForumError(409, 'post is not published');
   if (action === 'unhide' && post.status !== 'hidden') throw new ForumError(409, 'post is not hidden');
 
-  const rows =
-    action === 'delete'
-      ? await run(
-          q,
-          `UPDATE "ForumPost" SET body = '', status = 'deleted', "updatedAt" = now() WHERE id = $1::uuid RETURNING status`,
-          [post.id],
-        )
-      : await run(q, `UPDATE "ForumPost" SET status = $1, "updatedAt" = now() WHERE id = $2::uuid RETURNING status`, [
-          action === 'hide' ? 'hidden' : 'published',
-          post.id,
-        ]);
-  if (!rows.length) throw new ForumError(404, 'post not found');
+  // Pinned update: only applies if the post is still in the status we read and
+  // still in this space; otherwise another moderator got there first (409).
+  const next = action === 'delete' ? 'deleted' : action === 'hide' ? 'hidden' : 'published';
+  const rows = await run(
+    q,
+    `UPDATE "ForumPost" p SET status = $1, body = CASE WHEN $1 = 'deleted' THEN '' ELSE p.body END, "updatedAt" = now()
+     WHERE p.id = $2::uuid AND p.status = $3
+       AND EXISTS (SELECT 1 FROM "ForumThread" t WHERE t.id = p."threadId" AND t."spaceId" = $4::uuid)
+     RETURNING p.status`,
+    [next, post.id, post.status, spaceId],
+  );
+  if (!rows.length) throw new ForumError(409, 'post changed concurrently');
   return { postId: post.id, status: rows[0].status };
 }

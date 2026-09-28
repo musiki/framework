@@ -31,7 +31,7 @@ ALTER TABLE "SpaceAccessRule" ADD CONSTRAINT "SpaceAccessRule_role_check"
 -- ── Forum generalization: course XOR space ─────────────────────────────────────
 ALTER TABLE "ForumBoard" ALTER COLUMN "courseId" DROP NOT NULL;
 ALTER TABLE "ForumBoard" ADD COLUMN IF NOT EXISTS "spaceId" uuid NULL REFERENCES "Space"("id") ON DELETE CASCADE;
--- settings.zoteroCollection, settings.bibLibraryId
+-- settings.zoteroCollection, settings.seshatLibraryId, settings.ownerEmail
 ALTER TABLE "ForumBoard" ADD COLUMN IF NOT EXISTS "settings" jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE "ForumThread" ALTER COLUMN "courseId" DROP NOT NULL;

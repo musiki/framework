@@ -57,12 +57,12 @@ const forumByIdRoute = (row = forumRow()) => [
   /FROM "ForumBoard"\s+WHERE id = \$1::uuid AND "spaceId" = \$2::uuid/,
   ([fid, sid]) => (row && fid === row.id && sid === SPACE ? [row] : []),
 ];
-const threadByIdRoute = (row = { id: THREAD, isLocked: false, archivedAt: null }) => [
-  /SELECT id, "isLocked", "archivedAt" FROM "ForumThread"/,
+const threadByIdRoute = (row = { id: THREAD, isLocked: false, archivedAt: null, forumArchived: false }) => [
+  /FROM "ForumThread" t LEFT JOIN "ForumBoard" b ON b\.id = t\."boardId"\s+WHERE t\.id = \$1::uuid AND t\."spaceId" = \$2::uuid/,
   ([tid, sid]) => (row && tid === row.id && sid === SPACE ? [row] : []),
 ];
 const postByIdRoute = (rows = { [POST]: { id: POST, threadId: THREAD, status: 'published' } }) => [
-  /SELECT p\.id, p\."threadId", p\.status\s+FROM "ForumPost" p JOIN "ForumThread" t/,
+  /SELECT p\.id, p\."threadId", p\.status, t\."archivedAt" AS "threadArchived"/,
   ([pid, sid]) => (rows[pid] && sid === SPACE ? [rows[pid]] : []),
 ];
 
@@ -452,10 +452,13 @@ test('createPost: permissions, unknown/archived thread, locked thread', async ()
   await rejectsStatus(createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: null, body: 'x' }), 401);
   await rejectsStatus(createPost(q, { spaceId: SPACE, threadId: id(77), actorUserId: U.member, body: 'x' }), 404);
 
-  const archived = createPostDb({ id: THREAD, isLocked: false, archivedAt: 't' });
+  const archived = createPostDb({ id: THREAD, isLocked: false, archivedAt: 't', forumArchived: false });
   await rejectsStatus(createPost(archived.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x' }), 404);
 
-  const locked = createPostDb({ id: THREAD, isLocked: true, archivedAt: null });
+  const archivedForum = createPostDb({ id: THREAD, isLocked: false, archivedAt: null, forumArchived: true });
+  await rejectsStatus(createPost(archivedForum.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x' }), 404);
+
+  const locked = createPostDb({ id: THREAD, isLocked: true, archivedAt: null, forumArchived: false });
   await rejectsStatus(createPost(locked.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x' }), 403);
   const ok = await createPost(locked.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.curator, body: 'x' });
   assert.equal(ok.id, POST2);
@@ -469,14 +472,16 @@ test('vote: one per user (upsert on post+user), guests may vote, snapshot return
   const { q, calls } = fakeQuery([
     memberRoute,
     postByIdRoute(),
-    ['INSERT INTO "ForumPostVote"', () => []],
+    ['INSERT INTO "ForumPostVote"', () => [{ value: 2 }]],
     ['SELECT "userId", value FROM "ForumPostVote"', () => [{ userId: U.guest, value: 2 }, { userId: U.member, value: 1 }]],
   ]);
   const out = await vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.guest, value: 2 });
   assert.deepEqual(out, { postId: POST, votes: { useful: 1, clarifies: 1, reference: 0, total: 2 }, myVote: 2 });
   const up = calls.find((c) => c.text.includes('INSERT INTO "ForumPostVote"'));
   assert.match(up.text, /ON CONFLICT \("postId", "userId"\) DO UPDATE SET value = EXCLUDED\.value/);
-  assert.deepEqual(up.params, [POST, U.guest, 2]);
+  assert.deepEqual(up.params, [POST, U.guest, 2, SPACE]);
+  assert.match(up.text, /SELECT \$1::uuid, \$2::uuid, \$3::smallint\s+WHERE EXISTS/);
+  assert.match(up.text, /op\.status = 'published' AND ot\."spaceId" = \$4::uuid\s+AND ot\."archivedAt" IS NULL AND ob\."isArchived" IS NOT TRUE/);
   assert.ok(!JSON.stringify(out).includes(U.member));
 });
 
@@ -485,7 +490,8 @@ test('vote: 0 removes my vote', async () => {
   const out = await vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 0 });
   assert.equal(out.myVote, 0);
   const del = calls.find((c) => c.text.includes('DELETE FROM "ForumPostVote"'));
-  assert.deepEqual(del.params, [POST, U.member]);
+  assert.deepEqual(del.params, [POST, U.member, SPACE]);
+  assert.match(del.text, /ot\."spaceId" = \$3::uuid/);
 });
 
 test('vote: anonymous 401, non-member 403, bad value 400, other-space post 404, hidden post 409', async () => {
@@ -509,20 +515,22 @@ test('vote: anonymous 401, non-member 403, bad value 400, other-space post 404, 
 const modDb = (status = 'published') => fakeQuery([
   memberRoute,
   postByIdRoute({ [POST]: { id: POST, threadId: THREAD, status } }),
-  ['UPDATE "ForumPost"', (p, text) => [{ status: text.includes("status = 'deleted'") ? 'deleted' : p[0] }]],
+  ['UPDATE "ForumPost"', (p) => [{ status: p[0] }]],
 ]);
 
 test('moderatePost: hide / unhide / soft delete by curators', async () => {
   const hide = modDb('published');
   assert.deepEqual(await moderatePost(hide.q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'hide' }), { postId: POST, status: 'hidden' });
-  assert.deepEqual(hide.calls.at(-1).params, ['hidden', POST]);
+  assert.deepEqual(hide.calls.at(-1).params, ['hidden', POST, 'published', SPACE]);
+  assert.match(hide.calls.at(-1).text, /WHERE p\.id = \$2::uuid AND p\.status = \$3\s+AND EXISTS \(SELECT 1 FROM "ForumThread" t WHERE t\.id = p\."threadId" AND t\."spaceId" = \$4::uuid\)/);
 
   const unhide = modDb('hidden');
   assert.deepEqual(await moderatePost(unhide.q, { spaceId: SPACE, postId: POST, actorUserId: U.admin, action: 'unhide' }), { postId: POST, status: 'published' });
 
   const del = modDb('hidden');
   assert.deepEqual(await moderatePost(del.q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'delete' }), { postId: POST, status: 'deleted' });
-  assert.match(del.calls.at(-1).text, /SET body = '', status = 'deleted'/);
+  assert.match(del.calls.at(-1).text, /body = CASE WHEN \$1 = 'deleted' THEN '' ELSE p\.body END/);
+  assert.deepEqual(del.calls.at(-1).params, ['deleted', POST, 'hidden', SPACE]);
 });
 
 test('moderatePost: members 403, invalid transitions 409, bad action 400, unknown post 404', async () => {
@@ -558,4 +566,49 @@ test('all thread/post/forum reads and writes filter by the space (never course r
   const entry = all.filter((c) => /WHERE (p\.|t\.)?id = \$1::uuid/.test(c.text) && /"(ForumThread|ForumBoard)"/.test(c.text) && !c.text.startsWith('UPDATE "ForumPost"'));
   assert.ok(entry.length >= 4);
   for (const c of entry) assert.ok(/"spaceId" = \$2::uuid/.test(c.text), c.text);
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1: archive guards, pinned writes, concept join
+// ---------------------------------------------------------------------------
+
+test('listPosts: thread in an archived forum is not found', async () => {
+  assert.equal(await listPosts(postsDb({ forumArchived: true }).q, { spaceId: SPACE, threadId: THREAD }), null);
+});
+
+test('vote: post in an archived thread or forum is not found', async () => {
+  const { q } = fakeQuery([memberRoute, postByIdRoute({
+    [POST]: { id: POST, threadId: THREAD, status: 'published', threadArchived: null, forumArchived: true },
+    [POST2]: { id: POST2, threadId: THREAD, status: 'published', threadArchived: 't', forumArchived: false },
+  })]);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 1 }), 404);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST2, actorUserId: U.member, value: 1 }), 404);
+});
+
+test('vote: the pinned upsert writing nothing (hidden/archived meanwhile) is a 409', async () => {
+  const { q } = fakeQuery([memberRoute, postByIdRoute(), ['INSERT INTO "ForumPostVote"', () => []]]);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 1 }), 409);
+});
+
+test('moderatePost: pinned update matching nothing (status changed meanwhile) is a 409', async () => {
+  const { q } = fakeQuery([memberRoute, postByIdRoute(), ['UPDATE "ForumPost"', () => []]]);
+  await rejectsStatus(moderatePost(q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'hide' }), 409);
+});
+
+test('thread reads take at most one concept per thread (LATERAL … LIMIT 1)', async () => {
+  const list = fakeQuery([forumByIdRoute(), ['FROM "ForumThread" t', () => []]]);
+  await listThreads(list.q, { spaceId: SPACE, forumId: FORUM });
+  const posts = postsDb();
+  await listPosts(posts.q, { spaceId: SPACE, threadId: THREAD });
+  for (const c of [...list.calls, ...posts.calls].filter((c) => c.text.includes('"Concept" c'))) {
+    assert.match(c.text, /LEFT JOIN LATERAL \(\s+SELECT c\.slug, c\.label FROM "Concept" c[\s\S]*LIMIT 1\s+\) c ON true/);
+  }
+});
+
+test('listPosts passes the post identity to the renderer (render cache key)', async () => {
+  const seen = [];
+  await listPosts(postsDb().q, {
+    spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; },
+  });
+  assert.deepEqual(seen, [{ id: POST, updatedAt: 't2' }]);
 });

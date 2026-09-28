@@ -2,11 +2,12 @@
 // `query`; mutations that run a transaction (createThread, createPost) bind `q`
 // to one pooled client via `onClient` (same pattern as concepts.ts). Post
 // bodies render at read time with musiki's forum markdown (KaTeX, LilyPond,
-// Seshat @citekey citations), exactly as the course forum does.
+// Seshat @citekey citations), sanitized, and cached per post version.
 
 import { query } from '../db/pool';
 import { renderForumMarkdown } from '../forum-markdown';
 import { onClient } from './concepts';
+import { createRenderCache } from './forum-render-cache.ts';
 import * as core from './forum-core.ts';
 import type { QueryFn } from './forum-core.ts';
 
@@ -18,8 +19,16 @@ export type {
 
 const poolQ: QueryFn = (text, params) => query(text, params as any[]);
 
-/** musiki forum renderer; remote LilyPond on, as in the course forum UI. */
-export const renderMmPost: core.Render = (markdown) => renderForumMarkdown(markdown, { remoteLilypond: true });
+/**
+ * musiki forum renderer for mm: ALWAYS sanitized (posts are public to
+ * anonymous readers), remote LilyPond on as in the course forum UI, and cached
+ * per post version (bounded LRU) so remote renders/MIDI lookups are not
+ * repeated on every read.
+ */
+const mmRenderCache = createRenderCache((markdown) =>
+  renderForumMarkdown(markdown, { remoteLilypond: true, sanitize: true }),
+);
+export const renderMmPost: core.Render = mmRenderCache.render;
 
 export const listForums = (args: Parameters<typeof core.listForums>[1]) => core.listForums(poolQ, args);
 export const getForum = (args: Parameters<typeof core.getForum>[1]) => core.getForum(poolQ, args);
