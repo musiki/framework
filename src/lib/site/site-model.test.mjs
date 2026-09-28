@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFrontmatter, slugify } from './frontmatter.ts';
+import { parseFrontmatter, slugify, sanitizeSlug } from './frontmatter.ts';
 import { buildSiteModel } from './site-model.ts';
 
 // ---------------------------------------------------------------------------
@@ -322,4 +322,101 @@ test('buildSiteModel: default layout is "page" when frontmatter omits it', () =>
   });
   assert.equal(model.pages[0].layout, 'page');
   assert.equal(model.pages[0].markdown, 'plain body, no frontmatter');
+});
+
+// ---------------------------------------------------------------------------
+// Final-review fixes (M1-M4)
+// ---------------------------------------------------------------------------
+
+test('buildSiteModel: Home skips a leading empty / drafts-only folder (M1)', () => {
+  const model = buildSiteModel({
+    siteFolderId: 'site',
+    folders: [folder('empty', 'site', 'Aaa Empty', 1), folder('drafts', 'site', 'Bbb Drafts', 2), folder('about', 'site', 'About', 3)],
+    notes: [
+      note('d1', 'drafts', 'Only Draft', '---\ndraft: true\n---\nbody', 1),
+      note('ab', 'about', 'About Me', 'body', 1),
+      note('other', 'site', 'Other', 'body', 1),
+    ],
+  });
+  assert.equal(model.pages.find((p) => p.id === 'ab').path, '/');
+  assert.equal(model.pages.find((p) => p.id === 'other').path, '/other');
+  assert.equal(model.pages.some((p) => p.id === 'd1'), false);
+});
+
+test('buildSiteModel: Home falls to the first root note when every root folder is empty (M1)', () => {
+  const model = buildSiteModel({
+    siteFolderId: 'site',
+    folders: [folder('empty', 'site', 'Empty', 1)],
+    notes: [note('n', 'site', 'Welcome', 'hi', 1)],
+  });
+  assert.equal(model.pages.find((p) => p.id === 'n').path, '/');
+});
+
+test('buildSiteModel: duplicate suffixes never collide with a literal -2 slug (M3)', () => {
+  const model = buildSiteModel({
+    siteFolderId: 'site',
+    folders: [],
+    notes: [
+      note('home', 'site', 'Home', 'hi', 1),
+      note('f1', 'site', 'Foo', 'body', 2),
+      note('f2', 'site', 'Foo', 'body', 3),
+      note('f3', 'site', 'Foo 2', 'body', 4),
+    ],
+  });
+  const paths = model.pages.map((p) => p.path);
+  assert.equal(new Set(paths).size, paths.length, `paths must be unique: ${paths.join(', ')}`);
+  assert.equal(model.pages.find((p) => p.id === 'f1').path, '/foo');
+  assert.equal(model.pages.find((p) => p.id === 'f2').path, '/foo-2');
+  assert.equal(model.pages.find((p) => p.id === 'f3').path, '/foo-2-2');
+});
+
+test('buildSiteModel: a literal foo-2 slug earlier in order pushes the duplicate to -3 (M3)', () => {
+  const model = buildSiteModel({
+    siteFolderId: 'site',
+    folders: [],
+    notes: [
+      note('home', 'site', 'Home', 'hi', 1),
+      note('x', 'site', 'X', '---\nslug: foo-2\n---\nbody', 2),
+      note('f1', 'site', 'Foo', 'body', 3),
+      note('f2', 'site', 'Foo', 'body', 4),
+    ],
+  });
+  assert.equal(model.pages.find((p) => p.id === 'x').path, '/foo-2');
+  assert.equal(model.pages.find((p) => p.id === 'f1').path, '/foo');
+  assert.equal(model.pages.find((p) => p.id === 'f2').path, '/foo-3');
+});
+
+test('sanitizeSlug / frontmatter slug: strips slashes, rejects .., slugifies whitespace (M2)', () => {
+  assert.equal(sanitizeSlug('/about/'), 'about');
+  assert.equal(sanitizeSlug('My Page'), 'my-page');
+  assert.equal(sanitizeSlug('a/b'), 'a-b');
+  assert.equal(sanitizeSlug('../etc'), undefined);
+  assert.equal(sanitizeSlug('foo/../bar'), undefined);
+  assert.equal(sanitizeSlug('   '), undefined);
+  assert.equal(sanitizeSlug('///'), undefined);
+  assert.equal(sanitizeSlug('###'), undefined);
+  assert.equal(sanitizeSlug('index'), 'index');
+  assert.equal(parseFrontmatter('---\nslug: /About Us/\n---\nx').data.slug, 'about-us');
+  assert.equal(parseFrontmatter('---\nslug: ../x\n---\nx').data.slug, undefined);
+});
+
+test('buildSiteModel: a traversal slug falls back to the title slug (M2)', () => {
+  const model = buildSiteModel({
+    siteFolderId: 'site',
+    folders: [],
+    notes: [note('home', 'site', 'Home', 'hi', 1), note('e', 'site', 'Evil', '---\nslug: ../../etc\n---\nx', 2)],
+  });
+  assert.equal(model.pages.find((p) => p.id === 'e').path, '/evil');
+});
+
+test('parseFrontmatter: draft "true"/"yes" strings count as drafts; other strings do not (M4)', () => {
+  assert.equal(parseFrontmatter('---\ndraft: "true"\n---\nx').data.draft, true);
+  assert.equal(parseFrontmatter('---\ndraft: "Yes"\n---\nx').data.draft, true);
+  assert.equal(parseFrontmatter('---\ndraft: "no"\n---\nx').data.draft, undefined);
+  const model = buildSiteModel({
+    siteFolderId: 'site',
+    folders: [],
+    notes: [note('home', 'site', 'Home', 'hi', 1), note('d', 'site', 'D', '---\ndraft: "true"\n---\nx', 2)],
+  });
+  assert.equal(model.pages.some((p) => p.id === 'd'), false);
 });

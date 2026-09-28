@@ -7,7 +7,8 @@ export const prerender = false;
 
 // GET /api/public/site -> { generatedAt, pages, menu }
 //
-// Public, unauthenticated, cached for a minute at the edge; only reachable
+// Public, unauthenticated, never cached (`no-store`: the so-web rebuild
+// fetches it right after a save and must see that save); only reachable
 // on the so tenant (route family `api:public` is only in so's `routes`, and
 // this handler double-checks the tenant itself so it 404s even if it were
 // ever reached from another tenant's `routes: 'all'`).
@@ -30,7 +31,7 @@ export const GET: APIRoute = async ({ locals }) => {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=60',
+        'Cache-Control': 'no-store',
       },
     },
   );

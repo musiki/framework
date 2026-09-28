@@ -69,6 +69,21 @@ export function parsePluginManifest(json: unknown): PluginManifest | null {
 }
 
 /**
+ * `Dirent.isDirectory()` is false for a symlink, even one pointing at a
+ * directory — and plugin packages are commonly symlinked into the plugins
+ * dir. Follow the link (stat, not lstat); a dangling link is not a dir.
+ */
+async function isDirFollowingSymlinks(dir: string, entry: import('node:fs').Dirent): Promise<boolean> {
+  if (entry.isDirectory()) return true;
+  if (!entry.isSymbolicLink()) return false;
+  try {
+    return (await fs.stat(path.join(dir, entry.name))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Reads `<dir>/*\/manifest.json` for every immediate subdirectory of `dir`,
  * validates each manifest, and returns those whose `targets` include
  * `'so'`, sorted by name. Missing `dir`, unreadable entries, invalid JSON,
@@ -86,7 +101,7 @@ export async function listPlugins(dir: string): Promise<PluginManifest[]> {
 
   const manifests: PluginManifest[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!(await isDirFollowingSymlinks(dir, entry))) continue;
     const manifestPath = path.join(dir, entry.name, 'manifest.json');
     let raw: string;
     try {

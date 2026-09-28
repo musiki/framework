@@ -33,8 +33,9 @@ export function parseFrontmatter(markdown: string): { data: SiteFrontmatter; bod
   const raw = parsed.data ?? {};
   const data: SiteFrontmatter = {};
 
-  if (typeof raw.slug === 'string' && raw.slug.trim() !== '') {
-    data.slug = raw.slug;
+  if (typeof raw.slug === 'string') {
+    const slug = sanitizeSlug(raw.slug);
+    if (slug !== undefined) data.slug = slug;
   }
   if (typeof raw.menu === 'boolean') {
     data.menu = raw.menu;
@@ -44,6 +45,12 @@ export function parseFrontmatter(markdown: string): { data: SiteFrontmatter; bod
   }
   if (typeof raw.draft === 'boolean') {
     data.draft = raw.draft;
+  } else if (typeof raw.draft === 'string') {
+    // `draft: "true"` (quoted) is a common authoring slip; treating it as
+    // "not a draft" would publish the note. Accept the obvious truthy
+    // spellings; anything else leaves the note published as before.
+    const v = raw.draft.trim().toLowerCase();
+    if (v === 'true' || v === 'yes') data.draft = true;
   }
   if (typeof raw.description === 'string') {
     data.description = raw.description;
@@ -53,15 +60,33 @@ export function parseFrontmatter(markdown: string): { data: SiteFrontmatter; bod
 }
 
 /**
+ * Sanitize a frontmatter `slug:` value into a single safe path segment.
+ * Strips leading/trailing `/`, rejects anything containing `..`, then runs
+ * the result through the same slugify rules as titles (so whitespace,
+ * inner slashes and punctuation collapse to `-`). Returns `undefined`
+ * (slug ignored, title-derived slug used instead) when nothing usable is
+ * left.
+ */
+export function sanitizeSlug(value: string): string | undefined {
+  const stripped = value.trim().replace(/^\/+|\/+$/g, '');
+  if (stripped === '' || stripped.includes('..')) return undefined;
+  const slug = slugifyRaw(stripped);
+  return slug === '' ? undefined : slug;
+}
+
+function slugifyRaw(title: string): string {
+  const normalized = (title ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  return normalized
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
  * Slugify a title: lowercase, NFKD-normalize and strip diacritics, replace
  * runs of non-alphanumeric characters with `-`, trim leading/trailing `-`.
  * Falls back to `'page'` when the result would be empty.
  */
 export function slugify(title: string): string {
-  const normalized = (title ?? '').normalize('NFKD').replace(/[̀-ͯ]/g, '');
-  const slug = normalized
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'page';
+  return slugifyRaw(title) || 'page';
 }

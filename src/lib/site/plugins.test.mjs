@@ -173,3 +173,19 @@ test('listPlugins: sorts results by name', async () => {
     assert.deepEqual(plugins.map((p) => p.name), ['alpha', 'zebra']);
   });
 });
+
+test('listPlugins: follows symlinked package directories (M9)', async () => {
+  const real = await fs.mkdtemp(path.join(os.tmpdir(), 'plugins-real-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'plugins-links-'));
+  try {
+    await fs.mkdir(path.join(real, 'zotero-graph'));
+    await fs.writeFile(path.join(real, 'zotero-graph', 'manifest.json'), ZOTERO_MANIFEST, 'utf8');
+    await fs.symlink(path.join(real, 'zotero-graph'), path.join(dir, 'zotero-graph'), 'dir');
+    await fs.symlink(path.join(real, 'nope'), path.join(dir, 'dangling'), 'dir');
+    const result = await listPlugins(dir);
+    assert.deepEqual(result.map((m) => m.name), ['zotero-graph']);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(real, { recursive: true, force: true });
+  }
+});

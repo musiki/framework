@@ -75,8 +75,8 @@ export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolde
 
   // Same display order the studio tree renders: folders before notes at
   // every level, exactly like buildTree in ../writing/tree/model.ts. Home
-  // is simply the first item in this order at the Site root — a folder
-  // whenever one exists there, otherwise the first note.
+  // is the first item in this order at the Site root that yields at least
+  // one page (see homeIndex below) — empty/drafts-only folders are skipped.
   function orderedChildren(parentId: string): Item[] {
     const childFolders = displayOrderFolders(foldersByParent.get(parentId) ?? [], 'en');
     const childNotes = displayOrderNotes(notesByFolder.get(parentId) ?? [], 'en');
@@ -86,11 +86,33 @@ export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolde
     ];
   }
 
-  const used = new Map<string, number>();
+  // Every path handed out so far. A collision gets the next *unused*
+  // `-N` suffix, so a later page whose own slug happens to be `foo-2`
+  // (or an earlier one that already took it) can never collide with a
+  // generated suffix: foo, foo, foo-2 -> /foo, /foo-2, /foo-3.
+  const used = new Set<string>();
   function dedupe(path: string): string {
-    const count = (used.get(path) ?? 0) + 1;
-    used.set(path, count);
-    return count === 1 ? path : `${path}-${count}`;
+    let candidate = path;
+    for (let n = 2; used.has(candidate); n++) candidate = `${path}-${n}`;
+    used.add(candidate);
+    return candidate;
+  }
+
+  // Whether a folder (recursively) contains at least one publishable
+  // (non-draft) note — i.e. whether it would produce any page at all.
+  const yieldsCache = new Map<string, boolean>();
+  function folderYieldsPages(folderId: string): boolean {
+    const cached = yieldsCache.get(folderId);
+    if (cached !== undefined) return cached;
+    yieldsCache.set(folderId, false); // cycle guard
+    const result =
+      (notesByFolder.get(folderId)?.length ?? 0) > 0 ||
+      (foldersByParent.get(folderId) ?? []).some((f) => folderYieldsPages(f.id));
+    yieldsCache.set(folderId, result);
+    return result;
+  }
+  function itemYieldsPages(item: Item): boolean {
+    return item.kind === 'note' || folderYieldsPages(item.folder.id);
   }
 
   function pageFrom(note: ParsedNote, path: string): SitePage {
@@ -108,8 +130,12 @@ export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolde
     const pages: SitePage[] = [];
     const menu: MenuItem[] = [];
 
+    // Home is the first root item that actually yields a page: an empty
+    // (or drafts-only) folder sorted first must not swallow `/`.
+    const homeIndex = isHomeLevel ? items.findIndex(itemYieldsPages) : -1;
+
     items.forEach((item, index) => {
-      const isHomeItem = isHomeLevel && index === 0;
+      const isHomeItem = isHomeLevel && index === homeIndex;
 
       if (item.kind === 'note') {
         const note = item.note;
