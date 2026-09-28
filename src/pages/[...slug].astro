@@ -18,6 +18,7 @@ import {
   type PublicContentRouteProps,
 } from '../lib/public-content-routes';
 import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
+import { showsSoogDashboard, SOOG_DASHBOARD_LABELS_ES } from '../lib/instruments/courses';
 import { listCourseNotes } from '../lib/notes-fs';
 import {
   buildDefaultCreatePath,
@@ -1890,6 +1891,12 @@ function renderLessonsTreeHTML(
 
       .chapter {
         margin-bottom: 1.5rem;
+      }
+
+      .soog-dashboard-slot {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid color-mix(in srgb, var(--c-border) 62%, transparent);
       }
 
       .chapter-title {
@@ -5503,6 +5510,18 @@ function renderLessonsTreeHTML(
               <ul class="lesson-list progress-list" id="page-progress-list"></ul>
             </div>
           </>
+        )}
+
+        {showsSoogDashboard(canonicalCourseIdToUse || courseSlug) && (
+          <div class="chapter soog-dashboard-slot">
+            <soog-dashboard
+              mode="compact"
+              src="/api/public/instruments"
+              title={SOOG_DASHBOARD_LABELS_ES.title}
+              labels={JSON.stringify(SOOG_DASHBOARD_LABELS_ES)}
+            ></soog-dashboard>
+            <script is:inline type="module" src="/vendor/soog-dashboard/soog-dashboard.js"></script>
+          </div>
         )}
 
       </aside>
