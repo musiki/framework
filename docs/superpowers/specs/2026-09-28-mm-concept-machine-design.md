@@ -24,9 +24,10 @@ A discussion and concept machine for the MishMash network: **forums** (e.g. a St
 | Forums | Generalized `ForumBoard` with `spaceId`; each forum has a bibliography (linked Zotero collection via Seshat and/or `.bib` import). |
 | Writing | Reuse musiki forum markdown: `@citekey` citations (Seshat), KaTeX/MathJax, LilyPond blocks, image upload. |
 | Graph | One concept graph per space, filterable by forum and status. |
-| Export | `GET /api/public/mm/concepts.json` in the same shape as the Lab's `concept_machine.json`. |
+| Export | `GET /api/public/mm/concepts.json` in the same shape as the Lab's `concept_machine.json` (incl. `label_nb`, `definition_nb`, `*_nb` label maps). |
+| Languages | Aligned with MishMash (wiki "Nynorsk", `CONTENT_HANDOVER.yml`): **English is the source, Bokmål written by hand, Nynorsk generated** from Bokmål. UI in `en` and `nb` from day one (`t()` dictionaries; `nn` falls back to `nb` until a generated/reviewed set exists). Concepts carry per-language label and definition: English required, Bokmål optional-but-encouraged; a missing translation is shown as missing, never machine-filled silently. |
 
-Out of scope (later phases): AI commenter (improve musiki's Orf; AI-labelled, human-accepted), emergence trace view, SRS cards from assimilated concepts, Bokmål/Nynorsk UI, a GitHub Action in MishMash's repo (proposed via PR later).
+Out of scope (later phases): AI commenter (improve musiki's Orf; AI-labelled, human-accepted), emergence trace view, SRS cards from assimilated concepts, generated Nynorsk UI/concepts (Apertium, as mishmash-web does), proposing assimilated concepts into MishMash's `site/_data/glossary.yml` (term.en/nb/nn) by PR, a GitHub Action in MishMash's repo (proposed via PR later).
 
 ## 3. Tenant, routing, access
 
@@ -45,7 +46,7 @@ ALTER TABLE "Space" ADD COLUMN IF NOT EXISTS "settings" jsonb NOT NULL DEFAULT '
 
 CREATE TABLE "Concept" (
   id uuid PK, "spaceId" uuid NOT NULL → Space ON DELETE CASCADE, "forumId" uuid NULL → ForumBoard ON DELETE SET NULL,
-  slug text NOT NULL, label text NOT NULL,
+  slug text NOT NULL, label text NOT NULL, "labelNb" text NULL,
   status text NOT NULL DEFAULT 'neologism' CHECK (status IN ('neologism','discussion','assimilated')),
   "threadId" uuid NULL → ForumThread ON DELETE SET NULL,
   "createdBy" uuid NOT NULL → User, "createdAt" timestamptz DEFAULT now(), "updatedAt" timestamptz DEFAULT now(),
@@ -53,6 +54,7 @@ CREATE TABLE "Concept" (
 );
 CREATE TABLE "ConceptVersion" (
   id uuid PK, "conceptId" uuid NOT NULL → Concept ON DELETE CASCADE,
+  lang text NOT NULL DEFAULT 'en' CHECK (lang IN ('en','nb','nn')),   -- one version history per language
   definition text NOT NULL, sources jsonb NOT NULL DEFAULT '[]',   -- [{ citekey?, url?, note? }]
   "editedBy" uuid NOT NULL → User, "creditedUserId" uuid NOT NULL → User,
   "fromPostId" uuid NULL → ForumPost ON DELETE SET NULL, "createdAt" timestamptz DEFAULT now()
@@ -72,7 +74,7 @@ ALTER TABLE "ForumPost"   ADD "move" text NULL CHECK (move IN ('comment','propos
 ```
 (Exact column names of the existing forum tables are verified against `docs/sql/forum-schema.sql` and the live schema before writing the migration; all changes guarded for idempotency.)
 
-- Current definition = latest `ConceptVersion` by `createdAt`.
+- Current definition per language = latest `ConceptVersion` for that `lang` by `createdAt`; the English one is required (v1 at creation), Bokmål versions are added by author/curators or adopted from posts written in Bokmål.
 - Creating a concept creates its v1 (`creditedUserId = editedBy = author`) and its thread (`ForumThread` with `spaceId`, `boardId = forumId`, title = label).
 - Adopting post P (curator) creates `ConceptVersion(definition = P.body or curator-edited text, creditedUserId = P.author, editedBy = curator, fromPostId = P.id)` and sets `P.adoptedAsVersionId`.
 - musiki forum routes add `spaceId IS NULL` filters; mm routes are new and scope by space.
@@ -96,7 +98,8 @@ ALTER TABLE "ForumPost"   ADD "move" text NULL CHECK (move IN ('comment','propos
 - Layout `MmLayout.astro`: MishMash visual identity (brand tokens copied from `mishmash-web/site/assets/css/brand.css`, wordmark with attribution), header: Forums · Concepts · Graph · About · Sign in / avatar.
 - `/` forums list + recent activity + small graph; `/f/<forum>` description, bibliography panel (search, links to Zotero), threads, concepts born here, actions; `/f/<forum>/t/<id>` thread; `/c/<slug>` concept (current definition with credit, history, relations, origin forum, thread, adopt/status actions for curators); `/graph` full graph (D3, same visual language as the Lab page, filters by forum/status; accessible list fallback); `/admin` access + forums.
 - Composer: markdown with `@citekey` autocomplete from the forum bibliography, KaTeX/MathJax, LilyPond (musiki `renderForumMarkdown` + Seshat citations), move selector.
-- Everything via `t()`; nothing mentions musiki.
+- Everything via `t()` with `en` and `nb` dictionaries (language switch in the header, persisted per user; `nn` → `nb` fallback); nothing mentions musiki.
+- Concept pages show the definition in the reader's language with a visible "not yet available in Bokmål" note when missing, and link to the other language.
 
 ## 7. Bibliography
 
@@ -111,7 +114,7 @@ ALTER TABLE "ForumPost"   ADD "move" text NULL CHECK (move IN ('comment','propos
 
 ## 9. Testing
 
-- Pure: policy matrix (§5); role-per-kind validation; open-join decision; slug generation/uniqueness; export shape (no private fields); adopt-post version construction.
+- Pure: language fallback (nn→nb→en for UI; per-concept missing-translation state, never silent machine fill); policy matrix (§5); role-per-kind validation; open-join decision; slug generation/uniqueness; export shape (no private fields); adopt-post version construction.
 - Route sweep: no musiki route reachable on mm; `/` exact match.
 - Forum generalization: characterization tests for musiki forum routes before change; musiki lists never include space threads.
 - Staging: migration twice, XOR constraints, create forum/concept/thread/adopt flow via API.
