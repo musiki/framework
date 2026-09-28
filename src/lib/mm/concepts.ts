@@ -16,7 +16,8 @@ export type {
 
 const poolQ: QueryFn = (text, params) => query(text, params as any[]);
 
-async function onClient<T>(fn: (q: QueryFn) => Promise<T>): Promise<T> {
+/** Runs `fn` with `q` bound to one pooled client (for core transactions). */
+export async function onClient<T>(fn: (q: QueryFn) => Promise<T>): Promise<T> {
   const client = await getClient();
   // Set when a ROLLBACK itself failed: the connection's transaction state is
   // then unknown and it must not go back to the pool.

@@ -928,7 +928,7 @@ if (hasSessionUser && (canonicalCourseId || courseSlug)) {
     const courseIds = courseIdAliases.length > 0 ? courseIdAliases : [canonicalCourseId || courseSlug];
     const { data: rawBoards, error: rawBoardsError } = await query(
       `SELECT slug, title, description, "isDefault", "isArchived" FROM "ForumBoard" 
-       WHERE "courseId" = ANY($1) AND "isArchived" = false 
+       WHERE "courseId" = ANY($1) AND "isArchived" = false AND "spaceId" IS NULL 
        ORDER BY "isDefault" DESC, title ASC`,
       [courseIds]
     );

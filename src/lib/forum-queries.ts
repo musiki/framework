@@ -12,6 +12,15 @@ export type ForumQueryFn = (text: string, params?: any[]) => Promise<ForumQueryR
 
 export const BOARD_SCOPE_PREFIX = '@board:';
 
+// Course XOR space (migration 20260929090000): ForumBoard/ForumThread rows with a
+// `spaceId` belong to mm commons spaces and are never listed, read or mutated
+// through the musiki course routes. Every statement below is pinned to course
+// rows: boards/threads by `"spaceId" IS NULL`, posts/votes through their thread.
+const POST_IN_COURSE_THREAD = (postAlias: string) =>
+  `EXISTS (SELECT 1 FROM "ForumThread" ct WHERE ct.id = ${postAlias}."threadId" AND ct."spaceId" IS NULL)`;
+const VOTE_ON_COURSE_POST = `EXISTS (SELECT 1 FROM "ForumPost" cp JOIN "ForumThread" ct ON ct.id = cp."threadId"
+       WHERE cp.id = "ForumPostVote"."postId" AND ct."spaceId" IS NULL)`;
+
 /** Course ids to match: the alias list, or the canonical id alone. */
 export const courseIdsFor = (courseId: string, courseAliases: string[]): string[] =>
   courseAliases.length > 0 ? courseAliases : [courseId];
@@ -34,7 +43,7 @@ const BOARD_COLUMNS = `"id", "courseId", "slug", "title", "description", "isDefa
 
 export const selectDefaultBoard = (q: ForumQueryFn, courseIds: string[]) =>
   q(
-    `SELECT "id" FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "slug" = $2 AND "isArchived" = false`,
+    `SELECT "id" FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "slug" = $2 AND "isArchived" = false AND "spaceId" IS NULL`,
     [courseIds, 'general'],
   );
 
@@ -66,7 +75,7 @@ export const insertBoard = (
 export const listCourseBoards = (q: ForumQueryFn, courseIds: string[]) =>
   q(
     `SELECT ${BOARD_COLUMNS}
-     FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "isArchived" = false
+     FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "isArchived" = false AND "spaceId" IS NULL
      ORDER BY "isDefault" DESC, "title" ASC`,
     [courseIds],
   );
@@ -74,7 +83,7 @@ export const listCourseBoards = (q: ForumQueryFn, courseIds: string[]) =>
 export const selectCourseBoardBySlug = (q: ForumQueryFn, courseIds: string[], boardSlug: string) =>
   q(
     `SELECT ${BOARD_COLUMNS}
-     FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "slug" = $2 AND "isArchived" = false`,
+     FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "slug" = $2 AND "isArchived" = false AND "spaceId" IS NULL`,
     [courseIds, boardSlug],
   );
 
@@ -85,32 +94,34 @@ export const selectActiveBoardId = (q: ForumQueryFn, courseIds: string[], boardS
      WHERE "courseId" = ANY($1)
      AND "slug" = $2
      AND "isArchived" = false
+     AND "spaceId" IS NULL
      LIMIT 1`,
     [courseIds, boardSlug],
   );
 
 export const updateBoardTitle = (q: ForumQueryFn, boardId: string, title: string, now: string) =>
   q(
-    `UPDATE "ForumBoard" SET "title" = $1, "updatedAt" = $2 WHERE "id" = $3
+    `UPDATE "ForumBoard" SET "title" = $1, "updatedAt" = $2 WHERE "id" = $3 AND "spaceId" IS NULL
      RETURNING ${BOARD_COLUMNS}`,
     [title, now, boardId],
   );
 
 export const archiveBoard = (q: ForumQueryFn, boardId: string, now: string) =>
-  q(`UPDATE "ForumBoard" SET "isArchived" = true, "updatedAt" = $1 WHERE "id" = $2`, [now, boardId]);
+  q(`UPDATE "ForumBoard" SET "isArchived" = true, "updatedAt" = $1 WHERE "id" = $2 AND "spaceId" IS NULL`, [now, boardId]);
 
 /** Board-scoped threads of a course (`lessonSlug` = '@board:<slug>'). */
 export const selectBoardScopedThreads = (q: ForumQueryFn, courseIds: string[]) =>
   q(
     `SELECT "id", "lessonSlug", "createdAt", "updatedAt" FROM "ForumThread"
-     WHERE "courseId" = ANY($1) AND "lessonSlug" LIKE $2 LIMIT 2000`,
+     WHERE "courseId" = ANY($1) AND "lessonSlug" LIKE $2 AND "spaceId" IS NULL LIMIT 2000`,
     [courseIds, `${BOARD_SCOPE_PREFIX}%`],
   );
 
 export const selectPostActivity = (q: ForumQueryFn, threadIds: string[]) =>
   q(
     `SELECT "threadId", "createdAt" FROM "ForumPost"
-     WHERE "threadId" = ANY($1) AND ("status" IS NULL OR "status" <> 'deleted')`,
+     WHERE "threadId" = ANY($1) AND ("status" IS NULL OR "status" <> 'deleted')
+     AND ${POST_IN_COURSE_THREAD('"ForumPost"')}`,
     [threadIds],
   );
 
@@ -184,6 +195,7 @@ export const listThreadsByScope = (q: ForumQueryFn, courseIds: string[], scopeKe
      FROM "ForumThread"
      WHERE "courseId" = ANY($1)
      AND "lessonSlug" = $2
+     AND "spaceId" IS NULL
      ORDER BY "isPinned" DESC, "updatedAt" DESC
      LIMIT $3`,
     [courseIds, scopeKey, limit],
@@ -194,7 +206,8 @@ export const selectThreadPostActivity = (q: ForumQueryFn, threadIds: string[]) =
     `SELECT "threadId", "createdAt", "parentPostId"
      FROM "ForumPost"
      WHERE "threadId" = ANY($1)
-     AND ("status" IS NULL OR "status" <> 'deleted')`,
+     AND ("status" IS NULL OR "status" <> 'deleted')
+     AND ${POST_IN_COURSE_THREAD('"ForumPost"')}`,
     [threadIds],
   );
 
@@ -221,13 +234,13 @@ export const insertFirstPost = (
 
 /** threads.ts cleanup when the first post fails (a thread it just created). */
 export const deleteNewThread = (q: ForumQueryFn, threadId: string) =>
-  q(`DELETE FROM "ForumThread" WHERE "id" = $1`, [threadId]);
+  q(`DELETE FROM "ForumThread" WHERE "id" = $1 AND "spaceId" IS NULL`, [threadId]);
 
 /** threads/[threadId].ts */
 export const selectThreadForEdit = (q: ForumQueryFn, threadId: string) =>
   q(
     `SELECT id, "courseId", title, "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt"
-     FROM "ForumThread" WHERE id = $1`,
+     FROM "ForumThread" WHERE id = $1 AND "spaceId" IS NULL`,
     [threadId],
   );
 
@@ -237,18 +250,18 @@ export function updateThread(q: ForumQueryFn, threadId: string, updateData: Reco
   const vals = Object.values(updateData);
   const setSql = cols.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
   return q(
-    `UPDATE "ForumThread" SET ${setSql} WHERE id = $${cols.length + 1}
+    `UPDATE "ForumThread" SET ${setSql} WHERE id = $${cols.length + 1} AND "spaceId" IS NULL
      RETURNING id, "courseId", title, "createdByUserId", "isPinned", "isLocked", "createdAt", "updatedAt"`,
     [...vals, threadId],
   );
 }
 
 export const deleteThread = (q: ForumQueryFn, threadId: string) =>
-  q(`DELETE FROM "ForumThread" WHERE id = $1`, [threadId]);
+  q(`DELETE FROM "ForumThread" WHERE id = $1 AND "spaceId" IS NULL`, [threadId]);
 
 /** threads/[threadId]/posts.ts */
 export const selectThreadForPosts = (q: ForumQueryFn, threadId: string) =>
-  q(`SELECT id, "courseId", "lessonSlug", "createdByUserId", "isLocked" FROM "ForumThread" WHERE id = $1`, [threadId]);
+  q(`SELECT id, "courseId", "lessonSlug", "createdByUserId", "isLocked" FROM "ForumThread" WHERE id = $1 AND "spaceId" IS NULL`, [threadId]);
 
 export const listThreadPosts = (q: ForumQueryFn, threadId: string, limit: number) =>
   q(
@@ -256,6 +269,7 @@ export const listThreadPosts = (q: ForumQueryFn, threadId: string, limit: number
        FROM "ForumPost" p
        LEFT JOIN "User" u ON p."authorUserId" = u.id
        WHERE p."threadId" = $1
+       AND ${POST_IN_COURSE_THREAD('p')}
        ORDER BY p."createdAt" ASC
        LIMIT $2`,
     [threadId, limit],
@@ -268,7 +282,9 @@ export const insertReply = (
   q(
     `INSERT INTO "ForumPost" (
         "threadId", "authorUserId", "body", "parentPostId", "createdAt", "updatedAt"
-      ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      ) SELECT $1::uuid, $2::uuid, $3::text, $4::uuid, $5::timestamptz, $6::timestamptz
+      WHERE EXISTS (SELECT 1 FROM "ForumThread" ct WHERE ct.id = $1::uuid AND ct."spaceId" IS NULL)
+      RETURNING *`,
     [p.threadId, p.authorUserId, p.body, p.parentPostId, p.now, p.now],
   );
 
@@ -279,41 +295,43 @@ export const insertReply = (
 export const selectPostForEdit = (q: ForumQueryFn, postId: string) =>
   q(
     `SELECT id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt"
-     FROM "ForumPost" WHERE id = $1`,
+     FROM "ForumPost" WHERE id = $1 AND ${POST_IN_COURSE_THREAD('"ForumPost"')}`,
     [postId],
   );
 
 export const selectThreadOfPost = (q: ForumQueryFn, threadId: string) =>
-  q(`SELECT id, "courseId", "createdByUserId", "isLocked" FROM "ForumThread" WHERE id = $1`, [threadId]);
+  q(`SELECT id, "courseId", "createdByUserId", "isLocked" FROM "ForumThread" WHERE id = $1 AND "spaceId" IS NULL`, [threadId]);
 
 /** posts/[postId].ts PATCH (status 'published') and DELETE (body '', status 'deleted'). */
 export const updatePostBodyStatus = (q: ForumQueryFn, postId: string, body: string, status: string, now: string) =>
   q(
-    `UPDATE "ForumPost" SET body = $1, status = $2, "updatedAt" = $3 WHERE id = $4
+    `UPDATE "ForumPost" SET body = $1, status = $2, "updatedAt" = $3 WHERE id = $4 AND ${POST_IN_COURSE_THREAD('"ForumPost"')}
        RETURNING id, "threadId", "parentPostId", "authorUserId", body, status, "createdAt", "updatedAt"`,
     [body, status, now, postId],
   );
 
 export const touchThread = (q: ForumQueryFn, threadId: string, now: string) =>
-  q(`UPDATE "ForumThread" SET "updatedAt" = $1 WHERE id = $2`, [now, threadId]);
+  q(`UPDATE "ForumThread" SET "updatedAt" = $1 WHERE id = $2 AND "spaceId" IS NULL`, [now, threadId]);
 
 /** vote.ts */
 export const selectPostForVote = (q: ForumQueryFn, postId: string) =>
-  q(`SELECT "id", "threadId" FROM "ForumPost" WHERE "id" = $1 LIMIT 1`, [postId]);
+  q(`SELECT "id", "threadId" FROM "ForumPost" WHERE "id" = $1 AND ${POST_IN_COURSE_THREAD('"ForumPost"')} LIMIT 1`, [postId]);
 
 export const selectThreadForVote = (q: ForumQueryFn, threadId: string) =>
-  q(`SELECT "id", "courseId" FROM "ForumThread" WHERE "id" = $1 LIMIT 1`, [threadId]);
+  q(`SELECT "id", "courseId" FROM "ForumThread" WHERE "id" = $1 AND "spaceId" IS NULL LIMIT 1`, [threadId]);
 
 export const deleteVote = (q: ForumQueryFn, postId: string, userId: string) =>
-  q(`DELETE FROM "ForumPostVote" WHERE "postId" = $1 AND "userId" = $2`, [postId, userId]);
+  q(`DELETE FROM "ForumPostVote" WHERE "postId" = $1 AND "userId" = $2 AND ${VOTE_ON_COURSE_POST}`, [postId, userId]);
 
 export const upsertVote = (q: ForumQueryFn, postId: string, userId: string, value: number) =>
   q(
     `INSERT INTO "ForumPostVote" ("postId", "userId", "value")
-         VALUES ($1, $2, $3)
+         SELECT $1::uuid, $2::uuid, $3::smallint
+         WHERE EXISTS (SELECT 1 FROM "ForumPost" cp JOIN "ForumThread" ct ON ct.id = cp."threadId"
+                       WHERE cp.id = $1::uuid AND ct."spaceId" IS NULL)
          ON CONFLICT ("postId", "userId") DO UPDATE SET "value" = $3`,
     [postId, userId, value],
   );
 
 export const selectVotes = (q: ForumQueryFn, postId: string) =>
-  q(`SELECT "userId", "value" FROM "ForumPostVote" WHERE "postId" = $1`, [postId]);
+  q(`SELECT "userId", "value" FROM "ForumPostVote" WHERE "postId" = $1 AND ${VOTE_ON_COURSE_POST}`, [postId]);

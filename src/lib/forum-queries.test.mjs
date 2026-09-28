@@ -85,7 +85,7 @@ test('boards: insert (default with ON CONFLICT, created with RETURNING), rename,
 
 test('loadBoardActivityMap aggregates non-deleted posts per @board: slug', async () => {
   const { q, calls } = recorder((text) => {
-    if (text.includes('FROM "ForumThread"')) {
+    if (text.startsWith('SELECT "id", "lessonSlug"')) {
       return [
         { id: 't1', lessonSlug: '@board:Teoria', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' },
         { id: 't2', lessonSlug: '@board:teoria', createdAt: '2026-01-03T00:00:00Z', updatedAt: null },
@@ -93,7 +93,7 @@ test('loadBoardActivityMap aggregates non-deleted posts per @board: slug', async
         { id: 't4', lessonSlug: 'lesson-1', createdAt: '2026-05-01T00:00:00Z', updatedAt: null },
       ];
     }
-    if (text.includes('FROM "ForumPost"')) {
+    if (text.startsWith('SELECT "threadId", "createdAt"')) {
       return [
         { threadId: 't1', createdAt: '2026-01-05T00:00:00Z' },
         { threadId: 't1', createdAt: '2026-01-04T00:00:00Z' },
@@ -220,4 +220,109 @@ test('helpers pass the query result through unchanged (routes keep their error h
   }, { returning: true });
   assert.equal(res.data, null);
   assert.equal(res.error, err);
+});
+
+// ---------------------------------------------------------------------------
+// Course XOR space: musiki routes never see mm (space) rows
+// ---------------------------------------------------------------------------
+
+const BOARD = { id: 'b', courseId: 'c', slug: 's', title: 't', description: null, createdByUserId: 'u', isDefault: false, isArchived: false, createdAt: 'n', updatedAt: 'n' };
+
+/** Every helper, invoked once; inserts of new course rows are listed separately. */
+const READ_AND_MUTATE = {
+  selectDefaultBoard: (q) => sql.selectDefaultBoard(q, ['c']),
+  listCourseBoards: (q) => sql.listCourseBoards(q, ['c']),
+  selectCourseBoardBySlug: (q) => sql.selectCourseBoardBySlug(q, ['c'], 's'),
+  selectActiveBoardId: (q) => sql.selectActiveBoardId(q, ['c'], 's'),
+  updateBoardTitle: (q) => sql.updateBoardTitle(q, 'b', 'T', 'n'),
+  archiveBoard: (q) => sql.archiveBoard(q, 'b', 'n'),
+  selectBoardScopedThreads: (q) => sql.selectBoardScopedThreads(q, ['c']),
+  selectPostActivity: (q) => sql.selectPostActivity(q, ['t']),
+  listThreadsByScope: (q) => sql.listThreadsByScope(q, ['c'], 'l', 1),
+  selectThreadPostActivity: (q) => sql.selectThreadPostActivity(q, ['t']),
+  deleteNewThread: (q) => sql.deleteNewThread(q, 't'),
+  selectThreadForEdit: (q) => sql.selectThreadForEdit(q, 't'),
+  updateThread: (q) => sql.updateThread(q, 't', { updatedAt: 'n', title: 'T' }),
+  deleteThread: (q) => sql.deleteThread(q, 't'),
+  selectThreadForPosts: (q) => sql.selectThreadForPosts(q, 't'),
+  listThreadPosts: (q) => sql.listThreadPosts(q, 't', 1),
+  insertReply: (q) => sql.insertReply(q, { threadId: 't', authorUserId: 'u', body: 'b', parentPostId: null, now: 'n' }),
+  selectPostForEdit: (q) => sql.selectPostForEdit(q, 'p'),
+  selectThreadOfPost: (q) => sql.selectThreadOfPost(q, 't'),
+  updatePostBodyStatus: (q) => sql.updatePostBodyStatus(q, 'p', 'b', 'published', 'n'),
+  touchThread: (q) => sql.touchThread(q, 't', 'n'),
+  selectPostForVote: (q) => sql.selectPostForVote(q, 'p'),
+  selectThreadForVote: (q) => sql.selectThreadForVote(q, 't'),
+  deleteVote: (q) => sql.deleteVote(q, 'p', 'u'),
+  upsertVote: (q) => sql.upsertVote(q, 'p', 'u', 1),
+  selectVotes: (q) => sql.selectVotes(q, 'p'),
+};
+
+test('every musiki forum read/mutation statement is pinned to course rows ("spaceId" IS NULL)', async () => {
+  for (const [name, call] of Object.entries(READ_AND_MUTATE)) {
+    const { q, calls } = recorder();
+    await call(q);
+    assert.equal(calls.length, 1, name);
+    assert.ok(calls[0].text.includes('"spaceId" IS NULL'), `${name} must filter "spaceId" IS NULL:\n  ${calls[0].text}`);
+  }
+  // Helpers not covered above only insert new course rows (spaceId left NULL) or read users.
+  const covered = new Set([...Object.keys(READ_AND_MUTATE), 'insertBoard', 'insertThread', 'insertFirstPost', 'selectUsersByIds']);
+  const helpers = Object.entries(sql).filter(([, v]) => typeof v === 'function').map(([k]) => k)
+    .filter((k) => !['courseIdsFor', 'pickNewestTimestamp', 'loadBoardActivityMap'].includes(k));
+  assert.deepEqual(helpers.filter((k) => !covered.has(k)), [], 'new helper without a spaceId assertion');
+});
+
+test('course inserts never set spaceId (course XOR space holds with spaceId NULL)', async () => {
+  const { q, calls } = recorder();
+  await sql.insertBoard(q, BOARD, { onConflictDoNothing: true });
+  await sql.insertThread(q, { id: 't', courseId: 'c', lessonSlug: 'l', title: 'T', createdByUserId: 'u', now: 'n' });
+  await sql.insertFirstPost(q, { id: 'p', threadId: 't', authorUserId: 'u', body: 'b', now: 'n' });
+  for (const c of calls) assert.ok(!c.text.includes('"spaceId"'), c.text);
+});
+
+/**
+ * Tiny table model: rows carry spaceId; a statement that says `"spaceId" IS NULL`
+ * (directly or via its thread) only sees course rows — the same predicate the
+ * database evaluates.
+ */
+function fakeForumDb() {
+  const threads = [
+    { id: 'course-t', courseId: 'c', lessonSlug: 'l', spaceId: null, createdByUserId: 'u', isLocked: false, isPinned: false },
+    { id: 'mm-t', courseId: null, lessonSlug: null, spaceId: 'space-1', createdByUserId: 'u', isLocked: false, isPinned: false },
+  ];
+  const posts = [
+    { id: 'course-p', threadId: 'course-t' },
+    { id: 'mm-p', threadId: 'mm-t' },
+  ];
+  const visibleThread = (text, id) =>
+    threads.find((t) => t.id === id && (!text.includes('"spaceId" IS NULL') || t.spaceId === null));
+  return recorder((text, params) => {
+    if (/FROM "ForumThread" WHERE "?id"? = \$1/.test(text)) {
+      const t = visibleThread(text, params[0]);
+      return t ? [t] : [];
+    }
+    if (/FROM "ForumPost" WHERE "?id"? = \$1/.test(text)) {
+      const p = posts.find((row) => row.id === params[0]);
+      if (!p) return [];
+      if (text.includes('"spaceId" IS NULL') && !visibleThread(text, p.threadId)) return [];
+      return [p];
+    }
+    return [];
+  });
+}
+
+test('an mm thread id is "not found" through every musiki thread lookup', async () => {
+  const { q } = fakeForumDb();
+  for (const lookup of [sql.selectThreadForEdit, sql.selectThreadForPosts, sql.selectThreadOfPost, sql.selectThreadForVote]) {
+    assert.deepEqual((await lookup(q, 'mm-t')).data, [], lookup.name);
+    assert.equal((await lookup(q, 'course-t')).data.length, 1, lookup.name);
+  }
+});
+
+test('an mm post id is "not found" through the musiki edit and vote lookups', async () => {
+  const { q } = fakeForumDb();
+  for (const lookup of [sql.selectPostForEdit, sql.selectPostForVote]) {
+    assert.deepEqual((await lookup(q, 'mm-p')).data, [], lookup.name);
+    assert.equal((await lookup(q, 'course-p')).data.length, 1, lookup.name);
+  }
 });

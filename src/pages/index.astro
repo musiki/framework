@@ -29,7 +29,7 @@ try {
     `SELECT t."lessonSlug", COUNT(p.id) as cnt
      FROM "ForumThread" t
      JOIN "ForumPost" p ON t.id = p."threadId"
-     WHERE p.status IS NULL OR p.status <> 'deleted'
+     WHERE (p.status IS NULL OR p.status <> 'deleted') AND t."spaceId" IS NULL
      GROUP BY t."lessonSlug"`
   );
   if (commentRows) {
