@@ -14,13 +14,25 @@ test('musiki allows everything', () => {
 });
 
 test('so allows only studio, studio api, public site api and auth', () => {
-  for (const p of ['/studio', '/studio/', '/studio/settings/access', '/api/studio/me', '/api/auth/session', '/api/public/site']) {
+  for (const p of ['/studio', '/studio/', '/studio/settings/access', '/api/studio/me', '/api/auth/session', '/api/public/site', '/api/public/instruments']) {
     assert.equal(isRouteAllowed(so, p), true, p);
   }
   for (const p of ['/', '/cursos', '/foro', '/dashboard', '/login', '/api/enroll', '/api/graph-data',
     '/studiox', '/api/studiox', '/api/authz', '/api/notes/list', '/api/publicx']) {
     assert.equal(isRouteAllowed(so, p), false, p);
   }
+});
+
+test('musiki (default tenant) reaches /api/public/instruments', () => {
+  assert.equal(isRouteAllowed(TENANTS.musiki, '/api/public/instruments'), true);
+});
+
+test('a tenant not configured with api:public (e.g. mm, not yet in TENANTS) is refused /api/public/instruments', () => {
+  // mm isn't wired into TENANTS on this branch yet; a narrowly-scoped
+  // tenant (any RouteFamily list that doesn't include 'api:public') stands
+  // in for it here, generically.
+  const notYetConfigured = { ...so, id: 'mm', routes: ['studio', 'auth'] };
+  assert.equal(isRouteAllowed(notYetConfigured, '/api/public/instruments'), false);
 });
 
 // Sweep: every page file must be unreachable from `so` unless it lives under an allowed prefix.
