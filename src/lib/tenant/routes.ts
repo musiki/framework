@@ -19,9 +19,16 @@ export const ROUTE_FAMILY_EXACT: Partial<Record<RouteFamily, string[]>> = {
 const matchesPrefix = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);
 
+// Sub-trees carved out of a family's prefixes because another tenant owns
+// them: so's `api:public` must never reach mm's public API.
+export const ROUTE_FAMILY_EXCLUDED: Partial<Record<RouteFamily, string[]>> = {
+  'api:public': ['/api/public/mm'],
+};
+
 const familyMatches = (family: RouteFamily, pathname: string) =>
   (ROUTE_FAMILY_EXACT[family] ?? []).includes(pathname) ||
-  ROUTE_FAMILY_PREFIXES[family].some((prefix) => matchesPrefix(pathname, prefix));
+  (ROUTE_FAMILY_PREFIXES[family].some((prefix) => matchesPrefix(pathname, prefix)) &&
+    !(ROUTE_FAMILY_EXCLUDED[family] ?? []).some((prefix) => matchesPrefix(pathname, prefix)));
 
 export function isRouteAllowed(tenant: Tenant, pathname: string): boolean {
   if (tenant.routes === 'all') return true;
@@ -50,7 +57,9 @@ export function isInternalMmPath(pathname: string): boolean {
 
 /**
  * Maps a public mm path to its internal page path, or null when the path is
- * not an mm page (APIs, auth, anything else).
+ * not an mm page (APIs, auth, anything else). Takes the raw (still
+ * percent-encoded) pathname and never decodes it: the router decodes params
+ * exactly once, so '/f/%2561' keeps the param '%61'.
  *   '/' → '/mm-app/', '/f/stiegler' → '/mm-app/f/stiegler', '/cursos' → null
  */
 export function mapMmPath(pathname: string): string | null {

@@ -28,6 +28,20 @@ test('musiki (default tenant) reaches /api/public/instruments', () => {
   assert.equal(isRouteAllowed(TENANTS.musiki, '/api/public/instruments'), true);
 });
 
+test('so api:public excludes the mm public api', () => {
+  for (const p of ['/api/public/mm', '/api/public/mm/concepts.json']) {
+    assert.equal(isRouteAllowed(so, p), false, p);
+  }
+  for (const p of ['/api/public/mmx', '/api/public/site']) {
+    assert.equal(isRouteAllowed(so, p), true, p);
+  }
+});
+
+test('mapMmPath keeps raw encoding', () => {
+  assert.equal(mapMmPath('/f/%25'), '/mm-app/f/%25');
+  assert.equal(mapMmPath('/f/%2561'), '/mm-app/f/%2561');
+});
+
 test('mm (no api:public family) is refused /api/public/instruments and so data', () => {
   assert.equal(isRouteAllowed(mm, '/api/public/instruments'), false);
   assert.equal(isRouteAllowed(mm, '/api/public/site'), false);
@@ -99,7 +113,8 @@ function sampleRoute(file) {
   return rel.replace(/\[\.\.\.[^\]]+\]/g, 'x/y').replace(/\[[^\]]+\]/g, 'x');
 }
 const ALLOWED_PREFIXES = ['/studio', '/api/studio', '/api/public', '/api/auth'];
-const underAllowed = (r) => ALLOWED_PREFIXES.some((p) => r === p || r.startsWith(p + '/'));
+const underAllowed = (r) => ALLOWED_PREFIXES.some((p) => r === p || r.startsWith(p + '/'))
+  && !(r === '/api/public/mm' || r.startsWith('/api/public/mm/'));
 
 test('route sweep: no musiki route is reachable from so', () => {
   const routes = walk(PAGES).map(sampleRoute);

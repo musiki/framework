@@ -30,7 +30,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     ? { tenant: TENANTS[DEFAULT_TENANT_ID], action: "next" as const }
     : decideTenantRequest({
         host: context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname,
-        pathname,
+        // Raw pathname (encoding and '//' kept): what the router matches.
+        pathname: new URL(context.request.url).pathname,
         envTenant: import.meta.env.DEV ? process.env.TENANT : undefined,
       });
   context.locals.tenant = tenantDecision.tenant;
