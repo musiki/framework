@@ -95,7 +95,7 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
     classCondition = ` OR (s."targetType" = 'class' AND s."targetId" = ANY($${params.length}::text[]))`;
   }
 
-  let sql = `SELECT DISTINCT n.id, n.title, n.body, n."renderedHtml", n."noteDate", n."courseId", n."folderId", n."createdAt", n."updatedAt", n."userId",
+  let sql = `SELECT DISTINCT n.id, n.title, n.body, n."renderedHtml", n."noteDate", n."courseId", n."folderId", n."createdAt", n."updatedAt", n."userId", n."position",
                     o.name as "ownerName"
              FROM "LiveClassNote" n
              LEFT JOIN "User" o ON n."userId" = o.id
@@ -316,7 +316,7 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
   if (!id) return json({ error: 'id required' }, 400);
 
   const { error } = await query(
-    `DELETE FROM "LiveClassNote" WHERE "id" = $1::uuid AND "userId" = $2::uuid`,
+    `DELETE FROM "LiveClassNote" WHERE "id" = $1::uuid AND "userId" = $2::uuid AND "spaceId" IS NULL`,
     [id, user.id]
   );
 

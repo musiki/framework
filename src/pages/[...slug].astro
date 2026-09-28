@@ -3,6 +3,7 @@ export const prerender = false;
 
 import { getCollection, getEntry, render } from 'astro:content';
 import { ClientRouter } from 'astro:transitions';
+import '../lib/writing/tree/tree.css';
 import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
 import GraphModal from '../components/GraphModal.astro';
@@ -2318,6 +2319,65 @@ function renderLessonsTreeHTML(
 	        padding-left: 0.45rem;
 	        border-left: 1px solid color-mix(in srgb, var(--c-border) 72%, transparent);
 	      }
+
+      /* Shared writing-tree renderer (src/lib/writing/tree/render.ts), used
+         for musiki's own DB-notes tree since it was delegated to it: map
+         its CSS variables onto musiki's --c-* tokens and give it a look
+         consistent with the notas-sb-* rules above (the "Compartidas
+         conmigo" section still uses those directly). */
+      :global(.sidebar--left .notas-sb-owned-tree) {
+        --so-fg: var(--c-fg);
+        --so-border: var(--c-border);
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .writing-tree) {
+        font-size: 0.84rem;
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .writing-tree > p[role="status"]) {
+        margin: 0.12rem 0.25rem;
+        font-size: 0.78rem;
+        color: var(--c-fg-subtle, var(--c-fg));
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-label) {
+        padding: 0.12rem 0.25rem;
+        border-radius: 4px;
+        color: var(--c-fg);
+        font: inherit;
+        background: none;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-label:hover) {
+        background: color-mix(in srgb, var(--accent) 9%, transparent);
+        color: var(--accent);
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-create) {
+        padding: 0.12rem 0.25rem;
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-create button) {
+        font-size: 0.78rem;
+        color: var(--c-fg-subtle, var(--c-fg));
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.1rem 0.2rem;
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-create button:hover) {
+        color: var(--accent);
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-actions) {
+        font-size: 0.72rem;
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-actions > summary) {
+        cursor: pointer;
+        color: var(--c-fg-subtle, var(--c-fg));
+        padding: 0 0.2rem;
+        list-style: none;
+      }
+      :global(.sidebar--left .notas-sb-owned-tree .wt-actions button),
+      :global(.sidebar--left .notas-sb-owned-tree .wt-actions select) {
+        font-size: 0.72rem;
+      }
 
       /* Notes tree indentation and vertical connection lines (Roam Research style) */
       :global(.sidebar--left .notas-sb-level .notas-sb-level) {
@@ -6863,7 +6923,7 @@ function renderLessonsTreeHTML(
             if (!isMobileViewport()) return;
             const target = event.target;
             if (!(target instanceof Element)) return;
-            const navigationLink = target.closest('.lesson-link, .class-toc-link, .course-title-link, .recursos-sidebar-resource-link, .notas-sb-item');
+            const navigationLink = target.closest('.lesson-link, .class-toc-link, .course-title-link, .recursos-sidebar-resource-link, .notas-sb-item, .notas-sb-owned-tree li > .wt-row > .wt-label');
             if (!(navigationLink instanceof HTMLElement)) return;
             applySidebarState('left', false);
           });

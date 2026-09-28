@@ -1,12 +1,23 @@
 import { buildTree, type TreeFolder, type TreeNote, type TreeNode } from './model.ts';
 import { VISIBILITIES, type Visibility } from '../notes/visibility.ts';
 
-export type TreeLabels = Record<'newNote' | 'newFolder' | 'rename' | 'delete' | 'visibility' | 'inherit' | 'private' | 'supervision' | 'committee' | 'public' | 'confirmDelete' | 'empty' | 'loading' | 'error' | 'up' | 'down' | 'actions', string>;
+export type TreeLabels = Record<'newNote' | 'newFolder' | 'rename' | 'delete' | 'visibility' | 'inherit' | 'private' | 'supervision' | 'committee' | 'public' | 'confirmDelete' | 'empty' | 'loading' | 'error' | 'up' | 'down' | 'actions', string> & {
+  /** Shown instead of `error` after a failed create/rename/delete/reorder/etc. action. Falls back to `error` when absent. */
+  actionError?: string;
+};
 export type TreeRenderOptions = {
   container: HTMLElement; labels: TreeLabels; locale: string; canManage: boolean;
   showVisibility: boolean; selectedNoteId?: string | null;
   load(): Promise<{ folders: TreeFolder[]; notes: TreeNote[] }>;
   onOpenNote(id: string): void;
+  /** Optional per-note icon (e.g. musiki's concept/draft glyph), prefixed onto the label text. */
+  noteIcon?(note: TreeNote): string | null | undefined;
+  /** Optional per-note suffix (e.g. musiki's "(ownerName)" for notes shared with the viewer), appended onto the label text. */
+  noteSuffix?(note: TreeNote): string | null | undefined;
+  /** Optional extra per-note actions (e.g. musiki's "Compartir") rendered alongside rename/delete in the note's action menu. Only consulted when `canManage`. */
+  noteActions?(note: TreeNote): Array<{ label: string; run: () => void | Promise<void> }>;
+  /** Optional extra dragstart payload (e.g. musiki's `text/x-musiki-note` for the workspace's external drop handler), merged onto the tree's own drag data. */
+  dragData?(node: TreeNode): Record<string, string>;
   actions: {
     createNote(parentId: string | null): Promise<void>;
     createFolder(parentId: string | null, name: string): Promise<void>;
@@ -38,7 +49,14 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
     if (busy || !alive) return;
     busy = true; content.setAttribute('aria-busy', 'true');
     try { await action(); await refresh(); }
-    catch { status.textContent = l.error; }
+    catch (err) {
+      // refresh() first (it overwrites status.textContent with 'loading'/'' as it
+      // goes), then set the error label — otherwise refresh() would silently wipe
+      // it out and the user would never see the action failed.
+      await refresh();
+      status.textContent = l.actionError ?? l.error;
+      console.error('[writing-tree] action failed:', err);
+    }
     finally { busy = false; content.removeAttribute('aria-busy'); }
   }
   function createButtons(parentId: string | null) {
@@ -56,7 +74,14 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
       const siblings = nodes.filter(n => n.kind === node.kind);
       const index = siblings.indexOf(node);
       const li = document.createElement('li'); const row = document.createElement('div'); row.className = 'wt-row';
-      const label = button(title || l.newNote, () => {
+      let labelText = title || l.newNote;
+      if (node.kind === 'note') {
+        const icon = opts.noteIcon?.(node.note);
+        if (icon) labelText = `${icon} ${labelText}`;
+        const suffix = opts.noteSuffix?.(node.note);
+        if (suffix) labelText = `${labelText} ${suffix}`;
+      }
+      const label = button(labelText, () => {
         if (node.kind === 'note') opts.onOpenNote(item.id);
         else { details.open = !details.open; }
       });
@@ -91,6 +116,14 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
         }), button(l.delete, () => {
           if (window.confirm(l.confirmDelete)) void run(() => node.kind === 'folder' ? actions.deleteFolder(item.id) : actions.deleteNote(item.id));
         }));
+        if (node.kind === 'note' && opts.noteActions) {
+          for (const extra of opts.noteActions(node.note)) {
+            // Runs directly, not through run(): these are side actions (e.g.
+            // musiki's "Compartir", which opens a modal) that don't mutate the
+            // tree itself, so they shouldn't force a reload or the busy/error UI.
+            controls.append(button(extra.label, () => { void extra.run(); }));
+          }
+        }
         for (const [label, delta] of [[l.up, -1], [l.down, 1]] as const) {
           const move = button(label, () => void run(() => actions.reorder(node.kind, item.id, parentId, index + delta)));
           move.disabled = index + delta < 0 || index + delta >= siblings.length; controls.append(move);
@@ -107,7 +140,13 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
         menu.append(summary, controls); row.append(menu);
         label.draggable = true;
         label.addEventListener('dragstart', e => {
-          dragged = { id: item.id, kind: node.kind, parentId }; e.dataTransfer?.setData('text/plain', item.id);
+          dragged = { id: item.id, kind: node.kind, parentId };
+          // A private MIME, not 'text/plain' — hosts that also accept plain-text
+          // drops elsewhere (e.g. musiki's course-note slug drop) must not
+          // mistake this tree's own internal drag for theirs.
+          e.dataTransfer?.setData('application/x-writing-tree', item.id);
+          const extra = opts.dragData?.(node);
+          if (extra) for (const [key, value] of Object.entries(extra)) e.dataTransfer?.setData(key, value);
         });
         label.addEventListener('dragend', () => { dragged = null; });
         row.addEventListener('dragover', e => { if (dragged) { e.preventDefault(); e.stopPropagation(); } });
@@ -117,6 +156,12 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
           if (node.kind === 'folder' && d.kind === 'note') {
             const count = node.children.filter(n => n.kind === 'note' && n.note.id !== d.id).length;
             void run(() => actions.reorder('note', d.id, item.id, count));
+          } else if (node.kind === 'folder' && d.kind === 'folder' && d.parentId !== item.id) {
+            // Dropping a folder directly onto another folder's row reparents it as that
+            // folder's last child (distinct from the same-parent reorder branch below,
+            // which only fires when the dragged folder is already a sibling here).
+            const count = node.children.filter(n => n.kind === 'folder' && n.folder.id !== d.id).length;
+            void run(() => actions.reorder('folder', d.id, item.id, count));
           } else if (d.kind === node.kind && (d.kind === 'note' || d.parentId === parentId)) {
             const before = siblings.slice(0, index).filter(n => (n.kind === 'note' ? n.note.id : n.folder.id) !== d.id).length;
             void run(() => actions.reorder(d.kind, d.id, parentId, before));
