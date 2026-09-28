@@ -20,18 +20,27 @@ export type ImportFile = {
 
 export type ExistingNote = { folder: string; title: string };
 
+/** Coarse bucket of a file's frontmatter `type`, reported alongside every
+ * `create` step so the operator sees, at plan time, what the dashboard
+ * endpoint (which still filters to `type: instrument`, see Task 2) will
+ * actually show — the studio, not this script, is the source of truth on
+ * what gets imported: every parseable note is created regardless of type,
+ * and the author fixes types online afterwards. */
+export type NoteTypeBucket = 'instrument' | 'box' | 'none' | 'other';
+
 export type CreateStep = {
   action: 'create';
   folder: CasesSubfolder;
   title: string;
   markdown: string;
+  type: NoteTypeBucket;
 };
 
 export type SkipStep = {
   action: 'skip';
   folder: CasesSubfolder;
   title: string;
-  reason: 'not-instrument' | 'exists' | 'parse-error';
+  reason: 'exists' | 'parse-error';
   /** Set only for `reason: 'parse-error'` — the parser's own short message
    * (e.g. a duplicated-key or bad-alias complaint from js-yaml), so the
    * import script can report which files need a manual frontmatter fix. */
@@ -70,13 +79,32 @@ function readType(markdown: string): { type: unknown } | { error: string } {
   }
 }
 
+/** Classifies a frontmatter `type` value into the coarse bucket reported on
+ * each `create` step. Anything falsy or an empty/whitespace-only string is
+ * `'none'`; a non-`'instrument'`/`'box'` string (or a non-string value, e.g.
+ * a YAML list) is `'other'`. */
+function typeBucket(type: unknown): NoteTypeBucket {
+  if (type === 'instrument') return 'instrument';
+  if (type === 'box') return 'box';
+  if (type === undefined || type === null) return 'none';
+  if (typeof type === 'string' && type.trim() === '') return 'none';
+  return 'other';
+}
+
 /**
- * Plans the import: skips files whose frontmatter `type` isn't
- * `'instrument'`, then skips anything already present at (folder, title)
- * in `existing` (idempotent re-run), and creates the rest. Note title is
- * always the file name with `.md` stripped — never a frontmatter `title`
- * field, since a raw file listing (this function's input) doesn't parse
- * frontmatter for anything but the type filter.
+ * Plans the import: every `.md` file that parses (even without a `type` or
+ * with a `type` other than `instrument`) is imported — the studio is the
+ * source of truth, and the public endpoint filters to `type: instrument`
+ * on read (Task 2), so the author can fix a note's type online after the
+ * fact. Only two things are skipped: files whose frontmatter can't be
+ * parsed at all (`reason: 'parse-error'`, with the parser's message so the
+ * operator can fix them by hand) and files already present at (folder,
+ * title) in `existing` (idempotent re-run). Every `create` step carries a
+ * `type` bucket (`instrument` / `box` / `none` / `other`) so the operator
+ * can see at plan time what the dashboard will actually show. Note title
+ * is always the file name with `.md` stripped — never a frontmatter
+ * `title` field, since a raw file listing (this function's input) doesn't
+ * parse frontmatter for anything but the type bucket.
  */
 export function planInstrumentImport(files: ImportFile[], existing: ExistingNote[]): ImportStep[] {
   const existingKeys = new Set(existing.map((e) => key(e.folder, e.title)));
@@ -97,17 +125,12 @@ export function planInstrumentImport(files: ImportFile[], existing: ExistingNote
       continue;
     }
 
-    if (parsed.type !== 'instrument') {
-      steps.push({ action: 'skip', folder: file.folder, title, reason: 'not-instrument' });
-      continue;
-    }
-
     if (existingKeys.has(key(file.folder, title))) {
       steps.push({ action: 'skip', folder: file.folder, title, reason: 'exists' });
       continue;
     }
 
-    steps.push({ action: 'create', folder: file.folder, title, markdown: file.markdown });
+    steps.push({ action: 'create', folder: file.folder, title, markdown: file.markdown, type: typeBucket(parsed.type) });
   }
 
   return steps;

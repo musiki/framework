@@ -12,7 +12,7 @@ test('planInstrumentImport: creates instrument files not already imported', () =
   const files = [instrumentFile('Instruments', 'Daxophone.md')];
   const steps = planInstrumentImport(files, []);
   assert.deepEqual(steps, [
-    { action: 'create', folder: 'Instruments', title: 'Daxophone', markdown: files[0].markdown },
+    { action: 'create', folder: 'Instruments', title: 'Daxophone', markdown: files[0].markdown, type: 'instrument' },
   ]);
 });
 
@@ -22,23 +22,32 @@ test('planInstrumentImport: note title is the file name minus .md, never a front
   assert.equal(steps[0].title, 'aeolian harp');
 });
 
-test('planInstrumentImport: skips files whose type is not instrument', () => {
+test('planInstrumentImport: imports type: box files too, bucketed as "box" (studio is the source of truth; endpoint filters by type)', () => {
   const files = [
     { folder: 'Instruments', name: 'cricket.md', markdown: `---\ntype: box\n---\nbody` },
   ];
   const steps = planInstrumentImport(files, []);
   assert.deepEqual(steps, [
-    { action: 'skip', folder: 'Instruments', title: 'cricket', reason: 'not-instrument' },
+    { action: 'create', folder: 'Instruments', title: 'cricket', markdown: files[0].markdown, type: 'box' },
   ]);
 });
 
-test('planInstrumentImport: skips files with no type field at all', () => {
+test('planInstrumentImport: imports files with no type field at all, bucketed as "none"', () => {
   const files = [
     { folder: 'Instruments', name: 'digitAize.md', markdown: `---\nurl: https://x.org\n---\nbody` },
   ];
   const steps = planInstrumentImport(files, []);
-  assert.equal(steps[0].action, 'skip');
-  assert.equal(steps[0].reason, 'not-instrument');
+  assert.equal(steps[0].action, 'create');
+  assert.equal(steps[0].type, 'none');
+});
+
+test('planInstrumentImport: imports files with an unrecognized type value, bucketed as "other"', () => {
+  const files = [
+    { folder: 'Instruments', name: 'weird.md', markdown: `---\ntype: page\n---\nbody` },
+  ];
+  const steps = planInstrumentImport(files, []);
+  assert.equal(steps[0].action, 'create');
+  assert.equal(steps[0].type, 'other');
 });
 
 test('planInstrumentImport: idempotent — skips (folder, title) pairs already present', () => {
@@ -118,8 +127,10 @@ test('planInstrumentImport: processes a mixed batch preserving input order', () 
     steps.map((s) => [s.action, s.folder, s.title]),
     [
       ['skip', 'Instruments', 'A'],
-      ['skip', 'Instruments', 'B'],
+      ['create', 'Instruments', 'B'],
       ['create', 'Instruments (fictional)', 'C'],
     ],
   );
+  assert.equal(steps[1].type, 'other');
+  assert.equal(steps[2].type, 'instrument');
 });

@@ -17,8 +17,12 @@
 // `--vault <dir>` is the vault's `cases` directory (read-only), containing
 // `case instruments/` (-> studio folder `Instruments`) and
 // `case instruments fictional/` (-> studio folder `Instruments (fictional)`).
-// Only `.md` files whose frontmatter has `type: instrument` are imported;
-// everything else is listed as skipped, never written.
+// Every `.md` file whose frontmatter parses is imported, regardless of its
+// `type` (the studio is the source of truth; the public endpoint still
+// filters to `type: instrument` on read — see Task 2 — so the author fixes
+// a note's type online afterwards). Non-`.md` files (e.g. a `.base` file)
+// are ignored entirely. Only files whose frontmatter fails to parse at all
+// are skipped (reported with the parser's message).
 //
 // `--offline` skips the database entirely (no .env read, no pg Pool) and
 // only requires `--dry-run` — it prints the file-level plan (what the vault
@@ -154,9 +158,11 @@ function printHelp() {
       '                         connection) and print only the file-level plan;',
       '                         requires --dry-run',
       '',
-      'Imports every ".md" file under those two vault subdirectories whose',
-      'frontmatter has `type: instrument` as a studio note under Cases/Instruments',
-      'or Cases/Instruments (fictional), keeping the frontmatter verbatim except',
+      'Imports every ".md" file under those two vault subdirectories as a studio',
+      'note under Cases/Instruments or Cases/Instruments (fictional), regardless',
+      'of its frontmatter `type` (the public endpoint filters to `type: instrument`',
+      'on read; fix a note\'s type online after import). Only files whose',
+      'frontmatter fails to parse are skipped. Frontmatter is kept verbatim except',
       'for Templater tags (e.g. "<% tp.date.now(...) %>"), which are replaced with',
       'today\'s date. Idempotent by (folder, title) — a re-run only creates what is',
       'still missing.',
@@ -305,12 +311,20 @@ async function ensureCasesFolders(query, { spaceId, authorId, casesFolderId, sub
 // plan output
 // ---------------------------------------------------------------------------
 
+// The studio is the source of truth (see import-plan.ts): every parseable
+// note is created regardless of `type` — the public endpoint (Task 2)
+// still filters to `type: instrument` on read, so the author fixes a
+// note's type online afterwards. Only 'exists' (idempotent re-run) and
+// 'parse-error' are still skipped. Each 'create' step carries a per-type
+// bucket (`instrument` / `box` / `none` / `other`) so the operator sees at
+// plan time what the endpoint will actually show once imported.
 const GROUPS = [
   { key: 'create', label: 'to create', match: (s) => s.action === 'create' },
   { key: 'exists', label: 'already imported (exists)', match: (s) => s.action === 'skip' && s.reason === 'exists' },
-  { key: 'not-instrument', label: 'skipped: not an instrument note', match: (s) => s.action === 'skip' && s.reason === 'not-instrument' },
   { key: 'parse-error', label: 'skipped: frontmatter parse error', match: (s) => s.action === 'skip' && s.reason === 'parse-error' },
 ];
+
+const TYPE_BUCKETS = ['instrument', 'box', 'none', 'other'];
 
 function printPlan(steps, { dryRun }) {
   const prefix = dryRun ? '[dry-run] ' : '';
@@ -320,12 +334,18 @@ function printPlan(steps, { dryRun }) {
     console.log(`\n${group.label} (${inGroup.length}):`);
     for (const step of inGroup) {
       const extra = step.action === 'skip' && step.reason === 'parse-error' && step.message ? `  — ${step.message}` : '';
-      console.log(`  ${step.folder} / ${step.title}${extra}`);
+      const typeTag = step.action === 'create' ? `  [type: ${step.type}]` : '';
+      console.log(`  ${step.folder} / ${step.title}${typeTag}${extra}`);
     }
   }
+
   const counts = Object.fromEntries(GROUPS.map((g) => [g.key, steps.filter(g.match).length]));
+  const creates = steps.filter((s) => s.action === 'create');
+  const typeCounts = Object.fromEntries(TYPE_BUCKETS.map((t) => [t, creates.filter((s) => s.type === t).length]));
+
   console.log(
-    `\n${counts.create} to create, ${counts.exists} already imported, ${counts['not-instrument']} not instruments, ${counts['parse-error']} parse errors.`,
+    `\n${counts.create} to create (by frontmatter type: ${TYPE_BUCKETS.map((t) => `${t}=${typeCounts[t]}`).join(', ')}), ` +
+      `${counts.exists} already imported, ${counts['parse-error']} parse errors.`,
   );
 }
 
