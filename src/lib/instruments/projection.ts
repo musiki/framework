@@ -64,6 +64,14 @@ const PROFILE_KEYS = [
 
 const MOAIE_AXES: MoaieAxis[] = ['M', 'O', 'A', 'I', 'E'];
 
+/** Bounds on whitelisted strings — vault notes are free-form prose fields
+ * (e.g. `sachs-hornbostel` or `moaie.M` commentary can run to paragraph
+ * length); truncating keeps the public endpoint's payload predictable
+ * without rejecting the whole field. */
+const MAX_STRING_LEN = 2000;
+const MAX_ARRAY_ITEMS = 50;
+const MAX_ARRAY_ITEM_LEN = 200;
+
 /**
  * Replaces Templater expressions (`<% tp.date.now("YYYY-MM-DD") %>` and
  * similar) inside the frontmatter block only, with `today` (an injected
@@ -92,13 +100,19 @@ export function cleanTemplater(
  * expressions cleaned out if the raw markdown doesn't parse as YAML.
  * Returns `null` (never throws) if both attempts fail. */
 function parseFrontmatterRobust(markdown: string): Record<string, unknown> | null {
+  // `{}` (any options object, even empty) opts both calls out of
+  // gray-matter's own content-keyed cache. Without it, a first call that
+  // throws still poisons the cache with the pre-parse (dataless) file
+  // object under that content string, so an identical-content retry
+  // (e.g. cleanTemplater is a no-op because there's no Templater tag)
+  // would silently return `{}` instead of re-throwing.
   try {
-    return matter(markdown).data ?? {};
+    return matter(markdown, {}).data ?? {};
   } catch {
     // fall through
   }
   try {
-    return matter(cleanTemplater(markdown)).data ?? {};
+    return matter(cleanTemplater(markdown), {}).data ?? {};
   } catch {
     return null;
   }
@@ -117,19 +131,28 @@ function reduceWikilinks(s: string): string {
     .trim();
 }
 
-/** A non-empty, wikilink-reduced string, or `undefined`. */
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max) : s;
+}
+
+/** A non-empty, wikilink-reduced string bounded to `MAX_STRING_LEN`, or
+ * `undefined`. */
 function str(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const reduced = reduceWikilinks(value);
-  return reduced === '' ? undefined : reduced;
+  return reduced === '' ? undefined : truncate(reduced, MAX_STRING_LEN);
 }
 
+/** At most `MAX_ARRAY_ITEMS` entries, each bounded to `MAX_ARRAY_ITEM_LEN`
+ * chars (independent of `str`'s own, longer bound, since these are meant
+ * to be short names, not prose). */
 function strArray(value: unknown): string[] {
   const arr = Array.isArray(value) ? value : value == null ? [] : [value];
   const out: string[] = [];
   for (const item of arr) {
+    if (out.length >= MAX_ARRAY_ITEMS) break;
     const s = str(item);
-    if (s !== undefined) out.push(s);
+    if (s !== undefined) out.push(truncate(s, MAX_ARRAY_ITEM_LEN));
   }
   return out;
 }
@@ -158,14 +181,23 @@ function readVector(value: unknown): [number, number, number, number, number] | 
   return nums as [number, number, number, number, number];
 }
 
+/** `null` both when `interface_profile` is absent and when every one of
+ * the ten dimensions is 0 or missing — an "unscored" profile is
+ * indistinguishable from an absent one, so the UI can treat both the same
+ * way instead of plotting a real-looking all-zero radar. Individual
+ * missing/invalid keys still default to 0 as long as at least one
+ * dimension is actually scored. */
 function readProfile(value: unknown): PublicInstrument['profile'] {
   if (value == null || typeof value !== 'object') return null;
   const source = value as Record<string, unknown>;
   const profile = {} as NonNullable<PublicInstrument['profile']>;
+  let allZero = true;
   for (const key of PROFILE_KEYS) {
-    profile[key] = finiteNumber(source[key]) ?? 0;
+    const n = finiteNumber(source[key]) ?? 0;
+    profile[key] = n;
+    if (n !== 0) allZero = false;
   }
-  return profile;
+  return allZero ? null : profile;
 }
 
 function readMoaieText(value: unknown): Partial<Record<MoaieAxis, string>> {

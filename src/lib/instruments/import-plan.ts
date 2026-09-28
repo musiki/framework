@@ -31,23 +31,42 @@ export type SkipStep = {
   action: 'skip';
   folder: CasesSubfolder;
   title: string;
-  reason: 'not-instrument' | 'exists';
+  reason: 'not-instrument' | 'exists' | 'parse-error';
+  /** Set only for `reason: 'parse-error'` — the parser's own short message
+   * (e.g. a duplicated-key or bad-alias complaint from js-yaml), so the
+   * import script can report which files need a manual frontmatter fix. */
+  message?: string;
 };
 
 export type ImportStep = CreateStep | SkipStep;
 
 const key = (folder: string, title: string) => `${folder}\u0000${title}`;
 
-function readType(markdown: string): unknown {
+function firstLine(message: string): string {
+  return message.split('\n')[0].trim();
+}
+
+/** Reads frontmatter `type`, retrying once through `cleanTemplater` on a
+ * parse throw (mirrors `projectInstrument`'s robust parsing). Distinguishes
+ * "parsed fine, just not an instrument note" from "couldn't parse the
+ * frontmatter at all" (even after Templater cleanup) — the latter is a
+ * distinct, actionable skip reason, not silently folded into
+ * `not-instrument`. */
+function readType(markdown: string): { type: unknown } | { error: string } {
+  // `{}` opts both calls out of gray-matter's content-keyed cache — see
+  // the matching comment in projection.ts's parseFrontmatterRobust for why
+  // that cache would otherwise turn the retry into a silent, wrong
+  // "no type" result instead of a genuine parse-error.
   try {
-    return matter(markdown).data?.type;
+    return { type: matter(markdown, {}).data?.type };
   } catch {
-    // fall through
+    // fall through to the Templater-cleaned retry
   }
   try {
-    return matter(cleanTemplater(markdown)).data?.type;
-  } catch {
-    return undefined;
+    return { type: matter(cleanTemplater(markdown), {}).data?.type };
+  } catch (e) {
+    const error = e instanceof Error && e.message ? firstLine(e.message) : 'frontmatter parse error';
+    return { error };
   }
 }
 
@@ -65,9 +84,20 @@ export function planInstrumentImport(files: ImportFile[], existing: ExistingNote
 
   for (const file of files) {
     const title = file.name.replace(/\.md$/, '');
-    const type = readType(file.markdown);
+    const parsed = readType(file.markdown);
 
-    if (type !== 'instrument') {
+    if ('error' in parsed) {
+      steps.push({
+        action: 'skip',
+        folder: file.folder,
+        title,
+        reason: 'parse-error',
+        message: parsed.error,
+      });
+      continue;
+    }
+
+    if (parsed.type !== 'instrument') {
       steps.push({ action: 'skip', folder: file.folder, title, reason: 'not-instrument' });
       continue;
     }

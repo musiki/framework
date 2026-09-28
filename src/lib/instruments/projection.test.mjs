@@ -200,7 +200,7 @@ test('cleanTemplater: markdown without a frontmatter block is returned unchanged
   assert.equal(cleanTemplater(md, '2026-09-28'), md);
 });
 
-test('projectInstrument: interface_profile with missing keys defaults them to 0', () => {
+test('projectInstrument: interface_profile with missing keys defaults them to 0 (as long as something is scored)', () => {
   const body = note(`---
 type: instrument
 title: T
@@ -209,8 +209,68 @@ interface_profile:
 ---
 body`);
   const result = projectInstrument(body);
+  assert.ok(result.profile);
   assert.equal(result.profile.affordance, 0.5);
   assert.equal(result.profile.expressivity, 0);
+});
+
+test('projectInstrument: profile is null when every dimension is 0 or missing (unscored)', () => {
+  const allZero = note(`---
+type: instrument
+title: T
+interface_profile:
+  affordance: 0
+  liveness: 0
+  playability: 0
+  learnability: 0
+  situatedness: 0
+  mediality: 0
+  mapping: 0
+  sensorimotor_scheme: 0
+  ergonomics: 0
+  expressivity: 0
+---
+body`);
+  assert.equal(projectInstrument(allZero).profile, null);
+
+  const emptyStrings = note(`---
+type: instrument
+title: T
+interface_profile:
+  affordance: ""
+  liveness: ""
+---
+body`);
+  assert.equal(projectInstrument(emptyStrings).profile, null);
+});
+
+test('projectInstrument: bounds single strings to 2000 chars (truncated, not dropped)', () => {
+  const longFamily = 'x'.repeat(2500);
+  const body = note(`---
+type: instrument
+title: T
+family: "${longFamily}"
+---
+body`);
+  const result = projectInstrument(body);
+  assert.equal(result.family.length, 2000);
+  assert.equal(result.family, 'x'.repeat(2000));
+});
+
+test('projectInstrument: bounds arrays to 50 items, each truncated to 200 chars', () => {
+  const items = Array.from({ length: 60 }, (_, i) => `"connection-${i}-${'y'.repeat(250)}"`);
+  const body = note(`---
+type: instrument
+title: T
+connect: [${items.join(', ')}]
+---
+body`);
+  const result = projectInstrument(body);
+  assert.equal(result.connect.length, 50);
+  for (const c of result.connect) {
+    assert.ok(c.length <= 200);
+  }
+  assert.equal(result.connect[0], `connection-0-${'y'.repeat(250)}`.slice(0, 200));
 });
 
 // --- Real vault sweep --------------------------------------------------
@@ -232,6 +292,7 @@ test(
   () => {
     let total = 0;
     let validVector = 0;
+    let scoredProfile = 0;
     for (const { dir, fictional } of REAL_DIRS) {
       for (const name of fs.readdirSync(dir)) {
         if (!name.endsWith('.md')) continue;
@@ -245,9 +306,12 @@ test(
           );
         }, `projectInstrument threw on ${dir}/${name}`);
         if (result && result.moaie.vector) validVector += 1;
+        if (result && result.profile) scoredProfile += 1;
       }
     }
-    console.log(`[vault sweep] ${total} notes scanned, ${validVector} with a valid 5-number MOAIE vector`);
+    console.log(
+      `[vault sweep] ${total} notes scanned, ${validVector} with a valid 5-number MOAIE vector, ${scoredProfile} with a non-null (scored) interface profile`,
+    );
     assert.ok(total > 0, 'expected to find real vault files');
   },
 );

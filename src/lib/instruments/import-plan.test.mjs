@@ -69,6 +69,43 @@ test('planInstrumentImport: Templater expression in frontmatter does not break t
   assert.equal(steps[0].action, 'create');
 });
 
+test('planInstrumentImport: duplicate-key frontmatter is a distinct parse-error skip, not not-instrument', () => {
+  // Mirrors the real vault file case instruments/Dadamachines.md: a
+  // duplicated YAML mapping key makes js-yaml throw even after Templater
+  // cleanup (there's no Templater tag to clean here).
+  const files = [
+    {
+      folder: 'Instruments',
+      name: 'Dadamachines.md',
+      markdown: `---\ntype: instrument\nimg: https://example.org/a.png\nimg: https://example.org/b.png\n---\nbody`,
+    },
+  ];
+  const steps = planInstrumentImport(files, []);
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].action, 'skip');
+  assert.equal(steps[0].reason, 'parse-error');
+  assert.ok(typeof steps[0].message === 'string' && steps[0].message.length > 0);
+});
+
+test('planInstrumentImport: an unquoted accented alias-like value is a distinct parse-error skip', () => {
+  // Mirrors the real vault file
+  // case instruments fictional/"potentiomètre d'espace.md": an unquoted
+  // body-adjacent value starting with an accented word after `*` reads to
+  // js-yaml as an (undefined) alias reference.
+  const files = [
+    {
+      folder: 'Instruments (fictional)',
+      name: "potentiomètre d'espace.md",
+      markdown: `---\ntype: instrument\ndef: *potentiomètre d'espace* is an electroacoustic device\n---\nbody`,
+    },
+  ];
+  const steps = planInstrumentImport(files, []);
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].action, 'skip');
+  assert.equal(steps[0].reason, 'parse-error');
+  assert.ok(typeof steps[0].message === 'string' && steps[0].message.length > 0);
+});
+
 test('planInstrumentImport: processes a mixed batch preserving input order', () => {
   const files = [
     instrumentFile('Instruments', 'A.md'),
