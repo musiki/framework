@@ -54,39 +54,6 @@ function joinPath(prefix: string, slug: string): string {
   return `${prefix}/${slug}`;
 }
 
-function itemPosition(item: Item): number | null {
-  return (item.kind === 'folder' ? item.folder.position : item.note.position) ?? null;
-}
-
-function itemLabel(item: Item): string {
-  return item.kind === 'folder' ? item.folder.name : item.note.title;
-}
-
-function itemId(item: Item): string {
-  return item.kind === 'folder' ? item.folder.id : item.note.id;
-}
-
-/**
- * Merge already-position-sorted folders and notes of one sibling group into
- * a single deterministic "tree order": position ascending first (null
- * positions last), then label (`name`/`title`) via
- * `localeCompare(..., 'en', { sensitivity: 'base' })`, then folders before
- * notes, then `id` as a final tie-break.
- */
-function mergeByPosition(items: Item[]): Item[] {
-  return [...items].sort((a, b) => {
-    const pa = itemPosition(a);
-    const pb = itemPosition(b);
-    if (pa !== null && pb !== null) return pa - pb;
-    if (pa !== null && pb === null) return -1;
-    if (pa === null && pb !== null) return 1;
-    const cmp = itemLabel(a).localeCompare(itemLabel(b), 'en', { sensitivity: 'base' });
-    if (cmp !== 0) return cmp;
-    if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
-    return itemId(a).localeCompare(itemId(b));
-  });
-}
-
 export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolder[]; notes: SiteNote[] }): SiteModel {
   const { siteFolderId, folders, notes } = input;
 
@@ -106,14 +73,17 @@ export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolde
     notesByFolder.set(n.folderId, list);
   }
 
+  // Same display order the studio tree renders: folders before notes at
+  // every level, exactly like buildTree in ../writing/tree/model.ts. Home
+  // is simply the first item in this order at the Site root — a folder
+  // whenever one exists there, otherwise the first note.
   function orderedChildren(parentId: string): Item[] {
     const childFolders = displayOrderFolders(foldersByParent.get(parentId) ?? [], 'en');
     const childNotes = displayOrderNotes(notesByFolder.get(parentId) ?? [], 'en');
-    const items: Item[] = [
+    return [
       ...childFolders.map((folder): Item => ({ kind: 'folder', folder })),
       ...childNotes.map((note): Item => ({ kind: 'note', note })),
     ];
-    return mergeByPosition(items);
   }
 
   const used = new Map<string, number>();
@@ -157,6 +127,9 @@ export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolde
       const folderSlug = slugify(folder.name);
       const folderPathPrefix = isHomeItem ? '/' : joinPath(pathPrefix, folderSlug);
 
+      // Landing lookup only ever considers this folder's own direct notes
+      // (never descends into subfolders), even when a subfolder happens to
+      // contain its own `slug: index` note.
       const directNotes = displayOrderNotes(notesByFolder.get(folder.id) ?? [], 'en');
       const indexNote = directNotes.find((n) => n.fm.slug === 'index');
       const landing = indexNote ?? directNotes[0];
@@ -165,32 +138,39 @@ export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolde
         (it) => !(landing && it.kind === 'note' && it.note.id === landing.id),
       );
 
-      if (!landing) {
-        // No direct publishable note: folder contributes no page of its
-        // own. Recurse so non-empty subfolders still surface, nested under
-        // this folder's path prefix. A folder with neither a direct note
-        // nor any publishable descendant is fully omitted (nothing pushed).
-        const sub = buildFromItems(childItems, folderPathPrefix, false);
-        pages.push(...sub.pages);
-        menu.push(...sub.menu);
-        return;
+      // Page generation is unaffected by menu visibility: the landing page
+      // (if any) and every descendant page are always produced.
+      const pagesHere: SitePage[] = [];
+      let landingPath: string | undefined;
+      if (landing) {
+        landingPath = dedupe(isHomeItem ? '/' : folderPathPrefix);
+        pagesHere.push(pageFrom(landing, landingPath));
       }
-
-      const landingRawPath = isHomeItem ? '/' : folderPathPrefix;
-      const landingPath = dedupe(landingRawPath);
-      pages.push(pageFrom(landing, landingPath));
 
       const sub = buildFromItems(childItems, folderPathPrefix, false);
-      pages.push(...sub.pages);
+      pagesHere.push(...sub.pages);
+      pages.push(...pagesHere);
 
-      if (landing.fm.menu !== false) {
-        menu.push({ title: folder.name, path: landingPath, children: sub.menu });
-      } else {
-        // Landing explicitly hidden from the menu: don't add a folder group
-        // entry, but its submenu entries (if any) still surface at the top
-        // of this level rather than being silently dropped.
-        menu.push(...sub.menu);
+      // Menu groups never flatten: a folder with any menu-visible
+      // descendant (its own visible landing, or anything nested — direct
+      // notes, or subfolder groups, recursively) always gets exactly one
+      // group entry `{ title: folderName, path, children }` here, never
+      // its children promoted to this level in its place.
+      //
+      // `path` is the landing's path when the landing exists and is
+      // menu-visible; otherwise it falls back to the path of the first
+      // menu-visible descendant in depth-first display order — which is
+      // exactly `sub.menu[0].path`, since `sub.menu` was itself built by
+      // this same rule, in display order, one level down.
+      const landingVisible = !!landing && landing.fm.menu !== false;
+      const childrenVisible = sub.menu.length > 0;
+      if (landingVisible || childrenVisible) {
+        const groupPath = landingVisible ? (landingPath as string) : sub.menu[0].path;
+        menu.push({ title: folder.name, path: groupPath, children: sub.menu });
       }
+      // A folder with no visible landing and no visible descendants
+      // contributes nothing to the menu. If it also has no publishable
+      // pages at all, `pagesHere` was empty too, so it's fully omitted.
     });
 
     return { pages, menu };
