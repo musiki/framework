@@ -48,7 +48,7 @@ const str = (v: unknown): string | null => {
   return s || null;
 };
 
-/** Loads a forum's bibliography settings in the (single) mm commons space. */
+/** Loads a forum's bibliography settings. Assumes mm has a single commons space; ORDER BY keeps the pick deterministic if that ever changes. */
 export async function loadForumBibliography(q: QueryFn, slug: string): Promise<ForumBibliographySettings | null> {
   if (!SLUG_RE.test(slug)) return null;
   const { data, error } = await q(
@@ -56,6 +56,7 @@ export async function loadForumBibliography(q: QueryFn, slug: string): Promise<F
        FROM "ForumBoard" b
        JOIN "Space" s ON s."id" = b."spaceId" AND s."tenantId" = 'mm' AND s."kind" = 'commons'
       WHERE b."slug" = $1 AND b."isArchived" IS NOT TRUE
+      ORDER BY s."createdAt" ASC, b."id" ASC
       LIMIT 1`,
     [slug],
   );
