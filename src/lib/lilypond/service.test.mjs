@@ -1,7 +1,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { renderLilypond, resetLilypondServiceState } from './service.mjs';
+import { renderLilypond, resetLilypondServiceState, isTransportFailure } from './service.mjs';
 import { isLocalRenderAllowed } from './local-render.mjs';
 import { fakeService, makeTmpDir, ok, HASH } from './test/fake-service.mjs';
 
@@ -107,12 +107,81 @@ describe('graceful degradation', () => {
   });
 });
 
+describe('per-score failures vs outages', () => {
+  beforeEach(() => resetLilypondServiceState());
+
+  test('transport classification', () => {
+    assert.equal(isTransportFailure({ code: 'unavailable' }), true);
+    assert.equal(isTransportFailure({ code: 'timeout' }), true);
+    assert.equal(isTransportFailure({ code: 'timeout', status: 504 }), false);
+    assert.equal(isTransportFailure({ code: 'render_failed', status: 422 }), false);
+  });
+
+  test('a 504 (score hit LilyPond\'s timeout) does not open the circuit for other scores', async () => {
+    const srv = await fakeService(({ source }) => (source.includes('loop')
+      ? { status: 504, body: { error: 'lilypond timed out after 20000 ms' } }
+      : ok()));
+    const warn = captureWarnings();
+    try {
+      const env = { LILYPOND_SOCKET: srv.socketPath };
+      const bad = await renderLilypond('{ loop }', { env });
+      assert.deepEqual([bad.ok, bad.reason, bad.perScore], [false, 'timeout', true]);
+      const good = await renderLilypond('{ c4 }', { env });
+      assert.equal(good.ok, true);
+      assert.equal(warn.lines.length, 0, 'no outage warning');
+    } finally {
+      warn.restore();
+      await srv.close();
+    }
+  });
+
+  test('negative cache: render_failed and 504 are not retried for 10 minutes', async () => {
+    const srv = await fakeService(({ source }) => (source.includes('loop')
+      ? { status: 504, body: { error: 'lilypond timed out' } }
+      : { status: 422, body: { error: 'lilypond failed', stderr: 'x' } }));
+    try {
+      let t = 5_000_000;
+      const opts = { env: { LILYPOND_SOCKET: srv.socketPath }, now: () => t };
+      await renderLilypond('{ broken }', opts);
+      await renderLilypond('{ loop }', opts);
+      const calls = srv.seen.length;
+      const again = await renderLilypond('{ broken }', opts);
+      const again2 = await renderLilypond('{ loop }', opts);
+      assert.equal(srv.seen.length, calls);
+      assert.deepEqual([again.reason, again.negativeCached, again.stderr], ['render_failed', true, 'x']);
+      assert.equal(again2.reason, 'timeout');
+      t += 11 * 60_000;
+      await renderLilypond('{ broken }', opts);
+      assert.equal(srv.seen.length, calls + 1, 'retried after the TTL');
+    } finally {
+      await srv.close();
+    }
+  });
+
+  test('engine-side queue is capped: excess renders fail fast as busy', async () => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const client = { render: async () => { await gate; return { hash: 'h', svg: '<svg/>', cached: false }; } };
+    const env = { LILYPOND_CLIENT_CONCURRENCY: '1', LILYPOND_CLIENT_QUEUE_MAX: '1' };
+    const first = renderLilypond('{ q1 }', { client, env });
+    const second = renderLilypond('{ q2 }', { client, env });
+    const third = await renderLilypond('{ q3 }', { client, env });
+    assert.deepEqual([third.ok, third.reason], [false, 'busy']);
+    release();
+    assert.equal((await first).ok, true);
+    assert.equal((await second).ok, true);
+  });
+});
+
 describe('local binary gate', () => {
-  test('LILYPOND_ALLOW_LOCAL=1 only outside production; default off', () => {
-    assert.equal(isLocalRenderAllowed({}), false);
-    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: '1', NODE_ENV: 'development' }), true);
-    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: '1', NODE_ENV: 'production' }), false);
-    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: 'true' }), false);
+  test('LILYPOND_ALLOW_LOCAL=1 only for macOS dev; default off', () => {
+    const mac = { platform: 'darwin', sandboxDirExists: false };
+    assert.equal(isLocalRenderAllowed({}, mac), false);
+    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: '1', NODE_ENV: 'development' }, mac), true);
+    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: '1', NODE_ENV: 'production' }, mac), false);
+    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: 'true' }, mac), false);
+    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: '1' }, { platform: 'linux', sandboxDirExists: false }), false);
+    assert.equal(isLocalRenderAllowed({ LILYPOND_ALLOW_LOCAL: '1' }, { platform: 'darwin', sandboxDirExists: true }), false);
   });
 
   test('without the gate an unreachable service never falls back to a local binary', async () => {

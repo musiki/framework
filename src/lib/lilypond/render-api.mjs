@@ -4,7 +4,8 @@
 //   stores public/lily/<md5(source)>.{svg,midi,pdf}; JSON shape unchanged:
 //   { success, hash, url, midiUrl, pdfUrl, generated, cached?, remote? }.
 // GET ?url=<.../<hash>.<svg|midi|mid|pdf>> → serves the local asset (SVG
-//   sanitized), or proxies a legacy rendered object from an allowed R2 host.
+//   sanitized), or proxies a legacy rendered object — only from a configured
+//   R2 host AND only when the engine's own render cache already knows the URL.
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { renderLilypond } from './service.mjs';
@@ -18,11 +19,13 @@ import {
 } from './store.mjs';
 import { isAllowedRemoteLilyUrl } from '../lilypond-remote.mjs';
 import {
-  getRenderedLilypondUrl,
+  getCachedRenderedLilypondUrl,
+  isKnownRenderedLilypondUrl,
   stripRenderedLilypondComment,
 } from '../lilypond-rendered-comment.mjs';
 
 export const MAX_SOURCE_BYTES = 64 * 1024;
+export const MAX_REMOTE_ASSET_BYTES = 2 * 1024 * 1024;
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const SVG_HEADERS = {
   'Content-Type': 'image/svg+xml; charset=utf-8',
@@ -39,8 +42,15 @@ function mimeFor(kind) {
   return 'audio/midi';
 }
 
-function assetResponse(kind, body) {
-  const base = kind === 'svg' ? SVG_HEADERS : { 'Content-Type': mimeFor(kind), 'X-Content-Type-Options': 'nosniff' };
+function assetResponse(kind, body, hash) {
+  const base = kind === 'svg'
+    ? SVG_HEADERS
+    : {
+      'Content-Type': mimeFor(kind),
+      'Content-Security-Policy': 'sandbox',
+      'Content-Disposition': `attachment; filename="${hash}.${kind === 'pdf' ? 'pdf' : 'midi'}"`,
+      'X-Content-Type-Options': 'nosniff',
+    };
   return {
     status: 200,
     headers: { ...base, 'Cache-Control': 'public, max-age=31536000, immutable' },
@@ -58,6 +68,33 @@ function remoteCandidates(assetUrl, kind) {
   return [replaceExtension(assetUrl, 'midi'), replaceExtension(assetUrl, 'mid')];
 }
 
+/** Response body as a Buffer, or null when it exceeds `max` bytes (declared or streamed). */
+export async function readCapped(res, max) {
+  const declared = Number(res.headers?.get?.('content-length'));
+  if (Number.isFinite(declared) && declared > max) {
+    try { await res.body?.cancel(); } catch { /* ignore */ }
+    return null;
+  }
+  if (!res.body || typeof res.body.getReader !== 'function') {
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > max ? null : buf;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      try { await reader.cancel(); } catch { /* ignore */ }
+      return null;
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
 async function fetchFirst(candidates, { fetchImpl, env }) {
   const seen = new Set();
   for (const candidate of candidates) {
@@ -68,7 +105,9 @@ async function fetchFirst(candidates, { fetchImpl, env }) {
     try {
       const res = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
       if (!res.ok) continue;
-      return Buffer.from(await res.arrayBuffer());
+      const body = await readCapped(res, MAX_REMOTE_ASSET_BYTES);
+      if (body) return body;
+      console.warn(`[api/lily/render] proxy download refused (> ${MAX_REMOTE_ASSET_BYTES} bytes): ${url}`);
     } catch (error) {
       console.warn('[api/lily/render] proxy download failed:', error?.message || error);
     }
@@ -131,12 +170,31 @@ function failureResponse(outcome, hash, prefix = '') {
   if (outcome.reason === 'too_large' || outcome.reason === 'bad_request') {
     return jsonResponse(outcome.reason === 'too_large' ? 413 : 400, { success: false, hash, error: `${prefix}${outcome.message || 'invalid LilyPond source'}` });
   }
+  if (outcome.reason === 'timeout' && outcome.perScore) {
+    return jsonResponse(422, { success: false, hash, error: `${prefix}LilyPond took too long to render this score` });
+  }
+  if (outcome.reason === 'busy') {
+    return { ...jsonResponse(503, { success: false, hash, error: `${prefix}LilyPond renderer is busy, try again` }), headers: { ...JSON_HEADERS, 'Retry-After': '5' } };
+  }
   return jsonResponse(502, { success: false, hash, error: `${prefix}LilyPond render service is unavailable` });
+}
+
+function rateLimited(deps, hash) {
+  if (typeof deps.limiter !== 'function') return null;
+  const verdict = deps.limiter(deps.clientKey || 'anonymous');
+  if (verdict?.ok !== false) return null;
+  const retryAfter = String(Math.max(1, Math.ceil((verdict.retryAfterMs || 60_000) / 1000)));
+  return {
+    status: 429,
+    headers: { ...JSON_HEADERS, 'Retry-After': retryAfter },
+    body: JSON.stringify({ success: false, hash, error: 'Too many LilyPond renders, try again later' }),
+  };
 }
 
 /**
  * @param {unknown} payload parsed JSON body (null when it was not JSON)
- * @param {{dir?: string, render?: typeof renderLilypond, fetchImpl?: typeof fetch, env?: Record<string, string|undefined>}} [deps]
+ * @param {{dir?: string, render?: typeof renderLilypond, fetchImpl?: typeof fetch, env?: Record<string, string|undefined>, limiter?: (key: string) => {ok: boolean, retryAfterMs?: number}, clientKey?: string}} [deps]
+ *   `limiter` is consulted only before a real service render (cache hits are free).
  * @returns {Promise<{status: number, headers: Record<string,string>, body: string}>}
  */
 export async function handleLilyRenderPost(payload, deps = {}) {
@@ -149,8 +207,11 @@ export async function handleLilyRenderPost(payload, deps = {}) {
 
   const rawSource = String(payload.code || '');
   const format = String(payload.format || 'svg').toLowerCase();
-  const cachedUrl = getRenderedLilypondUrl(rawSource);
+  // `% rendered:` comments in a request body are untrusted: they are stripped
+  // and ignored. Only the engine's own render cache is consulted (read-only,
+  // nothing from a POST is ever persisted to it).
   const source = stripRenderedLilypondComment(rawSource);
+  const cachedUrl = source.trim() ? getCachedRenderedLilypondUrl(source) : '';
   if (!source.trim()) return jsonResponse(400, { error: 'Missing LilyPond source code' });
   if (Buffer.byteLength(source, 'utf8') > MAX_SOURCE_BYTES) return jsonResponse(413, { error: 'LilyPond source too large' });
 
@@ -160,6 +221,8 @@ export async function handleLilyRenderPost(payload, deps = {}) {
 
   if (format === 'pdf') {
     if (!fs.existsSync(paths.pdfPath)) {
+      const limited = rateLimited(deps, hash);
+      if (limited) return limited;
       const outcome = await render(source, { formats: ['pdf'], env });
       if (!outcome.ok) return failureResponse(outcome, hash, 'PDF generation failed: ');
       await writeLilyAssets(hash, { pdf: outcome.result.pdf }, { dir });
@@ -190,6 +253,8 @@ export async function handleLilyRenderPost(payload, deps = {}) {
     return jsonResponse(200, { success: true, hash, url: urls.svgUrl, midiUrl: urls.midiUrl, pdfUrl: urls.pdfUrl, generated: false });
   }
 
+  const limited = rateLimited(deps, hash);
+  if (limited) return limited;
   const outcome = await render(source, { formats: ['svg', 'midi'], env });
   if (!outcome.ok) return failureResponse(outcome, hash);
 
@@ -230,24 +295,32 @@ export async function handleLilyAssetGet(requestedUrl, deps = {}) {
         : null;
   if (!kind) return text(400, 'Unsupported LilyPond asset type');
 
+  // Local asset (/lily/<hash>.<ext>): served from the store, never downloaded.
+  // Remote object: stored under md5(<url as .svg>) — its own namespace, so a
+  // remote name can never shadow a local md5(source) render — and downloaded
+  // only from a configured host when the render cache already knows the URL.
+  // The player's proxy candidates (/api/lily/render?url=<remote svg|midi>)
+  // keep working because every lookup derives the same key from the URL.
+  const isRemote = /^https?:\/\//i.test(remoteUrl);
   const hashMatch = remoteUrl.match(/\/([a-f0-9]{32,64})\.(svg|midi|mid|pdf)(?=([?#].*)?$)/i);
-  const hash = hashMatch ? hashMatch[1].toLowerCase() : md5Hex(remoteUrl);
+  if (!isRemote && !hashMatch) return text(404, 'Unknown LilyPond asset');
+  const hash = isRemote ? md5Hex(replaceExtension(remoteUrl, 'svg')) : hashMatch[1].toLowerCase();
 
   await fsp.mkdir(dir, { recursive: true });
   const serveLocal = async () => {
     const paths = lilyAssetPaths(hash, dir);
     if (kind === 'svg') {
       const svg = await readSanitizedSvg(paths.svgPath);
-      return svg ? assetResponse('svg', svg) : null;
+      return svg ? assetResponse('svg', svg, hash) : null;
     }
     const filePath = kind === 'pdf' ? (fs.existsSync(paths.pdfPath) ? paths.pdfPath : '') : resolveMidiPath(hash, dir);
-    return filePath ? assetResponse(kind, await fsp.readFile(filePath)) : null;
+    return filePath ? assetResponse(kind, await fsp.readFile(filePath), hash) : null;
   };
 
   const local = await serveLocal();
   if (local) return local;
 
-  if (/^https:\/\//i.test(remoteUrl) && isAllowedRemoteLilyUrl(remoteUrl, env)) {
+  if (isRemote && isAllowedRemoteLilyUrl(remoteUrl, env) && isKnownRenderedLilypondUrl(remoteUrl)) {
     await downloadRemoteLilyFiles(remoteUrl, hash, { dir, fetchImpl, env });
     const proxied = await serveLocal();
     if (proxied) return proxied;
@@ -255,5 +328,5 @@ export async function handleLilyAssetGet(requestedUrl, deps = {}) {
 
   if (kind === 'midi') return text(404, 'Remote LilyPond MIDI unavailable');
   if (kind === 'pdf') return text(404, 'Remote LilyPond PDF unavailable');
-  return text(502, 'Could not proxy file');
+  return text(404, 'LilyPond asset unavailable');
 }

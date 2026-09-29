@@ -26,7 +26,7 @@ async function resolveRemoteMidiUrl(svgUrl, fetchImpl) {
   for (const candidate of candidates) {
     if (candidate === normalizedSvgUrl) continue;
     try {
-      const response = await fetchImpl(candidate, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+      const response = await fetchImpl(candidate, { method: 'HEAD', redirect: 'error', signal: AbortSignal.timeout(5000) });
       if (response.ok) return candidate;
     } catch {
       // Keep trying fallbacks.

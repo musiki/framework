@@ -10,46 +10,72 @@
 // `render_failed`. Any other failure (service unreachable, timeout, busy,
 // protocol) degrades gracefully: callers keep the code block, and the outage is
 // logged once until the service answers again.
+import crypto from 'node:crypto';
 import * as defaultClient from '../vendor/lilypond-client/index.mjs';
 import { buildLocalLilypondSourceAttempts } from '../lilypond-support.mjs';
 import { isLocalRenderAllowed, renderWithLocalBinary } from './local-render.mjs';
 
-const OUTAGE_CODES = new Set(['unavailable', 'timeout']);
 const CIRCUIT_OPEN_MS = 30_000;
 const BUSY_RETRIES = 2;
 const BUSY_DELAY_MS = 750;
+const NEGATIVE_TTL_MS = 10 * 60_000;
+const NEGATIVE_MAX = 1000;
 
 const state = {
   warned: false,
   circuitOpenUntil: 0,
   active: 0,
   queue: [],
+  negative: new Map(), // key -> { until, outcome }
 };
 
-function maxConcurrency(env) {
-  const value = Number(env?.LILYPOND_CLIENT_CONCURRENCY);
-  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : 2;
+function envInt(env, name, fallback, min = 1) {
+  const value = Number(env?.[name]);
+  return Number.isFinite(value) && value >= min ? Math.floor(value) : fallback;
+}
+
+/**
+ * Transport failure = the service itself is unreachable (connection error, or
+ * the client-side deadline expired without any HTTP answer). Only these open
+ * the engine-wide circuit. A 504/422 carries an HTTP status: that is one
+ * score failing (e.g. an endless loop hitting LilyPond's timeout), not an outage.
+ */
+export function isTransportFailure(error) {
+  if (error?.code === 'unavailable') return true;
+  return error?.code === 'timeout' && error?.status === undefined;
+}
+
+class QueueFullError extends Error {
+  constructor() {
+    super('engine-side LilyPond queue is full');
+    this.code = 'busy';
+    this.queueFull = true;
+  }
 }
 
 async function withSlot(env, task) {
-  const limit = maxConcurrency(env);
+  const limit = envInt(env, 'LILYPOND_CLIENT_CONCURRENCY', 2);
+  const queueMax = envInt(env, 'LILYPOND_CLIENT_QUEUE_MAX', 16, 0);
   if (state.active >= limit) {
+    if (state.queue.length >= queueMax) throw new QueueFullError();
+    // The releasing task hands its slot over directly (active stays counted).
     await new Promise((resolve) => state.queue.push(resolve));
+  } else {
+    state.active += 1;
   }
-  state.active += 1;
   try {
     return await task();
   } finally {
-    state.active -= 1;
     const next = state.queue.shift();
     if (next) next();
+    else state.active -= 1;
   }
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function noteOutage(error, now) {
-  if (OUTAGE_CODES.has(error?.code)) state.circuitOpenUntil = now + CIRCUIT_OPEN_MS;
+  if (isTransportFailure(error)) state.circuitOpenUntil = now + CIRCUIT_OPEN_MS;
   if (state.warned) return;
   state.warned = true;
   console.warn(
@@ -65,10 +91,32 @@ function noteRecovery() {
   state.circuitOpenUntil = 0;
 }
 
-/** Test hook: forget outage/circuit state. */
+function negativeKey(source, formats) {
+  return crypto.createHash('md5').update(`${[...formats].sort().join(',')}\n${source}`).digest('hex');
+}
+
+function rememberFailure(key, outcome, now) {
+  state.negative.delete(key);
+  state.negative.set(key, { until: now + NEGATIVE_TTL_MS, outcome });
+  while (state.negative.size > NEGATIVE_MAX) state.negative.delete(state.negative.keys().next().value);
+  return outcome;
+}
+
+function recalledFailure(key, now) {
+  const hit = state.negative.get(key);
+  if (!hit) return null;
+  if (hit.until <= now) {
+    state.negative.delete(key);
+    return null;
+  }
+  return { ...hit.outcome, negativeCached: true };
+}
+
+/** Test hook: forget outage/circuit/negative-cache state. */
 export function resetLilypondServiceState() {
   state.warned = false;
   state.circuitOpenUntil = 0;
+  state.negative.clear();
 }
 
 function hasRequestedOutput(result, formats) {
@@ -119,6 +167,10 @@ export async function renderLilypond(source, options = {}) {
   const raw = String(source ?? '');
   if (!raw.trim()) return { ok: false, reason: 'empty', message: 'empty LilyPond source' };
 
+  const failureKey = negativeKey(raw, formats);
+  const recalled = recalledFailure(failureKey, now());
+  if (recalled) return recalled;
+
   if (!localAllowed && state.circuitOpenUntil > now()) {
     return { ok: false, reason: 'unavailable', message: 'LilyPond render service unavailable (retrying later)' };
   }
@@ -133,11 +185,20 @@ export async function renderLilypond(source, options = {}) {
       result = await withSlot(env, () => renderOnce(attemptSource, { client, formats, timeoutMs, env, localAllowed }));
     } catch (error) {
       if (error?.code === 'render_failed') {
+        noteRecovery();
         lastFailure = error;
         continue;
       }
       if (error?.code === 'bad_request' || error?.code === 'too_large') {
         return { ok: false, reason: error.code, message: error.message };
+      }
+      if (error instanceof QueueFullError) {
+        return { ok: false, reason: 'busy', message: error.message };
+      }
+      if (error?.code === 'timeout' && error?.status !== undefined) {
+        // This score ran into the service's LilyPond timeout: per-score failure.
+        noteRecovery();
+        return rememberFailure(failureKey, { ok: false, reason: 'timeout', perScore: true, message: error.message }, now());
       }
       noteOutage(error, now());
       return { ok: false, reason: error?.code || 'unavailable', message: error?.message || String(error) };
@@ -150,10 +211,10 @@ export async function renderLilypond(source, options = {}) {
     lastFailure = { message: `LilyPond produced no ${formats.join('/')} output` };
   }
 
-  return {
+  return rememberFailure(failureKey, {
     ok: false,
     reason: 'render_failed',
     message: lastFailure?.message || 'LilyPond render failed',
     stderr: typeof lastFailure?.stderr === 'string' ? lastFailure.stderr : undefined,
-  };
+  }, now());
 }

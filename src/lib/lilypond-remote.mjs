@@ -53,9 +53,10 @@ function hostsFromEnv(env) {
 
 /**
  * True when `url` is a legacy rendered-score object the server may fetch or
- * HEAD: https on an R2 public host (*.r2.dev, R2_PUBLIC_URL, R2_PUBLIC_DEV_URL)
- * or a host listed in LILYPOND_REMOTE_ASSET_HOSTS. Everything else is refused
- * so /api/lily/render?url= cannot be used to fetch arbitrary URLs.
+ * HEAD: https on a configured host only — R2_PUBLIC_URL, R2_PUBLIC_DEV_URL or
+ * LILYPOND_REMOTE_ASSET_HOSTS (comma-separated). Not "any *.r2.dev": anyone can
+ * create an r2.dev bucket. Everything else is refused so
+ * /api/lily/render?url= cannot be used to fetch arbitrary URLs.
  */
 export function isAllowedRemoteLilyUrl(url, env = process.env) {
   let parsed;
@@ -66,7 +67,5 @@ export function isAllowedRemoteLilyUrl(url, env = process.env) {
   }
   if (parsed.protocol !== 'https:') return false;
   if (parsed.username || parsed.password) return false;
-  const host = parsed.hostname.toLowerCase();
-  if (host.endsWith('.r2.dev')) return true;
-  return hostsFromEnv(env).has(host);
+  return hostsFromEnv(env).has(parsed.hostname.toLowerCase());
 }

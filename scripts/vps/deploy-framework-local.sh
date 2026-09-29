@@ -73,6 +73,9 @@ if [[ -n "$EVAL_SYNC_COMMAND" ]]; then
 fi
 
 printf '::deploy-phase::build::Building Astro\n'
+# LilyPond SVGs rendered before the sandbox may contain script; astro build
+# copies public/lily into dist/client, so sanitize them first (idempotent).
+node scripts/sanitize-lily-assets.mjs
 rm -rf dist_tmp
 eval "$ASTRO_BUILD_COMMAND"
 

@@ -121,6 +121,22 @@ export function getCachedRenderedLilypondUrl(source) {
   return normalizeText(cached?.url);
 }
 
+/**
+ * True when `url` (or the same object with another score extension) is a
+ * value of the trusted render cache, i.e. the engine itself resolved it for
+ * some content before. Read-only.
+ */
+export function isKnownRenderedLilypondUrl(url) {
+  const normalized = normalizeText(url);
+  if (!normalized) return false;
+  const asSvg = normalized.replace(/\.(svg|midi|mid|pdf)(?=([?#].*)?$)/i, '.svg');
+  ensureLilyRenderCacheLoaded();
+  for (const value of lilyRenderCache.values()) {
+    if (value.url === normalized || value.url === asSvg) return true;
+  }
+  return false;
+}
+
 export function cacheRenderedLilypondUrl(source, url) {
   const normalizedUrl = normalizeText(url);
   const hash = computeRenderedLilypondHash(source);

@@ -22,11 +22,14 @@ import fs from 'node:fs';
 const LILY_LANGS = new Set(['lily', 'lilypond', 'ly']);
 
 /**
- * @param {{render?: typeof renderLilypond, dir?: string, timeoutMs?: number}} [options]
+ * @param {{render?: typeof renderLilypond, dir?: string, timeoutMs?: number, maxRenders?: number}} [options]
+ *   maxRenders: distinct scores sent to the service per document (default 20);
+ *   further uncached blocks stay as code. Already-rendered blocks are not counted.
  */
 export default function remarkLily(options = {}) {
   const render = options.render ?? renderLilypond;
   const timeoutMs = options.timeoutMs ?? 30_000;
+  const maxRenders = options.maxRenders ?? 20;
 
   return async (tree, file) => {
     const lilyDir = options.dir ?? getLilyDir();
@@ -41,9 +44,20 @@ export default function remarkLily(options = {}) {
     if (entries.length === 0) return;
 
     const memo = new Map();
+    let renders = 0;
+    let capped = false;
     const renderToFiles = async (code, hash) => {
       const { svgPath } = lilyAssetPaths(hash, lilyDir);
       if (fs.existsSync(svgPath)) return true;
+      if (renders >= maxRenders) {
+        if (!capped) {
+          capped = true;
+          const src = file?.path || file?.history?.[0] || 'unknown';
+          console.warn(`[remark-lily] ${src}: more than ${maxRenders} LilyPond scores to render; the rest stay as code`);
+        }
+        return false;
+      }
+      renders += 1;
       const outcome = await render(code, { formats: ['svg', 'midi'], timeoutMs });
       if (!outcome.ok) {
         if (outcome.reason === 'render_failed') {

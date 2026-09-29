@@ -1,19 +1,27 @@
-// LOCAL DEVELOPMENT ONLY: render with a LilyPond binary on this machine when
-// the sandboxed service is unreachable. Enabled only with LILYPOND_ALLOW_LOCAL=1
-// and never when NODE_ENV=production (so neither `astro build` nor the
-// production server can fall back to running LilyPond in the engine process).
+// LOCAL DEVELOPMENT ONLY (macOS): render with a LilyPond binary on this machine
+// when the sandboxed service is unreachable. Enabled only with
+// LILYPOND_ALLOW_LOCAL=1, and refused when NODE_ENV=production, on Linux (the
+// VPS and CI runners) or when /run/lilypond exists (a host meant to use the
+// sandbox) — so neither `astro build` nor a server can fall back to running
+// LilyPond in the engine process.
 // LilyPond scores can execute Scheme (`#(system ...)`); only use this with
 // scores you trust, on your own machine.
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { LilypondError } from '../vendor/lilypond-client/index.mjs';
 import { getLilypondBinary } from '../lilypond-support.mjs';
 
-export function isLocalRenderAllowed(env = process.env) {
-  return env?.LILYPOND_ALLOW_LOCAL === '1' && env?.NODE_ENV !== 'production';
+export function isLocalRenderAllowed(env = process.env, host = {}) {
+  const platform = host.platform ?? process.platform;
+  const sandboxDirExists = host.sandboxDirExists ?? existsSync('/run/lilypond');
+  return env?.LILYPOND_ALLOW_LOCAL === '1'
+    && env?.NODE_ENV !== 'production'
+    && platform !== 'linux'
+    && !sandboxDirExists;
 }
 
 function run(binary, args, timeoutMs) {

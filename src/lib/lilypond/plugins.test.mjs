@@ -10,6 +10,7 @@ import { fakeService, makeTmpDir, ok, EVIL_SVG } from './test/fake-service.mjs';
 const workDir = makeTmpDir('lily-plugins-');
 process.chdir(workDir);
 process.env.LILYPOND_PUBLIC_DIR = path.join(workDir, 'public', 'lily');
+process.env.R2_PUBLIC_URL = 'https://pub-abc.r2.dev'; // the configured legacy R2 host
 
 const { unified } = await import('unified');
 const { default: remarkParse } = await import('remark-parse');
@@ -23,8 +24,8 @@ const { resetLilypondServiceState } = await import('./service.mjs');
 const lilyDir = process.env.LILYPOND_PUBLIC_DIR;
 const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
 
-async function toHtml(markdown, { remote = false, fetchImpl } = {}) {
-  let processor = unified().use(remarkParse).use(remarkLily);
+async function toHtml(markdown, { remote = false, fetchImpl, lily = {} } = {}) {
+  let processor = unified().use(remarkParse).use(remarkLily, lily);
   if (remote) processor = processor.use(remarkRemoteLilypond, { enabled: true, fetch: fetchImpl });
   processor = processor.use(remarkRehype, { allowDangerousHtml: true }).use(rehypeRaw).use(rehypeStringify);
   return String(await processor.process(markdown));
@@ -86,6 +87,21 @@ describe('remark-lily', () => {
     assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /<script|onload=|javascript:/i);
   });
 
+  test('at most maxRenders scores per document go to the service; the rest stay as code', async () => {
+    const before = srv.seen.length;
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const md = [1, 2, 3, 4].map((n) => `\`\`\`lilypond\n{ cap${n} }\n\`\`\``).join('\n\n');
+      const html = await toHtml(md, { lily: { maxRenders: 2 } });
+      assert.equal(srv.seen.length - before, 2);
+      assert.equal((html.match(/lilypond-block/g) || []).length, 2);
+      assert.equal((html.match(/<pre><code class="language-lilypond">/g) || []).length, 2);
+    } finally {
+      console.warn = warn;
+    }
+  });
+
   test('render failure keeps the code block', async () => {
     reply = () => ({ status: 422, body: { error: 'lilypond failed', stderr: 'boom' } });
     const original = console.error;
@@ -121,16 +137,18 @@ describe('degradation without the service', () => {
     const url = 'https://pub-abc.r2.dev/scores/0123456789abcdef0123456789abcdef.svg';
     const block = withRenderedLilypondComment('{ g4 a4 }', url);
     const heads = [];
-    const fetchImpl = async (u, init) => { heads.push([u, init?.method]); return { ok: u.endsWith('.midi') }; };
+    const fetchImpl = async (u, init) => { heads.push([u, init?.method, init?.redirect]); return { ok: u.endsWith('.midi') }; };
     const html = await toHtml(`\`\`\`lilypond\n${block}\n\`\`\`\n`, { remote: true, fetchImpl });
     assert.match(html, new RegExp(`<figure class="lilypond-block lily-score" data-lily-url="${url.replace(/[.]/g, '\\.')}" data-midi-url="https://pub-abc\\.r2\\.dev/scores/0123456789abcdef0123456789abcdef\\.midi"><img src="${url.replace(/[.]/g, '\\.')}"`));
-    assert.deepEqual(heads[0], [url.replace('.svg', '.midi'), 'HEAD']);
+    assert.deepEqual(heads[0], [url.replace('.svg', '.midi'), 'HEAD', 'error']);
 
-    heads.length = 0;
-    const evil = withRenderedLilypondComment('{ b4 }', 'https://evil.example/x/0123456789abcdef0123456789abcdef.svg');
-    const html2 = await toHtml(`\`\`\`lilypond\n${evil}\n\`\`\`\n`, { remote: true, fetchImpl });
-    assert.equal(heads.length, 0, 'no server-side request to a non-allowed host');
-    assert.match(html2, /<img src="https:\/\/evil\.example/); // as before: an <img>, not inlined, no midi
-    assert.doesNotMatch(html2, /data-midi-url/);
+    for (const [n, other] of ['https://evil.example/x', 'https://attacker.r2.dev/scores'].entries()) {
+      heads.length = 0;
+      const evil = withRenderedLilypondComment(`{ b${n} }`, `${other}/0123456789abcdef0123456789abcdef.svg`);
+      const html2 = await toHtml(`\`\`\`lilypond\n${evil}\n\`\`\`\n`, { remote: true, fetchImpl });
+      assert.equal(heads.length, 0, `no server-side request to ${other}`);
+      assert.match(html2, /<img src="https:\/\//); // as before: an <img>, not inlined, no midi
+      assert.doesNotMatch(html2, /data-midi-url/);
+    }
   });
 });

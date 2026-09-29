@@ -136,23 +136,52 @@ export async function readSanitizedSvg(filePath) {
   return markup;
 }
 
-/** Sanitize every *.svg under `dir` in place (one-off for files rendered before the sandbox). */
-export async function sanitizeLilyDir(dir = getLilyDir()) {
+/**
+ * Sanitize every *.svg under `dir` in place (files rendered before the sandbox).
+ * Idempotent and fast on re-runs: a manifest remembers mtime+size
+ * of files already checked, so only new or changed files are parsed.
+ * The manifest lives outside the served dir (<cwd>/.cache/lily-sanitized.json).
+ */
+export async function sanitizeLilyDir(dir = getLilyDir(), { manifestPath = path.join(process.cwd(), '.cache', 'lily-sanitized.json') } = {}) {
+  const stats = { checked: 0, skipped: 0, rewritten: 0, removed: 0 };
   let entries = [];
   try {
     entries = await fsp.readdir(dir);
   } catch {
-    return { checked: 0, rewritten: 0, removed: 0 };
+    return stats;
   }
-  const stats = { checked: 0, rewritten: 0, removed: 0 };
+  let allManifests = {};
+  try {
+    allManifests = JSON.parse(await fsp.readFile(manifestPath, 'utf8')) || {};
+  } catch {
+    allManifests = {};
+  }
+  const dirKey = path.resolve(dir);
+  const manifest = allManifests[dirKey] || {};
+  const next = {};
   for (const name of entries) {
     if (!name.endsWith('.svg')) continue;
     const filePath = path.join(dir, name);
+    let stat = await fsp.stat(filePath);
+    const key = `${stat.mtimeMs}:${stat.size}`;
+    if (manifest[name] === key) {
+      next[name] = key;
+      stats.skipped += 1;
+      continue;
+    }
     const before = await fsp.readFile(filePath, 'utf8');
     const after = await readSanitizedSvg(filePath);
     stats.checked += 1;
-    if (!after) stats.removed += 1;
-    else if (after !== before) stats.rewritten += 1;
+    if (!after) {
+      stats.removed += 1;
+      continue;
+    }
+    if (after !== before) stats.rewritten += 1;
+    stat = await fsp.stat(filePath);
+    next[name] = `${stat.mtimeMs}:${stat.size}`;
   }
+  allManifests[dirKey] = next;
+  await fsp.mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeAtomic(manifestPath, JSON.stringify(allManifests));
   return stats;
 }

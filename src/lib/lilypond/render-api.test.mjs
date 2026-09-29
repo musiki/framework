@@ -11,7 +11,8 @@ process.chdir(workDir); // isolates .cache/lilypond-renders.json
 
 const { handleLilyRenderPost, handleLilyAssetGet, MAX_SOURCE_BYTES } = await import('./render-api.mjs');
 const { resetLilypondServiceState } = await import('./service.mjs');
-const { withRenderedLilypondComment } = await import('../lilypond-rendered-comment.mjs');
+const { withRenderedLilypondComment, cacheRenderedLilypondUrl, getCachedRenderedLilypondUrl } = await import('../lilypond-rendered-comment.mjs');
+const R2_ENV = { R2_PUBLIC_URL: 'https://pub-abc.r2.dev' };
 
 const md5 = (s) => crypto.createHash('md5').update(s).digest('hex');
 const parse = (res) => ({ status: res.status, json: JSON.parse(res.body) });
@@ -86,9 +87,23 @@ describe('POST /api/lily/render', () => {
     assert.deepEqual(srv.seen.at(-1).formats, ['pdf']);
   });
 
-  test('legacy `% rendered:` R2 URL is reused (and copied locally) without rendering', async () => {
+  test('`% rendered:` comments in the POST body are ignored and never persisted', async () => {
     const r2 = 'https://pub-abc.r2.dev/scores/0123456789abcdef0123456789abcdef.svg';
     const code = withRenderedLilypondComment('{ a4 }', r2);
+    const fetched = [];
+    const fetchImpl = async (u) => { fetched.push(u); return new Response(LILY_SVG); };
+    const before = srv.seen.length;
+    const { status, json } = parse(await handleLilyRenderPost({ code }, { dir, env: { ...env, ...R2_ENV }, fetchImpl }));
+    assert.equal(status, 200);
+    assert.equal(json.generated, true, 'rendered by the service, not taken from the comment');
+    assert.equal(srv.seen.length, before + 1);
+    assert.equal(fetched.length, 0);
+    assert.equal(getCachedRenderedLilypondUrl('{ a4 }'), '', 'nothing persisted to the render cache');
+  });
+
+  test('a trusted render-cache entry (legacy R2) is reused and copied locally without rendering', async () => {
+    const r2 = 'https://pub-abc.r2.dev/scores/fedcba9876543210fedcba9876543210.svg';
+    cacheRenderedLilypondUrl('{ h4 }', r2); // what page rendering / publish do for trusted content
     const fetched = [];
     const fetchImpl = async (u) => {
       fetched.push(u);
@@ -96,14 +111,37 @@ describe('POST /api/lily/render', () => {
       return new Response('nope', { status: 404 });
     };
     const before = srv.seen.length;
-    const { status, json } = parse(await handleLilyRenderPost({ code }, { dir, env, fetchImpl }));
+    const { status, json } = parse(await handleLilyRenderPost({ code: '{ h4 }' }, { dir, env: { ...env, ...R2_ENV }, fetchImpl }));
     assert.equal(status, 200);
     assert.equal(srv.seen.length, before, 'service not called');
     assert.equal(json.cached, true);
-    const hash = md5('{ a4 }');
+    const hash = md5('{ h4 }');
     assert.equal(json.url, `/lily/${hash}.svg`);
     assert.doesNotMatch(fs.readFileSync(path.join(dir, `${hash}.svg`), 'utf8'), /<script|onload=/i);
     assert.ok(fetched.every((u) => u.startsWith('https://pub-abc.r2.dev/')));
+  });
+
+  test('rate limit: 429 before a service render; cached scores are not limited', async () => {
+    const code = '{ rl4 }';
+    let asked = 0;
+    const deny = () => { asked += 1; return { ok: false, retryAfterMs: 30_000 }; };
+    const res = await handleLilyRenderPost({ code }, { dir, env, limiter: deny, clientKey: 'ip:1.2.3.4' });
+    assert.equal(res.status, 429);
+    assert.equal(res.headers['Retry-After'], '30');
+    await handleLilyRenderPost({ code }, { dir, env });
+    const cachedRes = await handleLilyRenderPost({ code }, { dir, env, limiter: deny });
+    assert.equal(cachedRes.status, 200);
+    assert.equal(asked, 1);
+  });
+
+  test('score hitting the service timeout (504) → 422; busy → 503', async () => {
+    reply = ({ source }) => (source.includes('loop')
+      ? { status: 504, body: { error: 'lilypond timed out after 20000 ms' } }
+      : { status: 503, body: { error: 'busy' } });
+    const t = parse(await handleLilyRenderPost({ code: '{ loop }' }, { dir, env }));
+    assert.equal(t.status, 422);
+    const b = await handleLilyRenderPost({ code: '{ crowded }' }, { dir, env });
+    assert.equal(b.status, 503);
   });
 });
 
@@ -136,24 +174,57 @@ describe('GET /api/lily/render?url=', () => {
   test('never fetches URLs outside the allowed R2 hosts (no SSRF / cache poisoning)', async () => {
     const fetched = [];
     const fetchImpl = async (u) => { fetched.push(u); return new Response(LILY_SVG); };
+    cacheRenderedLilypondUrl('{ trusted-attacker }', 'https://attacker.r2.dev/0123456789abcdef0123456789abcdef.svg');
     for (const url of [
       'https://evil.example/0123456789abcdef0123456789abcdef.svg',
+      'https://attacker.r2.dev/0123456789abcdef0123456789abcdef.svg',
+      'https://pub-abc.r2.dev/scores/not-in-cache-0123456789abcdef0123456789abcdef.svg',
       'http://pub-abc.r2.dev/0123456789abcdef0123456789abcdef.svg',
       'http://127.0.0.1:4321/0123456789abcdef0123456789abcdef.svg',
       'https://user:pw@pub-abc.r2.dev/0123456789abcdef0123456789abcdef.svg',
     ]) {
-      const res = await handleLilyAssetGet(url, { dir, fetchImpl, env: {} });
-      assert.equal(res.status, 502, url);
+      const res = await handleLilyAssetGet(url, { dir, fetchImpl, env: R2_ENV });
+      assert.equal(res.status, 404, url);
     }
     assert.equal(fetched.length, 0);
     assert.equal(fs.readdirSync(dir).length, 0);
   });
 
-  test('proxies an allowed R2 object (R2_PUBLIC_URL host) and sanitizes it', async () => {
-    const fetchImpl = async (u) => (u.endsWith('.svg') ? new Response(EVIL_SVG) : new Response('', { status: 404 }));
+  test('proxies a configured-host R2 object known to the render cache, sanitized, under md5(url)', async () => {
     const url = 'https://scores.example.org/scores/0123456789abcdef0123456789abcdef.svg';
-    const res = await handleLilyAssetGet(url, { dir, fetchImpl, env: { R2_PUBLIC_URL: 'https://scores.example.org' } });
+    cacheRenderedLilypondUrl('{ known }', url);
+    const fetchImpl = async (u) => (u.endsWith('.svg') ? new Response(EVIL_SVG) : u.endsWith('.midi') ? new Response('MThd') : new Response('', { status: 404 }));
+    const env = { R2_PUBLIC_URL: 'https://scores.example.org' };
+    const res = await handleLilyAssetGet(url, { dir, fetchImpl, env });
     assert.equal(res.status, 200);
     assert.doesNotMatch(String(res.body), /<script|onload=/i);
+    assert.ok(fs.existsSync(path.join(dir, `${md5(url)}.svg`)), 'stored in the md5(url) namespace');
+    assert.ok(!fs.existsSync(path.join(dir, '0123456789abcdef0123456789abcdef.svg')), 'remote name never shadows a local render');
+    const midi = await handleLilyAssetGet(url.replace('.svg', '.midi'), { dir, fetchImpl, env });
+    assert.equal(midi.status, 200, 'player MIDI proxy candidate keeps working');
+    assert.equal(midi.headers['Content-Security-Policy'], 'sandbox');
+    assert.match(midi.headers['Content-Disposition'], /^attachment; filename="[a-f0-9]{32}\.midi"$/);
+  });
+
+  test('remote downloads are capped at 2 MB (declared and streamed)', async () => {
+    const url = 'https://scores.example.org/scores/11111111111111111111111111111111.svg';
+    cacheRenderedLilypondUrl('{ big }', url);
+    const env = { R2_PUBLIC_URL: 'https://scores.example.org' };
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const declared = async () => new Response('x', { headers: { 'content-length': String(3 * 1024 * 1024) } });
+      assert.equal((await handleLilyAssetGet(url, { dir, fetchImpl: declared, env })).status, 404);
+      const streamed = async () => new Response(new ReadableStream({
+        start(controller) {
+          for (let i = 0; i < 3; i += 1) controller.enqueue(new Uint8Array(1024 * 1024));
+          controller.close();
+        },
+      }));
+      assert.equal((await handleLilyAssetGet(url, { dir, fetchImpl: streamed, env })).status, 404);
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(fs.readdirSync(dir).length, 0);
   });
 });
