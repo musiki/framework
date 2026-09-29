@@ -115,6 +115,25 @@ test('readJsonObject rejects malformed and non-object bodies', async () => {
   assert.deepEqual(await readJsonObject(req('{"a":1}')), { a: 1 });
 });
 
+test('readJsonObject caps bodies at 256 KB (413), by header and by actual size', async () => {
+  const big = JSON.stringify({ body: 'x'.repeat(256 * 1024) });
+  // declared too large
+  const declared = new Request(ORIGIN, { method: 'POST', body: '{}', headers: { 'content-length': String(300 * 1024) } });
+  await assert.rejects(readJsonObject(declared), (e) => e.status === 413);
+  // no/lying header, streamed body over the cap
+  const stream = new ReadableStream({
+    start(c) { for (let i = 0; i < 5; i += 1) c.enqueue(new TextEncoder().encode('x'.repeat(64 * 1024))); c.close(); },
+  });
+  const streamed = new Request(ORIGIN, { method: 'POST', body: stream, duplex: 'half' });
+  await assert.rejects(readJsonObject(streamed), (e) => e.status === 413);
+  await assert.rejects(readJsonObject(new Request(ORIGIN, { method: 'POST', body: big })), (e) => e.status === 413);
+  // just under the cap is fine
+  const ok = JSON.stringify({ body: 'y'.repeat(200 * 1024) });
+  assert.equal((await readJsonObject(new Request(ORIGIN, { method: 'POST', body: ok }))).body.length, 200 * 1024);
+  // multibyte UTF-8 decodes intact
+  assert.deepEqual(await readJsonObject(new Request(ORIGIN, { method: 'POST', body: '{"a":"Bokmål ø"}' })), { a: 'Bokmål ø' });
+});
+
 test('concept PATCH rejects unknown extra keys', () => {
   assert.throws(() => conceptPatchKind({ definition: 'x', spaceId: 'y' }), (e) => e.status === 400 && /unexpected field: spaceId/.test(e.message));
   assert.throws(() => conceptPatchKind({ status: 'assimilated', lang: 'nb' }), (e) => e.status === 400);

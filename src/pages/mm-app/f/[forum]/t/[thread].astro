@@ -41,13 +41,14 @@ if (state === 'notFound') Astro.response.status = 404;
 if (state === 'unavailable') Astro.response.status = 503;
 
 const formerMember = t(lang, 'mm.common.formerMember');
+const memberLabel = t(lang, 'mm.common.member');
 const thread = view?.thread;
 const posts = view?.posts ?? [];
 const perms = view?.viewer ?? { role: null, canPost: false, canVote: false, canModerate: false, canAdopt: false };
 const signedIn = Boolean(Astro.locals.session?.user);
 const concept = thread?.concept ?? null;
 const canAdoptHere = Boolean(concept && perms.canAdopt && !thread?.isLocked);
-const authorById = new Map(posts.map((p) => [p.id, displayName(p.author, formerMember)]));
+const authorById = new Map(posts.map((p) => [p.id, displayName(p.author, formerMember, memberLabel)]));
 const langName = (l: string | null) =>
   l === 'nb' ? t(lang, 'mm.common.langNb') : l === 'nn' ? t(lang, 'mm.common.langNn') : t(lang, 'mm.common.langEn');
 const strings = clientStrings(lang, {
@@ -77,7 +78,7 @@ const VOTES = [
       )}
       <h1>{thread.title}</h1>
       <p class="mm-meta">
-        <span>{t(lang, 'mm.forum.startedBy', { name: displayName(thread.createdBy, formerMember) })}</span>
+        <span>{t(lang, 'mm.forum.startedBy', { name: displayName(thread.createdBy, formerMember, memberLabel) })}</span>
         <span>{formatDate(thread.createdAt, lang)}</span>
       </p>
       {concept && (
@@ -92,7 +93,7 @@ const VOTES = [
       {posts.length ? (
         <ol class="mm-posts">
           {posts.map((p) => {
-            const author = displayName(p.author, formerMember);
+            const author = displayName(p.author, formerMember, memberLabel);
             const visible = p.status === 'published' || (p.status === 'hidden' && perms.canModerate);
             const hasFoot = p.status === 'published'
               ? perms.canVote || p.votes.total > 0 || perms.canPost || canAdoptHere || perms.canModerate

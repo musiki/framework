@@ -59,11 +59,44 @@ export function requireUuidParam(value: unknown, what = 'id'): string {
   return value;
 }
 
-/** Reads a JSON object body; a malformed or non-object body is a 400. */
+/** Largest JSON body an mm API accepts (post bodies are capped far lower). */
+export const MAX_JSON_BODY_BYTES = 256 * 1024;
+
+/** Reads the body as text, refusing (413) past `max` bytes whatever Content-Length says. */
+async function readCappedText(request: Request, max: number): Promise<string> {
+  const declared = request.headers.get('content-length');
+  if (declared !== null && /^\d+$/.test(declared.trim()) && Number(declared) > max) {
+    throw new MmApiError(413, 'request body too large');
+  }
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel().catch(() => undefined);
+      throw new MmApiError(413, 'request body too large');
+    }
+    chunks.push(value);
+  }
+  const buf = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    buf.set(c, offset);
+    offset += c.byteLength;
+  }
+  return new TextDecoder().decode(buf);
+}
+
+/** Reads a JSON object body; over 256 KB is a 413, a malformed or non-object body a 400. */
 export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+  const text = await readCappedText(request, MAX_JSON_BODY_BYTES);
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(text);
   } catch {
     throw new MmApiError(400, 'invalid JSON body');
   }

@@ -19,6 +19,7 @@
 import { can, type MmAction, type MmPolicyCtx } from './policy.ts';
 import { COMMONS_ROLES, isUuid, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
+import { publicName } from './view.ts';
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<{ data: any[] | null; error: any }>;
 
@@ -114,8 +115,9 @@ export function shouldDestroyClient(err: unknown, rollbackFailed: boolean): bool
 
 const isUniqueViolation = (err: unknown) => (err as { code?: unknown })?.code === '23505';
 
+/** Public user reference: display name only (never one that looks like an e-mail), or deleted. */
 const userRef = (id: string | null | undefined, name: string | null | undefined): UserRef =>
-  id ? { name: name ?? null, deleted: false } : { name: null, deleted: true };
+  id ? { name: publicName(name), deleted: false } : { name: null, deleted: true };
 
 // ---------------------------------------------------------------------------
 // Validation

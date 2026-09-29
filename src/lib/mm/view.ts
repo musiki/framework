@@ -83,10 +83,28 @@ export const threadPath = (forumSlug: string, threadId: string) =>
   `${forumPath(forumSlug)}/t/${encodeURIComponent(threadId)}`;
 export const conceptPath = (slug: string) => `/c/${encodeURIComponent(slug)}`;
 
-/** Display name for a user reference; deleted or nameless users get the given fallback. */
-export function displayName(ref: { name: string | null; deleted: boolean } | null | undefined, fallback: string): string {
-  const name = ref && !ref.deleted ? String(ref.name ?? '').trim() : '';
-  return name || fallback;
+/**
+ * A user's name as it may appear publicly: trimmed, and never anything that
+ * looks like an e-mail address (musiki fills User.name from sign-in profiles;
+ * a name containing '@' is treated as no name). Null when unusable.
+ */
+export function publicName(name: unknown): string | null {
+  const s = typeof name === 'string' ? name.trim() : '';
+  return s && !s.includes('@') ? s : null;
+}
+
+/**
+ * Display name for a user reference: deleted users get `deletedLabel`
+ * ("Former member"); living users without a usable name get `unnamedLabel`
+ * ("Member", defaults to `deletedLabel` for older callers).
+ */
+export function displayName(
+  ref: { name: string | null; deleted: boolean } | null | undefined,
+  deletedLabel: string,
+  unnamedLabel: string = deletedLabel,
+): string {
+  if (!ref || ref.deleted) return deletedLabel;
+  return publicName(ref.name) ?? unnamedLabel;
 }
 
 /**

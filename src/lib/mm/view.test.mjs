@@ -70,6 +70,20 @@ test('display names', () => {
   assert.equal(displayName({ name: null, deleted: true }, 'Former member'), 'Former member');
   assert.equal(displayName({ name: '  ', deleted: false }, 'Someone'), 'Someone');
   assert.equal(displayName(null, 'Someone'), 'Someone');
+  // living user without a usable name: "Member", not "Former member"
+  assert.equal(displayName({ name: null, deleted: false }, 'Former member', 'Member'), 'Member');
+  assert.equal(displayName({ name: ' ', deleted: false }, 'Former member', 'Member'), 'Member');
+  assert.equal(displayName({ name: 'ada@uni.no', deleted: false }, 'Former member', 'Member'), 'Member');
+  assert.equal(displayName({ name: 'Ada', deleted: true }, 'Former member', 'Member'), 'Former member');
+});
+
+test('publicName never returns something that looks like an e-mail', async () => {
+  const { publicName } = await import('./view.ts');
+  assert.equal(publicName(' Ada Lovelace '), 'Ada Lovelace');
+  assert.equal(publicName('ada@uni.no'), null);
+  assert.equal(publicName('Ada (ada@uni.no)'), null);
+  assert.equal(publicName(''), null);
+  assert.equal(publicName(null), null);
 });
 
 test('page error state: domain 404 → notFound, anything else → unavailable', async () => {

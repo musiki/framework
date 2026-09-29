@@ -650,3 +650,18 @@ test('listPosts passes the post identity to the renderer (render cache key)', as
   });
   assert.deepEqual(seen, [{ id: POST, updatedAt: 't2', forumId: FORUM }]);
 });
+
+test('user names that look like e-mails never leave the core', async () => {
+  const { q } = fakeQuery([
+    memberRoute,
+    [/FROM "ForumThread" t\s+LEFT JOIN "User" u/, () => [{
+      id: THREAD, title: 'T', isPinned: false, isLocked: false, createdAt: 't', updatedAt: 't', archivedAt: null,
+      createdByUserId: U.member, createdByName: 'me@uni.no', forumId: FORUM, forumSlug: 'technics', forumTitle: 'Technics', forumArchived: false,
+    }]],
+    [/FROM "ForumPost" p\s+LEFT JOIN "User" u/, () => [{ id: POST, authorUserId: U.member, authorName: 'Me <me@uni.no>', body: 'x', status: 'published', createdAt: 't', updatedAt: 't' }]],
+  ]);
+  const view = await listPosts(q, { spaceId: SPACE, threadId: THREAD });
+  assert.deepEqual(view.thread.createdBy, { name: null, deleted: false });
+  assert.deepEqual(view.posts[0].author, { name: null, deleted: false });
+  noEmail({ t: view.thread.createdBy, p: view.posts[0].author });
+});

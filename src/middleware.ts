@@ -90,7 +90,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
   context.locals.session = session;
 
-  if (shouldSyncEvalCatalogForPath(context.url.pathname)) {
+  // Eval catalog sync is musiki course machinery: only full-route tenants.
+  if (tenantDecision.tenant.routes === "all" && shouldSyncEvalCatalogForPath(context.url.pathname)) {
     // Skip eval sync in development if the tunnel is unstable
     if (import.meta.env.DEV) {
       console.log(`[DEV] Skipping eval sync for ${context.url.pathname} to save tunnel bandwidth`);

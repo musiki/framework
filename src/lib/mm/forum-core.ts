@@ -19,6 +19,7 @@ import { can, type MmAction } from './policy.ts';
 import { getCommonsRole, withTransaction, type QueryFn } from './concepts-core.ts';
 import { isUuid, isValidEmail, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
+import { publicName } from './view.ts';
 
 export type { QueryFn };
 
@@ -91,8 +92,9 @@ async function run(q: QueryFn, text: string, params: unknown[] = []): Promise<an
 
 const isUniqueViolation = (err: unknown) => (err as { code?: unknown })?.code === '23505';
 
+/** Public user reference: display name only (never one that looks like an e-mail), or deleted. */
 const userRef = (id: string | null | undefined, name: string | null | undefined): UserRef =>
-  id ? { name: name ?? null, deleted: false } : { name: null, deleted: true };
+  id ? { name: publicName(name), deleted: false } : { name: null, deleted: true };
 
 function requireUuid(value: unknown, what: string): string {
   if (typeof value !== 'string' || !isUuid(value)) throw new ForumError(404, `${what} not found`);

@@ -50,6 +50,7 @@ const role = viewer?.role ?? null;
 const canPost = can(role, 'post');
 const canPropose = can(role, 'proposeConcept');
 const formerMember = t(lang, 'mm.common.formerMember');
+const memberLabel = t(lang, 'mm.common.member');
 const strings = clientStrings(lang, {
   'cite.label': t(lang, 'mm.thread.citations.label'),
   'cite.searching': t(lang, 'mm.thread.citations.searching'),
@@ -88,7 +89,7 @@ const apiSlug = encodeURIComponent(slug);
                       )}
                     </ul>
                     <p class="mm-meta">
-                      <span>{t(lang, 'mm.forum.startedBy', { name: displayName(th.createdBy, formerMember) })}</span>
+                      <span>{t(lang, 'mm.forum.startedBy', { name: displayName(th.createdBy, formerMember, memberLabel) })}</span>
                       <span>{th.postCount === 1 ? t(lang, 'mm.forum.postsOne') : t(lang, 'mm.forum.posts', { n: th.postCount })}</span>
                       <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(th.lastActivityAt, lang) })}</span>
                     </p>

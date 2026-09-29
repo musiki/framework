@@ -81,6 +81,7 @@ export const mmEn = {
     unavailableTitle: 'Temporarily unavailable',
     unavailableLead: 'The Concept Machine cannot load this page right now. Please try again in a moment.',
     formerMember: 'Former member',
+    member: 'Member',
     cancel: 'Cancel',
     saving: 'Saving…',
     signInToTakePart: 'Sign in to take part',

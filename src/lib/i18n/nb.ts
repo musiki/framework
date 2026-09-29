@@ -84,6 +84,7 @@ export const nb: Pick<Dict, 'mm'> = {
       unavailableTitle: 'Midlertidig utilgjengelig',
       unavailableLead: 'Concept Machine kan ikke laste denne siden akkurat nå. Prøv igjen om litt.',
       formerMember: 'Tidligere medlem',
+      member: 'Medlem',
       cancel: 'Avbryt',
       saving: 'Lagrer …',
       signInToTakePart: 'Logg inn for å delta',

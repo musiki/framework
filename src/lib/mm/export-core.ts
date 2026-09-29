@@ -2,10 +2,11 @@
 // `site/_data/concept_machine.json` plus `forum`. Pure, q-injected.
 // Privacy (plan Global Constraints): display names only — no emails, no user
 // ids; credited users that were deleted (creditedUserId NULL) or have no
-// display name are omitted from `authors`.
+// usable display name (empty, or containing '@') are omitted from `authors`.
 
 import type { QueryFn } from './concepts-core.ts';
 import { CONCEPT_STATUSES, RELATION_TYPES } from './concepts-core.ts';
+import { publicName } from './view.ts';
 
 export const EXPORT_STATUSES = {
   neologism: 'Neologism: a new word or sense proposed in the discussion',
@@ -112,8 +113,8 @@ export function buildExport(
 
     const authors: string[] = [];
     for (const v of versions) {
-      if (v.creditedDeleted || !nonEmpty(v.creditedName)) continue;
-      const name = v.creditedName.trim();
+      const name = v.creditedDeleted ? null : publicName(v.creditedName);
+      if (!name) continue;
       if (!authors.includes(name)) authors.push(name);
     }
 

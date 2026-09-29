@@ -54,6 +54,7 @@ if (state === 'unavailable') Astro.response.status = 503;
 
 const role = viewer?.role ?? null;
 const formerMember = t(lang, 'mm.common.formerMember');
+const memberLabel = t(lang, 'mm.common.member');
 const label = concept ? conceptLabel(concept, lang) : { text: '', lang: 'en' as const };
 const pick = concept ? pickDefinition(concept.current, lang) : null;
 const shown = pick?.version ?? null;
@@ -82,7 +83,7 @@ const postLink = (postId: string | null) => (postId && concept?.forum && concept
       <h1 lang={label.lang}>{label.text}</h1>
       <p class="mm-meta">
         <span><span class="mm-badge" title={t(lang, `mm.status.help.${concept.status}` as MessageKey)}>{t(lang, `mm.status.${concept.status}` as MessageKey)}</span></span>
-        <span>{t(lang, 'mm.concept.proposedBy', { name: displayName(concept.createdBy, formerMember) })}</span>
+        <span>{t(lang, 'mm.concept.proposedBy', { name: displayName(concept.createdBy, formerMember, memberLabel) })}</span>
         <span>{formatDate(concept.createdAt, lang)}</span>
       </p>
       <p class="mm-alert" data-mm-flash role="alert" hidden></p>
@@ -94,7 +95,7 @@ const postLink = (postId: string | null) => (postId && concept?.forum && concept
           <>
             <blockquote class="mm-definition" lang={shown.lang}><p class="mm-pre-line">{shown.definition}</p></blockquote>
             <p class="mm-meta">
-              <span>{t(lang, 'mm.concept.credit', { name: displayName(shown.credited, formerMember) })}</span>
+              <span>{t(lang, 'mm.concept.credit', { name: displayName(shown.credited, formerMember, memberLabel) })}</span>
               {shown.fromPostId && (postLink(shown.fromPostId)
                 ? <a href={postLink(shown.fromPostId)!}>{t(lang, 'mm.concept.fromPost')}</a>
                 : <span>{t(lang, 'mm.concept.fromPost')}</span>)}
@@ -176,7 +177,7 @@ const postLink = (postId: string | null) => (postId && concept?.forum && concept
                       <td>
                         {can(role, 'deleteRelation', { isOwnRelation: r.own }) && (
                           <button type="button" class="mm-textbutton" data-mm-action data-method="DELETE" data-endpoint={`/api/mm/relations/${r.id}`} data-then="reload"
-                            title={t(lang, 'mm.concept.relationBy', { name: displayName(r.createdBy, formerMember) })}>{t(lang, 'mm.concept.removeRelation')}</button>
+                            title={t(lang, 'mm.concept.relationBy', { name: displayName(r.createdBy, formerMember, memberLabel) })}>{t(lang, 'mm.concept.removeRelation')}</button>
                         )}
                       </td>
                     </tr>
@@ -242,8 +243,8 @@ const postLink = (postId: string | null) => (postId && concept?.forum && concept
         <p class="mm-help">{t(lang, 'mm.concept.historyLead')}</p>
         <ol class="mm-history" reversed>
           {concept.history.map((v) => {
-            const credited = displayName(v.credited, formerMember);
-            const editor = displayName(v.editedBy, formerMember);
+            const credited = displayName(v.credited, formerMember, memberLabel);
+            const editor = displayName(v.editedBy, formerMember, memberLabel);
             return (
               <li>
                 <p class="mm-meta">

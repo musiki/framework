@@ -102,3 +102,17 @@ test('loader SQL selects only display names and is scoped to the space', async (
   assert.match(versionSql, /u\.name AS "creditedName"/);
   assert.doesNotMatch(versionSql, /SELECT[^]*"creditedUserId",/);
 });
+
+test('names that look like e-mails are omitted from authors (living users are not "deleted")', () => {
+  const out = buildExport({
+    concepts: [{ id: id(30), slug: 'x', label: 'X', labelNb: null, status: 'neologism', forumSlug: null, forumTitle: null }],
+    versions: [
+      { conceptId: id(30), lang: 'en', definition: 'd', createdAt: '2026-09-01T00:00:00Z', creditedName: 'ana@uni.no', creditedDeleted: false },
+      { conceptId: id(30), lang: 'en', definition: 'd2', createdAt: '2026-09-02T00:00:00Z', creditedName: 'Bo', creditedDeleted: false },
+    ],
+    relations: [],
+  }, new Date('2026-09-29T00:00:00Z'));
+  const c = out.concepts.find((x) => x.id === 'x');
+  assert.deepEqual(c.authors, ['Bo']);
+  assert.ok(!JSON.stringify(out).includes('@'));
+});
