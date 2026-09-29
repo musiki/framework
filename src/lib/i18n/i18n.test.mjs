@@ -40,3 +40,17 @@ test('studio sign-in error messages', () => {
   assert.equal(t('en', 'studio.errors.generic'), 'Sign-in failed. Please try again.');
   assert.notEqual(t('es', 'studio.errors.accessDenied'), t('en', 'studio.errors.accessDenied'));
 });
+
+test('mm: nb is complete for the mm namespace and non-empty', async () => {
+  const { nb } = await import('./nb.ts');
+  const nbKeys = new Map(leaves(nb.mm, 'mm.'));
+  for (const [k] of leaves(en.mm, 'mm.')) assert.ok(nbKeys.get(k)?.trim(), `missing or empty nb: ${k}`);
+  assert.equal(nbKeys.size, leaves(en.mm).length, 'nb has keys that en does not');
+});
+
+test('mm: nb translates mm keys and falls back to en elsewhere', () => {
+  assert.equal(t('en', 'mm.nav.about'), 'About');
+  assert.equal(t('nb', 'mm.nav.about'), 'Om');
+  assert.equal(t('nb', 'roles.supervisor'), 'Supervisor');
+  assert.equal(t('nb', 'mm.nav.account', { name: 'Ada' }), 'Logget inn som Ada');
+});

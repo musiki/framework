@@ -8,6 +8,7 @@ export type AuthRouteDecision =
   | { kind: 'filter-providers' };
 
 const STUDIO_LOGIN = '/studio/login';
+const loginPathFor = (tenant: Tenant) => tenant.loginPath ?? STUDIO_LOGIN;
 
 export function sanitizeAuthErrorCode(raw: string | null | undefined): string {
   const code = String(raw ?? '').replace(/[^A-Za-z]/g, '').slice(0, 64);
@@ -30,9 +31,9 @@ export function decideAuthRoute(
   }
   if (tenant.routes === 'all') return { kind: 'pass' };
   if (action === 'providers') return { kind: 'filter-providers' };
-  if (action === 'signin' && !providerId) return { kind: 'redirect', location: STUDIO_LOGIN };
+  if (action === 'signin' && !providerId) return { kind: 'redirect', location: loginPathFor(tenant) };
   if (action === 'error') {
-    return { kind: 'redirect', location: `${STUDIO_LOGIN}?error=${sanitizeAuthErrorCode(errorCode)}` };
+    return { kind: 'redirect', location: `${loginPathFor(tenant)}?error=${sanitizeAuthErrorCode(errorCode)}` };
   }
   return { kind: 'pass' };
 }

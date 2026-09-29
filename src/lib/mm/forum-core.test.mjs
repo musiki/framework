@@ -1,0 +1,682 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  ForumError,
+  POST_MOVES,
+  cleanMove,
+  cleanSettingsPatch,
+  forumSlug,
+  publicSettings,
+  listForums,
+  getForum,
+  listForumsAdmin,
+  createForum,
+  updateForum,
+  listThreads,
+  createThread,
+  listPosts,
+  createPost,
+  vote,
+  moderatePost,
+} from './forum-core.ts';
+
+const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const SPACE = id(1);
+const FORUM = id(10);
+const THREAD = id(30);
+const POST = id(40);
+const POST2 = id(41);
+const U = { admin: id(100), curator: id(101), member: id(102), guest: id(104), stranger: id(106) };
+const ROLES = { [U.admin]: 'admin', [U.curator]: 'curator', [U.member]: 'member', [U.guest]: 'guest' };
+
+function fakeQuery(routes) {
+  const calls = [];
+  const q = async (text, params = []) => {
+    calls.push({ text, params });
+    for (const [match, handler] of routes) {
+      const hit = typeof match === 'string' ? text.includes(match) : match.test(text);
+      if (hit) {
+        const out = handler(params, text);
+        if (out && !Array.isArray(out) && 'error' in out) return { data: null, error: out.error };
+        return { data: out ?? [], error: null };
+      }
+    }
+    return { data: [], error: null };
+  };
+  const texts = () => calls.map((c) => c.text.trim().split(/\s+/).slice(0, 3).join(' '));
+  return { q, calls, texts };
+}
+
+const memberRoute = ['"SpaceMember"', ([, userId]) => (ROLES[userId] ? [{ role: ROLES[userId] }] : [])];
+const forumRow = (over = {}) => ({
+  id: FORUM, slug: 'technics', title: 'Technics', description: 'd', isArchived: false,
+  settings: { seshatLibraryId: 'lib-1', zoteroCollection: 'https://www.zotero.org/groups/1/c', ownerEmail: 'owner@uni.no' },
+  ...over,
+});
+const forumByIdRoute = (row = forumRow()) => [
+  /FROM "ForumBoard"\s+WHERE id = \$1::uuid AND "spaceId" = \$2::uuid/,
+  ([fid, sid]) => (row && fid === row.id && sid === SPACE ? [row] : []),
+];
+const threadByIdRoute = (row = { id: THREAD, isLocked: false, archivedAt: null, forumArchived: false }) => [
+  /FROM "ForumThread" t LEFT JOIN "ForumBoard" b ON b\.id = t\."boardId"\s+WHERE t\.id = \$1::uuid AND t\."spaceId" = \$2::uuid/,
+  ([tid, sid]) => (row && tid === row.id && sid === SPACE ? [row] : []),
+];
+const postByIdRoute = (rows = { [POST]: { id: POST, threadId: THREAD, status: 'published' } }) => [
+  /SELECT p\.id, p\."threadId", p\.status, t\."archivedAt" AS "threadArchived"/,
+  ([pid, sid]) => (rows[pid] && sid === SPACE ? [rows[pid]] : []),
+];
+
+async function rejectsStatus(promise, status) {
+  await assert.rejects(promise, (err) => err instanceof ForumError && err.status === status);
+}
+
+const noEmail = (value) => assert.ok(!JSON.stringify(value).includes('@'), `leaked an email: ${JSON.stringify(value)}`);
+
+// ---------------------------------------------------------------------------
+// Validation helpers
+// ---------------------------------------------------------------------------
+
+test('cleanMove accepts the CHECK list or null, rejects anything else', () => {
+  assert.deepEqual([...POST_MOVES], ['comment', 'proposes', 'contrasts', 'combines', 'exemplifies', 'problematises', 'synthesises']);
+  for (const m of POST_MOVES) assert.equal(cleanMove(m), m);
+  assert.equal(cleanMove(undefined), null);
+  assert.equal(cleanMove(null), null);
+  assert.equal(cleanMove(''), null);
+  for (const bad of ['Proposes', 'derives', 1, {}]) assert.throws(() => cleanMove(bad), (e) => e.status === 400);
+});
+
+test('forumSlug: explicit slug validated, otherwise slugified title', () => {
+  assert.equal(forumSlug(undefined, 'Technics & Time'), 'technics-time');
+  assert.equal(forumSlug('', 'Pharmakón'), 'pharmakon');
+  assert.equal(forumSlug('my-forum', 'x'), 'my-forum');
+  assert.equal(forumSlug(undefined, '???'), 'forum');
+  assert.ok(forumSlug(undefined, 'a'.repeat(100)).length <= 48);
+  assert.throws(() => forumSlug('Bad Slug', 'x'), (e) => e.status === 400);
+  assert.throws(() => forumSlug('-x', 'x'), (e) => e.status === 400);
+});
+
+test('cleanSettingsPatch: known keys only, validated, null/"" clears', () => {
+  assert.deepEqual(cleanSettingsPatch(undefined), {});
+  assert.deepEqual(
+    cleanSettingsPatch({ seshatLibraryId: ' lib_1:a ', zoteroCollection: 'https://www.zotero.org/groups/1', ownerEmail: ' Owner@Uni.NO ' }),
+    { seshatLibraryId: 'lib_1:a', zoteroCollection: 'https://www.zotero.org/groups/1', ownerEmail: 'owner@uni.no' },
+  );
+  assert.deepEqual(cleanSettingsPatch({ ownerEmail: null, zoteroCollection: '' }), { ownerEmail: null, zoteroCollection: null });
+  assert.deepEqual(cleanSettingsPatch({ zoteroCollection: 'ABCD1234' }), { zoteroCollection: 'ABCD1234' });
+  for (const bad of [
+    { other: 'x' }, { ownerEmail: 'nope' }, { seshatLibraryId: 'has space' }, { zoteroCollection: 'javascript:alert(1)' },
+    { zoteroCollection: 'http://insecure' }, { seshatLibraryId: 5 }, [], 'x',
+  ]) {
+    assert.throws(() => cleanSettingsPatch(bad), (e) => e.status === 400, JSON.stringify(bad));
+  }
+});
+
+test('publicSettings never exposes ownerEmail or the library id', () => {
+  const pub = publicSettings(forumRow().settings);
+  assert.deepEqual(pub, { zoteroCollection: 'https://www.zotero.org/groups/1/c', hasBibliography: true });
+  assert.deepEqual(publicSettings('{"seshatLibraryId":"x"}'), { zoteroCollection: null, hasBibliography: false });
+  assert.deepEqual(publicSettings(null), { zoteroCollection: null, hasBibliography: false });
+  noEmail(pub);
+});
+
+// ---------------------------------------------------------------------------
+// Forums
+// ---------------------------------------------------------------------------
+
+const summaryRow = (over = {}) => ({
+  ...forumRow(), createdAt: '2026-09-01', updatedAt: '2026-09-02', threadCount: 3, conceptCount: 2,
+  lastActivityAt: '2026-09-03', ...over,
+});
+
+test('listForums: space-scoped, active only, public settings only', async () => {
+  const { q, calls } = fakeQuery([['FROM "ForumBoard" b', () => [summaryRow()]]]);
+  const forums = await listForums(q, { spaceId: SPACE });
+  assert.equal(forums.length, 1);
+  assert.equal(forums[0].slug, 'technics');
+  assert.equal(forums[0].threadCount, 3);
+  assert.equal(forums[0].conceptCount, 2);
+  assert.deepEqual(forums[0].settings, { zoteroCollection: 'https://www.zotero.org/groups/1/c', hasBibliography: true });
+  noEmail(forums);
+  assert.match(calls[0].text, /b\."spaceId" = \$1::uuid AND b\."isArchived" = false/);
+  assert.deepEqual(calls[0].params, [SPACE]);
+  assert.deepEqual(await listForums(q, { spaceId: 'nope' }), []);
+});
+
+test('getForum: by slug in the space, null when missing or slug invalid', async () => {
+  const { q, calls } = fakeQuery([['FROM "ForumBoard" b', ([, slug]) => (slug === 'technics' ? [summaryRow()] : [])]]);
+  const f = await getForum(q, { spaceId: SPACE, slug: 'technics' });
+  assert.equal(f.id, FORUM);
+  noEmail(f);
+  assert.match(calls[0].text, /b\."spaceId" = \$1::uuid AND b\.slug = \$2 AND b\."isArchived" = false/);
+  assert.equal(await getForum(q, { spaceId: SPACE, slug: 'other' }), null);
+  assert.equal(await getForum(q, { spaceId: SPACE, slug: "x' OR 1=1" }), null);
+});
+
+test('listForumsAdmin: curator sees full settings incl. ownerEmail; member denied', async () => {
+  const { q } = fakeQuery([memberRoute, ['FROM "ForumBoard"', () => [forumRow(), forumRow({ id: id(11), slug: 'old', isArchived: true })]]]);
+  const rows = await listForumsAdmin(q, { spaceId: SPACE, actorUserId: U.curator });
+  assert.equal(rows[0].settings.ownerEmail, 'owner@uni.no');
+  assert.equal(rows[1].isArchived, true);
+  await rejectsStatus(listForumsAdmin(q, { spaceId: SPACE, actorUserId: U.member }), 403);
+  await rejectsStatus(listForumsAdmin(q, { spaceId: SPACE, actorUserId: null }), 401);
+});
+
+const ownEmailsRoute = (emails = { [U.curator]: ['owner@uni.no'] }) => [
+  'FROM "UserEmail"',
+  ([userId]) => (emails[userId] ?? []).map((email) => ({ email })),
+];
+
+test('createForum: curator creates a space forum (no course), settings stored', async () => {
+  const { q, calls } = fakeQuery([
+    memberRoute,
+    ownEmailsRoute(),
+    ['SELECT id FROM "ForumBoard"', () => []],
+    ['INSERT INTO "ForumBoard"', (p) => [{ id: FORUM, slug: p[1], title: p[2], description: p[3], isArchived: false, settings: JSON.parse(p[5]) }]],
+  ]);
+  const f = await createForum(q, {
+    spaceId: SPACE, actorUserId: U.curator, title: 'Technics and Time', description: ' About ',
+    settings: { seshatLibraryId: 'lib-1', ownerEmail: 'Owner@Uni.no', zoteroCollection: null },
+  });
+  assert.equal(f.slug, 'technics-and-time');
+  assert.equal(f.description, 'About');
+  assert.deepEqual(f.settings, { seshatLibraryId: 'lib-1', ownerEmail: 'owner@uni.no' });
+  const ins = calls.find((c) => c.text.includes('INSERT INTO "ForumBoard"'));
+  assert.ok(!ins.text.includes('"courseId"'));
+  assert.deepEqual(ins.params.slice(0, 5), [SPACE, 'technics-and-time', 'Technics and Time', 'About', U.curator]);
+});
+
+test('createForum: permission, validation, slug conflicts', async () => {
+  const taken = fakeQuery([memberRoute, ['SELECT id FROM "ForumBoard"', () => [{ id: FORUM }]]]);
+  await rejectsStatus(createForum(taken.q, { spaceId: SPACE, actorUserId: U.curator, title: 'Technics' }), 409);
+
+  const race = fakeQuery([
+    memberRoute,
+    ['SELECT id FROM "ForumBoard"', () => []],
+    ['INSERT INTO "ForumBoard"', () => ({ error: Object.assign(new Error('dup'), { code: '23505' }) })],
+  ]);
+  await rejectsStatus(createForum(race.q, { spaceId: SPACE, actorUserId: U.admin, title: 'Technics' }), 409);
+
+  const { q } = fakeQuery([memberRoute]);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.member, title: 'Technics' }), 403);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.stranger, title: 'Technics' }), 403);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: null, title: 'Technics' }), 401);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'ab' }), 400);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Technics', settings: { ownerEmail: 'x' } }), 400);
+});
+
+test('updateForum: partial update, settings merged with jsonb (null clears), space-pinned', async () => {
+  const { q, calls } = fakeQuery([
+    memberRoute,
+    forumByIdRoute(),
+    ['UPDATE "ForumBoard"', () => [forumRow({ title: 'New', settings: { seshatLibraryId: 'lib-2' } })]],
+  ]);
+  const f = await updateForum(q, {
+    spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, title: 'New',
+    settings: { seshatLibraryId: 'lib-2', ownerEmail: null },
+  });
+  assert.equal(f.title, 'New');
+  const up = calls.find((c) => c.text.includes('UPDATE "ForumBoard"'));
+  assert.match(up.text, /title = \$1/);
+  assert.match(up.text, /settings = jsonb_strip_nulls\(COALESCE\(settings, '\{\}'::jsonb\) \|\| \$2::jsonb\)/);
+  assert.match(up.text, /WHERE id = \$3::uuid AND "spaceId" = \$4::uuid/);
+  assert.deepEqual(up.params, ['New', JSON.stringify({ seshatLibraryId: 'lib-2', ownerEmail: null }), FORUM, SPACE]);
+});
+
+test('updateForum: archive flag, nothing to update, other space forum 404, member 403', async () => {
+  const { q, calls } = fakeQuery([memberRoute, forumByIdRoute(), ['UPDATE "ForumBoard"', () => [forumRow({ isArchived: true })]]]);
+  const f = await updateForum(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.admin, isArchived: true });
+  assert.equal(f.isArchived, true);
+  assert.deepEqual(calls.at(-1).params, [true, FORUM, SPACE]);
+  await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.admin }), 400);
+  await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.admin, isArchived: 'yes' }), 400);
+  await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: id(99), actorUserId: U.admin, title: 'New' }), 404);
+  await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: 'not-a-uuid', actorUserId: U.admin, title: 'New' }), 404);
+  await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, title: 'New' }), 403);
+});
+
+test('forum bibliography owner: admins set any; curators only their own email', async () => {
+  const insert = ['INSERT INTO "ForumBoard"', (p) => [{ id: FORUM, slug: p[1], title: p[2], description: p[3], isArchived: false, settings: JSON.parse(p[5]) }]];
+  const base = [memberRoute, ownEmailsRoute({ [U.curator]: ['me@uni.no'] }), ['SELECT id FROM "ForumBoard"', () => []], insert];
+  const { q } = fakeQuery(base);
+  const other = { seshatLibraryId: 'lib-1', ownerEmail: 'someone@else.org' };
+  // admin: anyone's email
+  const a = await createForum(q, { spaceId: SPACE, actorUserId: U.admin, title: 'Admin forum', settings: other });
+  assert.equal(a.settings.ownerEmail, 'someone@else.org');
+  // curator: someone else's email refused, own (any case) accepted
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Curator forum', settings: other }), 403);
+  const c = await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Curator forum', settings: { seshatLibraryId: 'lib-1', ownerEmail: 'Me@Uni.no' } });
+  assert.equal(c.settings.ownerEmail, 'me@uni.no');
+  // curator without owner fields: no email lookup needed
+  await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Plain forum', settings: { zoteroCollection: 'ABCD' } });
+
+  // update: curator cannot point an admin-owned forum at another library, nor take it over with a foreign owner
+  const upd = (row) => fakeQuery([
+    memberRoute, ownEmailsRoute({ [U.curator]: ['me@uni.no'] }), forumByIdRoute(row),
+    ['UPDATE "ForumBoard"', () => [row]],
+  ]).q;
+  const adminOwned = forumRow(); // ownerEmail owner@uni.no (not the curator's)
+  await rejectsStatus(updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-9' } }), 403);
+  await rejectsStatus(updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { ownerEmail: 'x@y.org' } }), 403);
+  // ...but may switch it to their own email, clear the link, or edit other fields
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { ownerEmail: 'me@uni.no', seshatLibraryId: 'lib-9' } });
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { ownerEmail: null } });
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { zoteroCollection: 'ABCD' } });
+  const mine = forumRow({ settings: { seshatLibraryId: 'lib-1', ownerEmail: 'me@uni.no' } });
+  await updateForum(upd(mine), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-2' } });
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.admin, settings: { seshatLibraryId: 'lib-2', ownerEmail: 'any@one.org' } });
+});
+
+// ---------------------------------------------------------------------------
+// Threads
+// ---------------------------------------------------------------------------
+
+test('listThreads: forum of the space, display names only, concept marker, own flag', async () => {
+  const { q, calls } = fakeQuery([
+    forumByIdRoute(),
+    ['FROM "ForumThread" t', () => [
+      { id: THREAD, title: 'Pharmakon', isPinned: true, isLocked: false, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-02T00:00:00Z',
+        createdByUserId: U.member, createdByName: 'Ada', conceptSlug: 'pharmakon', conceptLabel: 'Pharmakon', postCount: 4,
+        lastPostAt: '2026-09-05T00:00:00Z' },
+      { id: id(31), title: 'Open question', isPinned: false, isLocked: true, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-03T00:00:00Z',
+        createdByUserId: U.curator, createdByName: null, conceptSlug: null, conceptLabel: null, postCount: 0, lastPostAt: null },
+    ]],
+  ]);
+  const threads = await listThreads(q, { spaceId: SPACE, forumId: FORUM, viewerUserId: U.member });
+  assert.equal(threads.length, 2);
+  assert.deepEqual(threads[0].createdBy, { name: 'Ada', deleted: false });
+  assert.equal(threads[0].own, true);
+  assert.equal(threads[1].own, false);
+  assert.deepEqual(threads[0].concept, { slug: 'pharmakon', label: 'Pharmakon' });
+  assert.equal(threads[0].lastActivityAt, '2026-09-05T00:00:00Z');
+  assert.equal(threads[1].lastActivityAt, '2026-09-03T00:00:00Z');
+  assert.ok(!JSON.stringify(threads).includes(U.member), 'no user ids');
+  const list = calls.find((c) => c.text.includes('FROM "ForumThread" t'));
+  assert.match(list.text, /t\."spaceId" = \$1::uuid AND t\."boardId" = \$2::uuid AND t\."archivedAt" IS NULL/);
+  await rejectsStatus(listThreads(q, { spaceId: SPACE, forumId: id(99) }), 404);
+});
+
+test('listThreads: archived forum is not found', async () => {
+  const { q } = fakeQuery([forumByIdRoute(forumRow({ isArchived: true }))]);
+  await rejectsStatus(listThreads(q, { spaceId: SPACE, forumId: FORUM }), 404);
+});
+
+test('createThread: member creates thread (spaceId + boardId, no course) and first post with move, in a transaction', async () => {
+  const { q, calls, texts } = fakeQuery([
+    memberRoute,
+    forumByIdRoute(),
+    ['INSERT INTO "ForumThread"', () => [{ id: THREAD }]],
+    ['INSERT INTO "ForumPost"', () => [{ id: POST }]],
+  ]);
+  const out = await createThread(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, title: 'Pharmakon?', body: 'Is it?', move: 'problematises' });
+  assert.deepEqual(out, { threadId: THREAD, postId: POST });
+  const t = texts();
+  assert.ok(t.indexOf('BEGIN') < t.indexOf('INSERT INTO "ForumThread"'));
+  assert.equal(t.at(-1), 'COMMIT');
+  const th = calls.find((c) => c.text.includes('INSERT INTO "ForumThread"'));
+  assert.ok(!th.text.includes('"courseId"') && !th.text.includes('"lessonSlug"'));
+  assert.deepEqual(th.params, [SPACE, FORUM, 'Pharmakon?', U.member]);
+  const po = calls.find((c) => c.text.includes('INSERT INTO "ForumPost"'));
+  assert.deepEqual(po.params, [THREAD, U.member, 'Is it?', 'problematises']);
+});
+
+test('createThread: rollback when the first post fails; guest/anon denied; bad move 400', async () => {
+  const failing = fakeQuery([
+    memberRoute,
+    forumByIdRoute(),
+    ['INSERT INTO "ForumThread"', () => [{ id: THREAD }]],
+    ['INSERT INTO "ForumPost"', () => ({ error: new Error('boom') })],
+  ]);
+  await assert.rejects(createThread(failing.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, title: 'Title', body: 'b' }));
+  assert.equal(failing.texts().at(-1), 'ROLLBACK');
+
+  const { q } = fakeQuery([memberRoute, forumByIdRoute()]);
+  await rejectsStatus(createThread(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.guest, title: 'Title', body: 'b' }), 403);
+  await rejectsStatus(createThread(q, { spaceId: SPACE, forumId: FORUM, actorUserId: null, title: 'Title', body: 'b' }), 401);
+  await rejectsStatus(createThread(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, title: 'Title', body: 'b', move: 'rants' }), 400);
+  await rejectsStatus(createThread(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, title: 'Title', body: '  ' }), 400);
+  await rejectsStatus(createThread(q, { spaceId: SPACE, forumId: id(99), actorUserId: U.member, title: 'Title', body: 'b' }), 404);
+});
+
+// ---------------------------------------------------------------------------
+// listPosts
+// ---------------------------------------------------------------------------
+
+const threadRow = (over = {}) => ({
+  id: THREAD, title: 'Pharmakon', isPinned: false, isLocked: false, createdAt: 't0', updatedAt: 't1', archivedAt: null,
+  createdByUserId: U.member, createdByName: 'Ada', forumId: FORUM, forumSlug: 'technics', forumTitle: 'Technics',
+  conceptSlug: 'pharmakon', conceptLabel: 'Pharmakon', ...over,
+});
+const postRows = () => [
+  { id: POST, parentPostId: null, authorUserId: U.member, body: 'First $x$', status: 'published', move: 'proposes',
+    adoptedAsVersionId: id(60), adoptedLang: 'en', adoptedConceptSlug: 'pharmakon', createdAt: 't2', updatedAt: 't2', authorName: 'Ada' },
+  { id: POST2, parentPostId: POST, authorUserId: U.curator, body: 'Hidden reply', status: 'hidden', move: null,
+    adoptedAsVersionId: null, createdAt: 't3', updatedAt: 't3', authorName: 'Bo' },
+  { id: id(42), parentPostId: null, authorUserId: null, body: '', status: 'deleted', move: 'bogus',
+    adoptedAsVersionId: null, createdAt: 't4', updatedAt: 't4', authorName: null },
+];
+const postsDb = (over = {}) => fakeQuery([
+  memberRoute,
+  [/FROM "ForumThread" t\s+LEFT JOIN "User"/, ([tid, sid]) => (tid === THREAD && sid === SPACE ? [threadRow(over)] : [])],
+  ['FROM "ForumPost" p\n     LEFT JOIN "User"', () => postRows()],
+  ['FROM "ForumPostVote" v', ([, viewer]) => [
+    { postId: POST, value: 1, n: 2, mine: viewer === U.member },
+    { postId: POST, value: 3, n: 1, mine: false },
+    { postId: POST, value: 9, n: 5, mine: false },
+  ]],
+]);
+
+test('listPosts: rendered bodies, moves, votes, adopted marker, display names only', async () => {
+  const { q, calls } = postsDb();
+  const rendered = [];
+  const render = async (md) => {
+    rendered.push(md);
+    return `<p>${md}</p>`;
+  };
+  const view = await listPosts(q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.member, render });
+  assert.equal(view.thread.title, 'Pharmakon');
+  assert.deepEqual(view.thread.forum, { id: FORUM, slug: 'technics', title: 'Technics' });
+  assert.deepEqual(view.thread.concept, { slug: 'pharmakon', label: 'Pharmakon' });
+  assert.deepEqual(view.viewer, { role: 'member', canPost: true, canVote: true, canModerate: false, canAdopt: false });
+
+  const [p1, p2, p3] = view.posts;
+  assert.equal(p1.bodyHtml, '<p>First $x$</p>');
+  assert.equal(p1.move, 'proposes');
+  assert.deepEqual(p1.votes, { useful: 2, clarifies: 0, reference: 1, total: 3 });
+  assert.equal(p1.myVote, 1);
+  assert.deepEqual(p1.adopted, { versionId: id(60), lang: 'en', conceptSlug: 'pharmakon' });
+  assert.deepEqual(p1.author, { name: 'Ada', deleted: false });
+  assert.equal(p1.own, true);
+
+  // hidden: body withheld from non-moderators; deleted: never shown; unknown move dropped
+  assert.equal(p2.status, 'hidden');
+  assert.equal(p2.body, null);
+  assert.equal(p2.bodyHtml, '');
+  assert.equal(p2.parentPostId, POST);
+  assert.equal(p3.status, 'deleted');
+  assert.equal(p3.body, null);
+  assert.equal(p3.move, null);
+  assert.deepEqual(p3.author, { name: null, deleted: true });
+  assert.deepEqual(rendered, ['First $x$']);
+
+  const json = JSON.stringify(view);
+  noEmail(view);
+  for (const uid of [U.member, U.curator]) assert.ok(!json.includes(uid), 'no user ids in the view');
+  const sel = calls.find((c) => c.text.includes('u.name AS "authorName"'));
+  assert.ok(!/u\.email/.test(sel.text), 'never selects User.email');
+});
+
+test('listPosts: moderators see hidden bodies; anonymous gets read-only view', async () => {
+  const mod = await listPosts(postsDb().q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.curator });
+  assert.equal(mod.posts[1].body, 'Hidden reply');
+  assert.ok(mod.posts[1].bodyHtml.includes('Hidden reply'));
+  assert.equal(mod.viewer.canModerate, true);
+  assert.equal(mod.viewer.canAdopt, true);
+
+  const anon = await listPosts(postsDb().q, { spaceId: SPACE, threadId: THREAD });
+  assert.deepEqual(anon.viewer, { role: null, canPost: false, canVote: false, canModerate: false, canAdopt: false });
+  assert.equal(anon.posts[0].myVote, 0);
+  assert.equal(anon.posts[0].own, false);
+});
+
+test('listPosts: default renderer escapes HTML; render errors fall back to escaped text', async () => {
+  const view = await listPosts(postsDb().q, { spaceId: SPACE, threadId: THREAD });
+  assert.equal(view.posts[0].bodyHtml, '<p>First $x$</p>');
+  const failing = await listPosts(postsDb().q, {
+    spaceId: SPACE, threadId: THREAD, render: async () => { throw new Error('katex'); },
+  });
+  assert.equal(failing.posts[0].bodyHtml, '<p>First $x$</p>');
+});
+
+test('listPosts: locked thread blocks posting for members but not moderators', async () => {
+  const member = await listPosts(postsDb({ isLocked: true }).q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.member });
+  assert.equal(member.viewer.canPost, false);
+  const cur = await listPosts(postsDb({ isLocked: true }).q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.curator });
+  assert.equal(cur.viewer.canPost, true);
+});
+
+test('listPosts: null for other-space/course threads, archived threads and bad ids', async () => {
+  const { q, calls } = postsDb();
+  assert.equal(await listPosts(q, { spaceId: SPACE, threadId: id(77) }), null);
+  assert.match(calls[0].text, /t\.id = \$1::uuid AND t\."spaceId" = \$2::uuid/);
+  assert.equal(await listPosts(postsDb({ archivedAt: 't9' }).q, { spaceId: SPACE, threadId: THREAD }), null);
+  assert.equal(await listPosts(q, { spaceId: SPACE, threadId: 'x' }), null);
+});
+
+// ---------------------------------------------------------------------------
+// createPost
+// ---------------------------------------------------------------------------
+
+const createPostDb = (thread, parent = [{ id: POST }]) => fakeQuery([
+  memberRoute,
+  threadByIdRoute(thread),
+  [/SELECT id FROM "ForumPost" WHERE id = \$1::uuid AND "threadId" = \$2::uuid/, () => parent],
+  ['INSERT INTO "ForumPost"', () => [{ id: POST2, createdAt: 't5' }]],
+]);
+
+test('createPost: reply with move in the same thread; thread activity touched in the transaction', async () => {
+  const { q, calls, texts } = createPostDb();
+  const out = await createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: ' Yes ', move: 'contrasts', parentPostId: POST });
+  assert.deepEqual(out, { id: POST2, threadId: THREAD, parentPostId: POST, move: 'contrasts', createdAt: 't5' });
+  const ins = calls.find((c) => c.text.includes('INSERT INTO "ForumPost"'));
+  assert.deepEqual(ins.params, [THREAD, U.member, POST, 'Yes', 'contrasts']);
+  const parent = calls.find((c) => c.text.includes('"threadId" = $2::uuid'));
+  assert.deepEqual(parent.params, [POST, THREAD]);
+  const t = texts();
+  assert.ok(t.indexOf('BEGIN') < t.indexOf('INSERT INTO "ForumPost"'));
+  assert.ok(t.includes('UPDATE "ForumThread" SET'));
+  assert.equal(t.at(-1), 'COMMIT');
+});
+
+test('createPost: plain post (no move, no parent)', async () => {
+  const { q, calls } = createPostDb();
+  const out = await createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.admin, body: 'Hi' });
+  assert.equal(out.move, null);
+  assert.equal(out.parentPostId, null);
+  assert.ok(!calls.some((c) => c.text.includes('"threadId" = $2::uuid')), 'no parent lookup');
+});
+
+test('createPost: parent must be in the same thread; invalid move 400', async () => {
+  const other = createPostDb(undefined, []);
+  await rejectsStatus(createPost(other.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x', parentPostId: id(55) }), 400);
+  await rejectsStatus(createPost(other.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x', parentPostId: 'nope' }), 400);
+  const { q } = createPostDb();
+  await rejectsStatus(createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x', move: 'derives' }), 400);
+});
+
+test('createPost: permissions, unknown/archived thread, locked thread', async () => {
+  const { q } = createPostDb();
+  await rejectsStatus(createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.guest, body: 'x' }), 403);
+  await rejectsStatus(createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.stranger, body: 'x' }), 403);
+  await rejectsStatus(createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: null, body: 'x' }), 401);
+  await rejectsStatus(createPost(q, { spaceId: SPACE, threadId: id(77), actorUserId: U.member, body: 'x' }), 404);
+
+  const archived = createPostDb({ id: THREAD, isLocked: false, archivedAt: 't', forumArchived: false });
+  await rejectsStatus(createPost(archived.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x' }), 404);
+
+  const archivedForum = createPostDb({ id: THREAD, isLocked: false, archivedAt: null, forumArchived: true });
+  await rejectsStatus(createPost(archivedForum.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x' }), 404);
+
+  const locked = createPostDb({ id: THREAD, isLocked: true, archivedAt: null, forumArchived: false });
+  await rejectsStatus(createPost(locked.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x' }), 403);
+  const ok = await createPost(locked.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.curator, body: 'x' });
+  assert.equal(ok.id, POST2);
+});
+
+// ---------------------------------------------------------------------------
+// vote
+// ---------------------------------------------------------------------------
+
+test('vote: one per user (upsert on post+user), guests may vote, snapshot returned', async () => {
+  const { q, calls } = fakeQuery([
+    memberRoute,
+    postByIdRoute(),
+    ['INSERT INTO "ForumPostVote"', () => [{ value: 2 }]],
+    ['SELECT "userId", value FROM "ForumPostVote"', () => [{ userId: U.guest, value: 2 }, { userId: U.member, value: 1 }]],
+  ]);
+  const out = await vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.guest, value: 2 });
+  assert.deepEqual(out, { postId: POST, votes: { useful: 1, clarifies: 1, reference: 0, total: 2 }, myVote: 2 });
+  const up = calls.find((c) => c.text.includes('INSERT INTO "ForumPostVote"'));
+  assert.match(up.text, /ON CONFLICT \("postId", "userId"\) DO UPDATE SET value = EXCLUDED\.value/);
+  assert.deepEqual(up.params, [POST, U.guest, 2, SPACE]);
+  assert.match(up.text, /SELECT \$1::uuid, \$2::uuid, \$3::smallint\s+WHERE EXISTS/);
+  assert.match(up.text, /op\.status = 'published' AND ot\."spaceId" = \$4::uuid\s+AND ot\."archivedAt" IS NULL AND ob\."isArchived" IS NOT TRUE/);
+  assert.ok(!JSON.stringify(out).includes(U.member));
+});
+
+test('vote: 0 removes my vote', async () => {
+  const { q, calls } = fakeQuery([memberRoute, postByIdRoute(), ['SELECT "userId", value', () => []]]);
+  const out = await vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 0 });
+  assert.equal(out.myVote, 0);
+  const del = calls.find((c) => c.text.includes('DELETE FROM "ForumPostVote"'));
+  assert.deepEqual(del.params, [POST, U.member, SPACE]);
+  assert.match(del.text, /ot\."spaceId" = \$3::uuid/);
+});
+
+test('vote: anonymous 401, non-member 403, bad value 400, other-space post 404, hidden post 409', async () => {
+  const { q } = fakeQuery([memberRoute, postByIdRoute({
+    [POST]: { id: POST, threadId: THREAD, status: 'published' },
+    [POST2]: { id: POST2, threadId: THREAD, status: 'hidden' },
+  })]);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST, actorUserId: null, value: 1 }), 401);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.stranger, value: 1 }), 403);
+  for (const value of [4, -1, '1', 1.5, null]) {
+    await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value }), 400);
+  }
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: id(77), actorUserId: U.member, value: 1 }), 404);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST2, actorUserId: U.member, value: 1 }), 409);
+});
+
+// ---------------------------------------------------------------------------
+// moderatePost
+// ---------------------------------------------------------------------------
+
+const modDb = (status = 'published') => fakeQuery([
+  memberRoute,
+  postByIdRoute({ [POST]: { id: POST, threadId: THREAD, status } }),
+  ['UPDATE "ForumPost"', (p) => [{ status: p[0] }]],
+]);
+
+test('moderatePost: hide / unhide / soft delete by curators', async () => {
+  const hide = modDb('published');
+  assert.deepEqual(await moderatePost(hide.q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'hide' }), { postId: POST, status: 'hidden' });
+  assert.deepEqual(hide.calls.at(-1).params, ['hidden', POST, 'published', SPACE]);
+  assert.match(hide.calls.at(-1).text, /WHERE p\.id = \$2::uuid AND p\.status = \$3\s+AND EXISTS \(SELECT 1 FROM "ForumThread" t WHERE t\.id = p\."threadId" AND t\."spaceId" = \$4::uuid\)/);
+
+  const unhide = modDb('hidden');
+  assert.deepEqual(await moderatePost(unhide.q, { spaceId: SPACE, postId: POST, actorUserId: U.admin, action: 'unhide' }), { postId: POST, status: 'published' });
+
+  const del = modDb('hidden');
+  assert.deepEqual(await moderatePost(del.q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'delete' }), { postId: POST, status: 'deleted' });
+  assert.match(del.calls.at(-1).text, /body = CASE WHEN \$1 = 'deleted' THEN '' ELSE p\.body END/);
+  assert.deepEqual(del.calls.at(-1).params, ['deleted', POST, 'hidden', SPACE]);
+});
+
+test('moderatePost: members 403, invalid transitions 409, bad action 400, unknown post 404', async () => {
+  await rejectsStatus(moderatePost(modDb().q, { spaceId: SPACE, postId: POST, actorUserId: U.member, action: 'hide' }), 403);
+  await rejectsStatus(moderatePost(modDb().q, { spaceId: SPACE, postId: POST, actorUserId: null, action: 'hide' }), 401);
+  await rejectsStatus(moderatePost(modDb().q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'ban' }), 400);
+  await rejectsStatus(moderatePost(modDb('hidden').q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'hide' }), 409);
+  await rejectsStatus(moderatePost(modDb('published').q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'unhide' }), 409);
+  await rejectsStatus(moderatePost(modDb('deleted').q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'delete' }), 409);
+  await rejectsStatus(moderatePost(modDb().q, { spaceId: SPACE, postId: id(77), actorUserId: U.curator, action: 'hide' }), 404);
+});
+
+// ---------------------------------------------------------------------------
+// Scope: every forum-core statement on forum tables is pinned to the space
+// ---------------------------------------------------------------------------
+
+test('all thread/post/forum reads and writes filter by the space (never course rows)', async () => {
+  const all = [];
+  const collect = async (db, fn) => {
+    try {
+      await fn(db.q);
+    } catch {
+      /* permission/validation paths are fine; we only inspect SQL */
+    }
+    all.push(...db.calls);
+  };
+  await collect(postsDb(), (q) => listPosts(q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.member }));
+  await collect(createPostDb(), (q) => createPost(q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x', parentPostId: POST }));
+  await collect(modDb(), (q) => moderatePost(q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'hide' }));
+  await collect(fakeQuery([memberRoute, postByIdRoute()]), (q) => vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 1 }));
+  await collect(fakeQuery([forumByIdRoute()]), (q) => listThreads(q, { spaceId: SPACE, forumId: FORUM }));
+  // Entry points into a thread/post/forum by id must carry the space predicate.
+  const entry = all.filter((c) => /WHERE (p\.|t\.)?id = \$1::uuid/.test(c.text) && /"(ForumThread|ForumBoard)"/.test(c.text) && !c.text.startsWith('UPDATE "ForumPost"'));
+  assert.ok(entry.length >= 4);
+  for (const c of entry) assert.ok(/"spaceId" = \$2::uuid/.test(c.text), c.text);
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1: archive guards, pinned writes, concept join
+// ---------------------------------------------------------------------------
+
+test('listPosts: thread in an archived forum is not found', async () => {
+  assert.equal(await listPosts(postsDb({ forumArchived: true }).q, { spaceId: SPACE, threadId: THREAD }), null);
+});
+
+test('vote: post in an archived thread or forum is not found', async () => {
+  const { q } = fakeQuery([memberRoute, postByIdRoute({
+    [POST]: { id: POST, threadId: THREAD, status: 'published', threadArchived: null, forumArchived: true },
+    [POST2]: { id: POST2, threadId: THREAD, status: 'published', threadArchived: 't', forumArchived: false },
+  })]);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 1 }), 404);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST2, actorUserId: U.member, value: 1 }), 404);
+});
+
+test('vote: the pinned upsert writing nothing (hidden/archived meanwhile) is a 409', async () => {
+  const { q } = fakeQuery([memberRoute, postByIdRoute(), ['INSERT INTO "ForumPostVote"', () => []]]);
+  await rejectsStatus(vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 1 }), 409);
+});
+
+test('moderatePost: pinned update matching nothing (status changed meanwhile) is a 409', async () => {
+  const { q } = fakeQuery([memberRoute, postByIdRoute(), ['UPDATE "ForumPost"', () => []]]);
+  await rejectsStatus(moderatePost(q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'hide' }), 409);
+});
+
+test('thread reads take at most one concept per thread (LATERAL … LIMIT 1)', async () => {
+  const list = fakeQuery([forumByIdRoute(), ['FROM "ForumThread" t', () => []]]);
+  await listThreads(list.q, { spaceId: SPACE, forumId: FORUM });
+  const posts = postsDb();
+  await listPosts(posts.q, { spaceId: SPACE, threadId: THREAD });
+  for (const c of [...list.calls, ...posts.calls].filter((c) => c.text.includes('"Concept" c'))) {
+    assert.match(c.text, /LEFT JOIN LATERAL \(\s+SELECT c\.slug, c\.label FROM "Concept" c[\s\S]*LIMIT 1\s+\) c ON true/);
+  }
+});
+
+test('listPosts passes the post identity to the renderer (render cache key)', async () => {
+  const seen = [];
+  await listPosts(postsDb().q, {
+    spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; },
+  });
+  assert.deepEqual(seen, [{ id: POST, updatedAt: 't2', forumId: FORUM, forumBibliography: '|' }]);
+});
+
+test('user names that look like e-mails never leave the core', async () => {
+  const { q } = fakeQuery([
+    memberRoute,
+    [/FROM "ForumThread" t\s+LEFT JOIN "User" u/, () => [{
+      id: THREAD, title: 'T', isPinned: false, isLocked: false, createdAt: 't', updatedAt: 't', archivedAt: null,
+      createdByUserId: U.member, createdByName: 'me@uni.no', forumId: FORUM, forumSlug: 'technics', forumTitle: 'Technics', forumArchived: false,
+    }]],
+    [/FROM "ForumPost" p\s+LEFT JOIN "User" u/, () => [{ id: POST, authorUserId: U.member, authorName: 'Me <me@uni.no>', body: 'x', status: 'published', createdAt: 't', updatedAt: 't' }]],
+  ]);
+  const view = await listPosts(q, { spaceId: SPACE, threadId: THREAD });
+  assert.deepEqual(view.thread.createdBy, { name: null, deleted: false });
+  assert.deepEqual(view.posts[0].author, { name: null, deleted: false });
+  noEmail({ t: view.thread.createdBy, p: view.posts[0].author });
+});
+
+test('listPosts passes the forum bibliography link to the renderer (cache invalidation)', async () => {
+  const { q } = fakeQuery([
+    memberRoute,
+    [/FROM "ForumThread" t\s+LEFT JOIN "User" u/, () => [{
+      id: THREAD, title: 'T', isPinned: false, isLocked: false, createdAt: 't', updatedAt: 't', archivedAt: null,
+      createdByUserId: U.member, createdByName: 'A', forumId: FORUM, forumSlug: 'technics', forumTitle: 'Technics', forumArchived: false,
+      forumSettings: { seshatLibraryId: 'lib-1', ownerEmail: 'Owner@Uni.no' },
+    }]],
+    [/FROM "ForumPost" p\s+LEFT JOIN "User" u/, () => [{ id: POST, authorUserId: U.member, authorName: 'A', body: 'x', status: 'published', createdAt: 't', updatedAt: 't' }]],
+  ]);
+  const seen = [];
+  await listPosts(q, { spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; } });
+  assert.equal(seen[0].forumBibliography, 'lib-1|owner@uni.no');
+});

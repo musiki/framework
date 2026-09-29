@@ -133,7 +133,7 @@ if (activeCourse) {
     const courseIds = courseAliases.length > 0 ? courseAliases : [courseId];
     const { data: boardData, error: boardError } = await query(
       `SELECT slug, title, "isDefault", "isArchived" FROM "ForumBoard" 
-       WHERE "courseId" = ANY($1) AND "isArchived" = false 
+       WHERE "courseId" = ANY($1) AND "isArchived" = false AND "spaceId" IS NULL 
        ORDER BY "isDefault" DESC, title ASC`,
       [courseIds]
     );
@@ -143,7 +143,7 @@ if (activeCourse) {
 
     const { data: threadData, error: threadError } = await query(
       `SELECT id, "lessonSlug", "createdAt", "updatedAt" FROM "ForumThread" 
-       WHERE "courseId" = ANY($1) LIMIT 2000`,
+       WHERE "courseId" = ANY($1) AND "spaceId" IS NULL LIMIT 2000`,
       [courseIds]
     );
 

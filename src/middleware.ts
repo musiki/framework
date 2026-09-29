@@ -30,13 +30,29 @@ export const onRequest = defineMiddleware(async (context, next) => {
     ? { tenant: TENANTS[DEFAULT_TENANT_ID], action: "next" as const }
     : decideTenantRequest({
         host: context.request.headers.get("x-forwarded-host") || context.request.headers.get("host") || url.hostname,
-        pathname,
+        // Raw pathname (encoding and '//' kept): what the router matches.
+        pathname: new URL(context.request.url).pathname,
         envTenant: import.meta.env.DEV ? process.env.TENANT : undefined,
       });
   context.locals.tenant = tenantDecision.tenant;
   if (tenantDecision.action === "not-found") {
+    // mm renders its own plain 404 (no musiki/so chrome). next(path) serves
+    // the internal page without re-running this middleware.
+    if (tenantDecision.tenant.id === "mm") return next("/mm-app/not-found");
+    if (tenantDecision.tenant.routes === "all") {
+      // Only /mm-app/* reaches here on full-route tenants: musiki's 404 page, with a real 404 status.
+      const notFound = await context.rewrite("/404");
+      return new Response(notFound.body, { status: 404, headers: notFound.headers });
+    }
     return context.rewrite("/studio/not-found");
   }
+  // mm public pages are served from the internal /mm-app/* mount. Applied via
+  // next(path) at the end so the rest of this middleware still runs and the
+  // internal path never goes through the tenant check (which 404s it).
+  const internalPath = "rewrite" in tenantDecision && tenantDecision.rewrite
+    ? `${tenantDecision.rewrite}${url.search}`
+    : null;
+  const proceed = () => (internalPath ? next(internalPath) : next());
 
   // Skip header access and session check for known static or prerendered paths (search.json, assets, etc)
   const isStaticLike = 
@@ -47,7 +63,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     /\.[a-z0-9]+$/i.test(pathname);
 
   if (isStaticLike) {
-    return next();
+    return proceed();
   }
   
   // Get hostname from forwarded headers or request URL
@@ -74,7 +90,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
   context.locals.session = session;
 
-  if (shouldSyncEvalCatalogForPath(context.url.pathname)) {
+  // Eval catalog sync is musiki course machinery: only full-route tenants.
+  if (tenantDecision.tenant.routes === "all" && shouldSyncEvalCatalogForPath(context.url.pathname)) {
     // Skip eval sync in development if the tunnel is unstable
     if (import.meta.env.DEV) {
       console.log(`[DEV] Skipping eval sync for ${context.url.pathname} to save tunnel bandwidth`);
@@ -94,5 +111,5 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  return next();
+  return proceed();
 });

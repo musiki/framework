@@ -7,6 +7,29 @@ export const isSpaceRole = (v: unknown): v is SpaceRole =>
 export const isGrantableRole = (v: unknown): v is SpaceRole =>
   isSpaceRole(v) && v !== 'author';
 
+export const SPACE_KINDS = ['dissertation', 'commons'] as const;
+export type SpaceKind = (typeof SPACE_KINDS)[number];
+export const COMMONS_ROLES = ['admin', 'curator', 'member', 'guest'] as const;
+export type CommonsRole = (typeof COMMONS_ROLES)[number];
+export type AnySpaceRole = SpaceRole | CommonsRole;
+
+export const ROLES_BY_KIND: Record<SpaceKind, readonly AnySpaceRole[]> = {
+  dissertation: SPACE_ROLES,
+  commons: COMMONS_ROLES,
+};
+/** Roles an invite or access rule may grant: never `author` or `admin`. */
+export const GRANTABLE_BY_KIND: Record<SpaceKind, readonly AnySpaceRole[]> = {
+  dissertation: GRANTABLE_ROLES,
+  commons: COMMONS_ROLES.filter((r) => r !== 'admin'),
+};
+
+export const isSpaceKind = (v: unknown): v is SpaceKind =>
+  typeof v === 'string' && (SPACE_KINDS as readonly string[]).includes(v);
+export const isRoleForKind = (kind: SpaceKind, v: unknown): v is AnySpaceRole =>
+  typeof v === 'string' && (ROLES_BY_KIND[kind] as readonly string[]).includes(v);
+export const isGrantableForKind = (kind: SpaceKind, v: unknown): v is AnySpaceRole =>
+  typeof v === 'string' && (GRANTABLE_BY_KIND[kind] as readonly string[]).includes(v);
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isUuid = (value: string): boolean => UUID_RE.test(value);
 
@@ -24,11 +47,14 @@ export function isValidEmail(email: string): boolean {
   return parts.length === 2 && parts[0].length > 0 && isValidDomain(parts[1]);
 }
 
-export function validateAccessRuleInput(input: { kind: unknown; value: unknown; role: unknown }):
-  | { ok: true; kind: 'email' | 'domain'; value: string; role: SpaceRole }
+export function validateAccessRuleInput(
+  input: { kind: unknown; value: unknown; role: unknown },
+  spaceKind: SpaceKind = 'dissertation',
+):
+  | { ok: true; kind: 'email' | 'domain'; value: string; role: AnySpaceRole }
   | { ok: false; error: string } {
   const value = normalizeEmail(input.value);
-  if (!isGrantableRole(input.role)) return { ok: false, error: 'invalid-role' };
+  if (!isGrantableForKind(spaceKind, input.role)) return { ok: false, error: 'invalid-role' };
   if (input.kind === 'email') {
     return isValidEmail(value) ? { ok: true, kind: 'email', value, role: input.role } : { ok: false, error: 'invalid-email' };
   }
@@ -38,11 +64,11 @@ export function validateAccessRuleInput(input: { kind: unknown; value: unknown; 
   return { ok: false, error: 'invalid-kind' };
 }
 
-export function validateInviteInput(input: { email: unknown; role: unknown }):
-  | { ok: true; email: string; role: SpaceRole }
+export function validateInviteInput(input: { email: unknown; role: unknown }, spaceKind: SpaceKind = 'dissertation'):
+  | { ok: true; email: string; role: AnySpaceRole }
   | { ok: false; error: string } {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return { ok: false, error: 'invalid-email' };
-  if (!isGrantableRole(input.role)) return { ok: false, error: 'invalid-role' };
+  if (!isGrantableForKind(spaceKind, input.role)) return { ok: false, error: 'invalid-role' };
   return { ok: true, email, role: input.role };
 }

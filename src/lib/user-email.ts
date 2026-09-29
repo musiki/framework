@@ -9,6 +9,9 @@
  */
 
 import { query } from './db/pool';
+import { repointMergedUserContent } from './mm/user-content.ts';
+
+export { MERGE_REPOINT_COLUMNS, MERGE_DEDUPE_COLUMNS } from './mm/user-content.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -124,6 +127,8 @@ export async function registerEmailForUser(
  * 1. Transfer all UserEmail rows from mergeId → keepId
  * 2. Reassign all Enrollment rows from mergeId → keepId (skip duplicates)
  * 3. Reassign all Submission rows from mergeId → keepId (skip duplicates)
+ * 3b. Re-point mm concept + forum user columns (MERGE_REPOINT_COLUMNS; votes
+ *     via MERGE_DEDUPE_COLUMNS, skipping duplicates) mergeId → keepId
  * 4. Delete the mergeId User record
  */
 export async function mergeUsers(
@@ -204,6 +209,12 @@ export async function mergeUsers(
       transferredSubmissions++;
     }
   }
+
+  // 3b. Re-point mm concept authorship/credit and forum boards/threads/posts/votes.
+  //     Forum FKs are ON DELETE CASCADE: without this, deleting the merged user
+  //     row below would delete their threads and posts.
+  const repointed = await repointMergedUserContent(query as any, keepId, mergeId);
+  if (!repointed.ok) return { ok: false, error: repointed.error };
 
   // 4. Delete the merged user
   const { error: deleteError } = await query(`DELETE FROM "User" WHERE "id" = $1`, [mergeId]);

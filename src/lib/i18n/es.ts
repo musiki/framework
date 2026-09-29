@@ -1,4 +1,5 @@
 import type { Dict } from './en.ts';
+import { mmEn } from './mm-en.ts';
 
 export const es: Dict = {
   studio: {
@@ -241,4 +242,6 @@ export const es: Dict = {
       diagProcessWithoutReflection: 'Nota de proceso sin reflexión crítica asociada',
     },
   },
+  // mm (MishMash Concept Machine) has no Spanish UI; English keeps the Dict type complete.
+  mm: mmEn,
 };

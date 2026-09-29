@@ -1,6 +1,8 @@
 import { getClient, query } from '../db/pool';
 import { resolveUserIdByEmail } from '../user-email';
 import { decideSpaceAccess, shouldRejectMusikiSignIn, type AccessRuleRow, type InviteRow } from './access';
+import { loadSpaceAccessContext } from './access-context';
+import { unblockOnInvite } from './access-unblock.ts';
 import { emailDomain, normalizeEmail } from './space-roles';
 import { DEFAULT_TENANT_ID, type TenantId } from './tenants';
 
@@ -39,8 +41,17 @@ export async function authorizeTenantSignIn(
       )).length > 0
     : false;
 
+  const { spaces, blockedSpaceIds } = await loadSpaceAccessContext(query, tenantId, userId);
+  const memberSpaceIds = userId
+    ? must<{ spaceId: string }>(await query(
+        `SELECT m."spaceId" FROM "SpaceMember" m JOIN "Space" s ON s."id" = m."spaceId"
+          WHERE s."tenantId" = $1 AND m."userId" = $2`,
+        [tenantId, userId],
+      )).map((r) => r.spaceId)
+    : [];
+
   const decision = decideSpaceAccess({
-    email, emailVerified: input.emailVerified, now: new Date(), isMember, invites, rules,
+    email, emailVerified: input.emailVerified, now: new Date(), isMember, invites, rules, spaces, memberSpaceIds, blockedSpaceIds,
   });
   if (!decision.allowed) {
     console.warn(`[TENANT-SIGNIN] ${tenantId} rejected ${email}: ${decision.reason}`);
@@ -72,6 +83,7 @@ export async function authorizeTenantSignIn(
            ON CONFLICT ("spaceId", "userId") DO NOTHING`,
           [grant.spaceId, userId, grant.role],
         );
+        await unblockOnInvite(client, grant, userId as string, spaces);
         if (grant.inviteId) {
           await client.query(
             `UPDATE "SpaceInvite" SET "acceptedAt" = now() WHERE "id" = $1 AND "acceptedAt" IS NULL`,

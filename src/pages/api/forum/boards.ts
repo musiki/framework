@@ -8,6 +8,7 @@ import {
 } from '../../../lib/forum-server';
 import { canonicalizeCourseId, getCourseAliases } from '../../../lib/course-alias';
 import { query } from '../../../lib/db/pool';
+import * as forumSql from '../../../lib/forum-queries.ts';
 
 const BOARD_TITLE_MAX = 90;
 const BOARD_DESCRIPTION_MAX = 260;
@@ -25,97 +26,8 @@ type BoardRow = {
   updatedAt: string | null;
 };
 
-type ThreadRow = {
-  id: string;
-  lessonSlug: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-};
-
-type PostRow = {
-  threadId: string | null;
-  createdAt: string | null;
-};
-
-const BOARD_SCOPE_PREFIX = '@board:';
-
-function pickNewestTimestamp(current: string | null, candidate: string | null): string | null {
-  if (!current) return candidate;
-  if (!candidate) return current;
-  const currentTime = new Date(current).getTime();
-  const candidateTime = new Date(candidate).getTime();
-  if (Number.isNaN(currentTime)) return candidate;
-  if (Number.isNaN(candidateTime)) return current;
-  return candidateTime > currentTime ? candidate : current;
-}
-
-async function loadBoardActivityMap(
-  courseId: string,
-  courseAliases: string[],
-): Promise<Map<string, { messageCount: number; lastActivityAt: string | null }>> {
-  const boardActivity = new Map<string, { messageCount: number; lastActivityAt: string | null }>();
-
-  const { data: threadsRaw, error: threadsError } = await query(
-    `SELECT "id", "lessonSlug", "createdAt", "updatedAt" FROM "ForumThread" 
-     WHERE "courseId" = ANY($1) AND "lessonSlug" LIKE $2 LIMIT 2000`,
-    [courseAliases.length > 0 ? courseAliases : [courseId], `${BOARD_SCOPE_PREFIX}%`]
-  );
-
-  if (threadsError) throw threadsError;
-
-  const threads = (threadsRaw || []) as ThreadRow[];
-  if (threads.length === 0) return boardActivity;
-
-  const threadStatsById = new Map<string, { boardSlug: string; messageCount: number; lastActivityAt: string | null }>();
-  const threadIds: string[] = [];
-
-  for (const thread of threads) {
-    const threadId = cleanString(thread?.id, 80);
-    const rawScope = cleanString(thread?.lessonSlug, 240);
-    const boardSlug = rawScope.startsWith(BOARD_SCOPE_PREFIX)
-      ? cleanString(rawScope.slice(BOARD_SCOPE_PREFIX.length), 120).toLowerCase()
-      : '';
-    if (!threadId || !boardSlug) continue;
-    threadIds.push(threadId);
-    threadStatsById.set(threadId, {
-      boardSlug,
-      messageCount: 0,
-      lastActivityAt: pickNewestTimestamp(thread?.createdAt ?? null, thread?.updatedAt ?? null),
-    });
-  }
-
-  if (threadIds.length > 0) {
-    const { data: postsRaw, error: postsError } = await query(
-      `SELECT "threadId", "createdAt" FROM "ForumPost" 
-       WHERE "threadId" = ANY($1) AND ("status" IS NULL OR "status" <> 'deleted')`,
-      [threadIds]
-    );
-
-    if (postsError) throw postsError;
-
-    for (const post of (postsRaw || []) as PostRow[]) {
-      const threadId = cleanString(post?.threadId, 80);
-      if (!threadId) continue;
-      const threadStats = threadStatsById.get(threadId);
-      if (!threadStats) continue;
-      threadStats.messageCount += 1;
-      threadStats.lastActivityAt = pickNewestTimestamp(threadStats.lastActivityAt, post?.createdAt ?? null);
-      threadStatsById.set(threadId, threadStats);
-    }
-  }
-
-  threadStatsById.forEach((threadStats) => {
-    const current = boardActivity.get(threadStats.boardSlug) || {
-      messageCount: 0,
-      lastActivityAt: null,
-    };
-    current.messageCount += threadStats.messageCount;
-    current.lastActivityAt = pickNewestTimestamp(current.lastActivityAt, threadStats.lastActivityAt);
-    boardActivity.set(threadStats.boardSlug, current);
-  });
-
-  return boardActivity;
-}
+const loadBoardActivityMap = (courseId: string, courseAliases: string[]) =>
+  forumSql.loadBoardActivityMap(query, courseId, courseAliases);
 
 function resolveForumErrorMessage(error: any, fallback: string): string {
   const message = typeof error?.message === 'string' ? error.message : '';
@@ -141,9 +53,9 @@ async function ensureDefaultBoard(
   courseAliases: string[],
   createdByUserId: string,
 ): Promise<void> {
-  const { data: existingDefaultRows, error: existingError } = await query(
-    `SELECT "id" FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "slug" = $2 AND "isArchived" = false`,
-    [courseAliases.length > 0 ? courseAliases : [courseId], 'general']
+  const { data: existingDefaultRows, error: existingError } = await forumSql.selectDefaultBoard(
+    query,
+    forumSql.courseIdsFor(courseId, courseAliases),
   );
   const existingDefault = existingDefaultRows?.[0];
 
@@ -152,21 +64,21 @@ async function ensureDefaultBoard(
 
   const now = new Date().toISOString();
 
-  const { error: insertError } = await query(
-    `INSERT INTO "ForumBoard" ("id", "courseId", "slug", "title", "description", "createdByUserId", "isDefault", "isArchived", "createdAt", "updatedAt") 
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT ("courseId", "slug") DO NOTHING`,
-    [
-      crypto.randomUUID(),
+  const { error: insertError } = await forumSql.insertBoard(
+    query,
+    {
+      id: crypto.randomUUID(),
       courseId,
-      'general',
-      'General',
-      'Foro general del curso',
+      slug: 'general',
+      title: 'General',
+      description: 'Foro general del curso',
       createdByUserId,
-      true,
-      false,
-      now,
-      now,
-    ]
+      isDefault: true,
+      isArchived: false,
+      createdAt: now,
+      updatedAt: now,
+    },
+    { onConflictDoNothing: true },
   );
 
   if (insertError && insertError.code !== '23505') {
@@ -178,11 +90,9 @@ async function listBoards(
   courseId: string,
   courseAliases: string[],
 ): Promise<BoardRow[]> {
-  const { data: boards, error: boardsError } = await query(
-    `SELECT "id", "courseId", "slug", "title", "description", "isDefault", "isArchived", "createdAt", "updatedAt" 
-     FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "isArchived" = false 
-     ORDER BY "isDefault" DESC, "title" ASC`,
-    [courseAliases.length > 0 ? courseAliases : [courseId]]
+  const { data: boards, error: boardsError } = await forumSql.listCourseBoards(
+    query,
+    forumSql.courseIdsFor(courseId, courseAliases),
   );
 
   if (boardsError) throw boardsError;
@@ -194,10 +104,10 @@ async function getBoardBySlug(
   courseAliases: string[],
   boardSlug: string,
 ): Promise<BoardRow | null> {
-  const { data: boardRows, error } = await query(
-    `SELECT "id", "courseId", "slug", "title", "description", "isDefault", "isArchived", "createdAt", "updatedAt" 
-     FROM "ForumBoard" WHERE "courseId" = ANY($1) AND "slug" = $2 AND "isArchived" = false`,
-    [courseAliases.length > 0 ? courseAliases : [courseId], boardSlug]
+  const { data: boardRows, error } = await forumSql.selectCourseBoardBySlug(
+    query,
+    forumSql.courseIdsFor(courseId, courseAliases),
+    boardSlug,
   );
   const board = boardRows?.[0];
 
@@ -338,23 +248,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       updatedAt: now,
     };
 
-    const { data: createdBoardRows, error: createError } = await query(
-      `INSERT INTO "ForumBoard" ("id", "courseId", "slug", "title", "description", "createdByUserId", "isDefault", "isArchived", "createdAt", "updatedAt") 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
-       RETURNING "id", "courseId", "slug", "title", "description", "isDefault", "isArchived", "createdAt", "updatedAt"`,
-      [
-        insertPayload.id,
-        insertPayload.courseId,
-        insertPayload.slug,
-        insertPayload.title,
-        insertPayload.description,
-        insertPayload.createdByUserId,
-        insertPayload.isDefault,
-        insertPayload.isArchived,
-        insertPayload.createdAt,
-        insertPayload.updatedAt,
-      ]
-    );
+    const { data: createdBoardRows, error: createError } = await forumSql.insertBoard(query, insertPayload, {
+      returning: true,
+    });
     const createdBoard = createdBoardRows?.[0];
 
     if (createError) {
@@ -399,10 +295,11 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       return json({ error: 'The default course forum cannot be renamed' }, 400);
     }
 
-    const { data: updatedBoardRows, error: updateError } = await query(
-      `UPDATE "ForumBoard" SET "title" = $1, "updatedAt" = $2 WHERE "id" = $3 
-       RETURNING "id", "courseId", "slug", "title", "description", "isDefault", "isArchived", "createdAt", "updatedAt"`,
-      [title, new Date().toISOString(), board.id]
+    const { data: updatedBoardRows, error: updateError } = await forumSql.updateBoardTitle(
+      query,
+      board.id,
+      title,
+      new Date().toISOString(),
     );
     const updatedBoard = updatedBoardRows?.[0];
 
@@ -441,10 +338,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       return json({ error: 'The default course forum cannot be removed' }, 400);
     }
 
-    const { error: archiveError } = await query(
-      `UPDATE "ForumBoard" SET "isArchived" = true, "updatedAt" = $1 WHERE "id" = $2`,
-      [new Date().toISOString(), board.id]
-    );
+    const { error: archiveError } = await forumSql.archiveBoard(query, board.id, new Date().toISOString());
 
     if (archiveError) throw archiveError;
     return json({ success: true, boardSlug }, 200);

@@ -3,6 +3,9 @@ import { getEntry } from 'astro:content';
 import { canonicalizeCourseId, getCourseAliases } from './course-alias';
 import { isElevatedGlobalRole } from './roles';
 import { query } from './db/pool';
+import { cleanString, cleanBody } from './forum-text.ts';
+
+export { cleanString, cleanBody };
 
 export type ForumDbUser = {
   id: string;
@@ -18,22 +21,6 @@ export type ForumCourseAccess = {
   isEnrolled: boolean;
   isTeacher: boolean;
 };
-
-function clampLength(value: string, maxLength: number): string {
-  if (maxLength <= 0) return value;
-  if (value.length <= maxLength) return value;
-  return value.slice(0, maxLength);
-}
-
-export function cleanString(value: unknown, maxLength = 0): string {
-  const s = typeof value === 'string' ? value.trim() : '';
-  return maxLength > 0 ? clampLength(s, maxLength) : s;
-}
-
-export function cleanBody(value: unknown, maxLength = 0): string {
-  const s = typeof value === 'string' ? value : '';
-  return maxLength > 0 ? clampLength(s, maxLength) : s;
-}
 
 export function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {

@@ -1,0 +1,87 @@
+// Pure helpers shared by the mm client scripts (src/scripts/mm/*): `@citekey`
+// detection and `[@citekey]` insertion in the composer and API error → message mapping.
+// No DOM, no fetch: tested in client-core.test.mjs.
+
+/** Characters Seshat citekeys use after the `@` (remark-seshat-citations style). */
+const CITEKEY_CHAR = /[A-Za-z0-9_:.#$%&+?<>~/-]/;
+const MAX_QUERY = 60;
+
+/**
+ * If the caret is right after `@partial` (the `@` at the start or after
+ * whitespace/opening punctuation), returns the partial key and where the `@`
+ * is; otherwise null. An empty partial (just `@`) is returned too, so the
+ * caller can decide to wait for more characters.
+ */
+export function findCitekeyQuery(text: string, caret: number): { start: number; query: string } | null {
+  if (typeof text !== 'string' || caret < 1 || caret > text.length) return null;
+  let i = caret;
+  while (i > 0 && CITEKEY_CHAR.test(text[i - 1]) && caret - i <= MAX_QUERY) i -= 1;
+  if (i < 1 || text[i - 1] !== '@') return null;
+  const at = i - 1;
+  if (at > 0 && !/[\s([{;,"'“]/.test(text[at - 1])) return null; // e-mail addresses, foo@bar
+  const query = text.slice(i, caret);
+  if (query.length > MAX_QUERY) return null;
+  return { start: at, query };
+}
+
+/**
+ * Replaces `@partial` (from `start` to `caret`) with `[@citekey] ` — the
+ * bracketed form the renderer (remark-seshat-citations) resolves — and
+ * returns the new text and caret. An opening `[` typed before the `@` and a
+ * closing `]` right after the caret are absorbed, so `[@sti]` does not become
+ * `[[@key]]]`.
+ */
+export function insertCitekey(text: string, start: number, caret: number, citekey: string): { text: string; caret: number } {
+  const from = start > 0 && text[start - 1] === '[' ? start - 1 : start;
+  let after = text.slice(caret);
+  if (after.startsWith(']')) after = after.slice(1);
+  const insert = `[@${citekey}]`;
+  const spacer = after === '' || /^[\s.,;:!?)\]]/.test(after) ? (after === '' ? ' ' : '') : ' ';
+  const next = text.slice(0, from) + insert + spacer + after;
+  return { text: next, caret: from + insert.length + spacer.length };
+}
+
+export type ApiErrorKind = 'rateLimited' | 'signIn' | 'forbidden' | 'notFound' | 'conflict' | 'invalid' | 'generic';
+
+/** Maps an API status to the kind of message the UI shows (429 gets its own gentle message). */
+export function apiErrorKind(status: number): ApiErrorKind {
+  if (status === 429) return 'rateLimited';
+  if (status === 401) return 'signIn';
+  if (status === 403) return 'forbidden';
+  if (status === 404) return 'notFound';
+  if (status === 409) return 'conflict';
+  if (status === 400 || status === 413 || status === 415 || status === 422) return 'invalid';
+  return 'generic';
+}
+
+/**
+ * Message for a failed call: validation (400) and conflict (409) messages
+ * from the API are short, domain-level English strings and are shown after
+ * the localized lead; everything else uses the localized message only.
+ */
+export function apiErrorMessage(
+  status: number,
+  apiMessage: unknown,
+  strings: Record<ApiErrorKind, string>,
+): string {
+  const kind = apiErrorKind(status);
+  const lead = strings[kind] ?? strings.generic;
+  const detail = typeof apiMessage === 'string' ? apiMessage.trim().slice(0, 200) : '';
+  if ((kind === 'invalid' || kind === 'conflict') && detail) return `${lead} (${detail})`;
+  return lead;
+}
+
+export type AdminErrorKind = 'lastAdmin' | 'self' | 'slugTaken';
+
+/**
+ * Admin page: the 409s the admin APIs return for a reason the admin can act
+ * on (src/lib/mm/admin-core.ts, forum-core.ts createForum) get their own
+ * localized message instead of the generic "changed in the meantime".
+ */
+export function adminErrorKind(status: number, apiMessage: unknown): AdminErrorKind | null {
+  if (status !== 409 || typeof apiMessage !== 'string') return null;
+  if (/at least one admin/i.test(apiMessage)) return 'lastAdmin';
+  if (/your own membership/i.test(apiMessage)) return 'self';
+  if (/slug already exists/i.test(apiMessage)) return 'slugTaken';
+  return null;
+}

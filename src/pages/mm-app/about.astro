@@ -1,0 +1,43 @@
+---
+// Internal page for mm "/about" (see index.astro for the routing rules).
+// Purpose, AI declaration (MishMash web philosophy), privacy, languages.
+import MmLayout from '../../layouts/MmLayout.astro';
+import { t } from '../../lib/i18n';
+import { applyMmLang } from '../../lib/mm/ui-lang';
+export const prerender = false;
+
+const lang = applyMmLang(Astro);
+const PHILOSOPHY_URL = 'https://github.com/MishMash-Norway/mishmash-web/wiki/Web-Philosophy';
+---
+<MmLayout lang={lang} title={t(lang, 'mm.about.title')}>
+  <div class="mm-prose">
+    <h1>{t(lang, 'mm.about.title')}</h1>
+    <p class="mm-lead">{t(lang, 'mm.tagline')}</p>
+
+    <section aria-labelledby="mm-purpose">
+      <h2 id="mm-purpose">{t(lang, 'mm.about.purposeTitle')}</h2>
+      <p>{t(lang, 'mm.about.purpose')}</p>
+      <p>{t(lang, 'mm.about.statuses')}</p>
+    </section>
+
+    <section aria-labelledby="mm-ai">
+      <h2 id="mm-ai">{t(lang, 'mm.about.aiTitle')}</h2>
+      <p>{t(lang, 'mm.about.aiContent')}</p>
+      <p>{t(lang, 'mm.about.aiCode')}</p>
+      <p>{t(lang, 'mm.about.aiTranslation')}</p>
+      <p>{t(lang, 'mm.about.aiPhilosophy')} <a class="mm-more" href={PHILOSOPHY_URL}>{t(lang, 'mm.about.aiPhilosophyLink')}</a></p>
+    </section>
+
+    <section aria-labelledby="mm-privacy">
+      <h2 id="mm-privacy">{t(lang, 'mm.about.privacyTitle')}</h2>
+      <p>{t(lang, 'mm.about.privacyTracking')}</p>
+      <p>{t(lang, 'mm.about.privacyCookies')}</p>
+      <p>{t(lang, 'mm.about.privacyData')}</p>
+    </section>
+
+    <section aria-labelledby="mm-languages">
+      <h2 id="mm-languages">{t(lang, 'mm.about.languagesTitle')}</h2>
+      <p>{t(lang, 'mm.about.languages')}</p>
+    </section>
+  </div>
+</MmLayout>

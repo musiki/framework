@@ -50,10 +50,18 @@ async function resolveCitations(keys) {
   return found;
 }
 
+/**
+ * Options: headingText, lang, template, and `resolve(keys) => Promise<Map|Iterable<[key, cslItem]>>`.
+ * When `resolve` is given (mm forums: scoped to the forum's own Seshat owner),
+ * it replaces the global SESHAT_CITATION_OWNER_EMAIL lookup and its shared
+ * cache entirely; the musiki default is unchanged.
+ */
 export default function remarkSeshatCitations(options = {}) {
   const headingText = String(options.headingText || 'Referencias');
   const lang = String(options.lang || 'es-ES');
   const template = String(options.template || 'apa');
+  const customResolve = typeof options.resolve === 'function' ? options.resolve : null;
+  const normalizedHeadings = new Set(['referencias', 'references', headingText.trim().toLocaleLowerCase()]);
 
   return async (tree, file) => {
     const occurrences = [];
@@ -71,12 +79,13 @@ export default function remarkSeshatCitations(options = {}) {
 
     let resolved;
     try {
-      resolved = await resolveCitations(keys);
+      resolved = customResolve ? new Map(await customResolve([...new Set(keys)])) : await resolveCitations(keys);
     } catch (error) {
       console.warn('[remark-seshat-citations]', file?.path || 'runtime note', error);
       return;
     }
-    const uniqueKeys = [...new Set(keys)];
+    // Only resolved keys go into the bibliography (citeproc throws on unknown ids).
+    const uniqueKeys = [...new Set(keys)].filter((key) => resolved.has(key));
     const orderedItems = uniqueKeys.map((key) => resolved.get(key)).filter(Boolean);
     if (!orderedItems.length) return;
     const cite = new Cite(orderedItems);
@@ -101,7 +110,7 @@ export default function remarkSeshatCitations(options = {}) {
     }
 
     const hasReferencesHeading = tree.children.some(
-      (node) => node.type === 'heading' && ['referencias', 'references'].includes(normalizeHeading(node)),
+      (node) => node.type === 'heading' && normalizedHeadings.has(normalizeHeading(node)),
     );
     if (!hasReferencesHeading) {
       tree.children.push({ type: 'heading', depth: 1, children: [{ type: 'text', value: headingText }] });

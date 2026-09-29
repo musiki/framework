@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TENANTS } from './tenants.ts';
 import { decideAuthRoute, filterProvidersPayload, sanitizeAuthErrorCode, studioLoginErrorKey } from './auth-gate.ts';
 
-const { musiki, so } = TENANTS;
+const { musiki, so, mm } = TENANTS;
 
 test('musiki: every action passes, own providers allowed', () => {
   for (const action of ['providers', 'session', 'csrf', 'signout', 'verify-request', 'error']) {
@@ -60,4 +60,24 @@ test('login error key mapping', () => {
   assert.equal(studioLoginErrorKey(''), null);
   assert.equal(studioLoginErrorKey('AccessDenied'), 'studio.errors.accessDenied');
   assert.equal(studioLoginErrorKey('Configuration'), 'studio.errors.generic');
+});
+
+test('mm: own provider passes, foreign providers are not-found both ways', () => {
+  assert.deepEqual(decideAuthRoute(mm, 'signin', 'logto-mm'), { kind: 'pass' });
+  assert.deepEqual(decideAuthRoute(mm, 'callback', 'logto-mm'), { kind: 'pass' });
+  for (const p of ['logto', 'google', 'authentik', 'logto-so']) {
+    assert.deepEqual(decideAuthRoute(mm, 'signin', p), { kind: 'not-found' }, p);
+    assert.deepEqual(decideAuthRoute(mm, 'callback', p), { kind: 'not-found' }, p);
+  }
+  assert.deepEqual(decideAuthRoute(musiki, 'signin', 'logto-mm'), { kind: 'not-found' });
+  assert.deepEqual(decideAuthRoute(so, 'callback', 'logto-mm'), { kind: 'not-found' });
+});
+
+test('mm: default Auth.js pages redirect to /join, providers filtered', () => {
+  assert.deepEqual(decideAuthRoute(mm, 'providers'), { kind: 'filter-providers' });
+  assert.deepEqual(decideAuthRoute(mm, 'signin'), { kind: 'redirect', location: '/join' });
+  assert.deepEqual(decideAuthRoute(mm, 'error', undefined, 'AccessDenied'),
+    { kind: 'redirect', location: '/join?error=AccessDenied' });
+  const payload = { google: {}, 'logto-so': {}, 'logto-mm': { id: 'logto-mm' } };
+  assert.deepEqual(filterProvidersPayload(mm, payload), { 'logto-mm': { id: 'logto-mm' } });
 });

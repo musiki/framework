@@ -1,5 +1,6 @@
 import { resolveRequestAuthOrigin } from '../auth-origin';
 import { json } from '../forum-server';
+import { sameOriginJsonRejection } from './same-origin.ts';
 
 /**
  * CSRF guard for mutating studio API routes.
@@ -16,15 +17,6 @@ import { json } from '../forum-server';
  * or `null` when the request may proceed.
  */
 export function assertSameOriginJson(request: Request, opts: { requireJson?: boolean } = {}): Response | null {
-  const origin = request.headers.get('origin');
-  if (origin && origin !== resolveRequestAuthOrigin(request)) {
-    return json({ error: 'Forbidden' }, 403);
-  }
-  if (opts.requireJson) {
-    const contentType = (request.headers.get('content-type') || '').toLowerCase();
-    if (!contentType.startsWith('application/json')) {
-      return json({ error: 'Unsupported Media Type' }, 415);
-    }
-  }
-  return null;
+  const rejection = sameOriginJsonRejection(request, resolveRequestAuthOrigin(request), opts);
+  return rejection ? json({ error: rejection.error }, rejection.status) : null;
 }
