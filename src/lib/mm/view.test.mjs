@@ -96,3 +96,14 @@ test('page error state: domain 404 → notFound, anything else → unavailable',
   assert.equal(pageErrorState(new Error('ECONNREFUSED')), 'unavailable');
   assert.equal(pageErrorState(null), 'unavailable');
 });
+
+test('definitionExcerpt: plain text from markdown (no fences, math delimiters, links or HTML), capped', async () => {
+  const { definitionExcerpt } = await import('./view.ts');
+  const md = "# Title\n\nThe **weight** matrix $\\mathbf{W}$ maps [inputs](https://x.test) to _outputs_ <b>x</b>.\n\n```lily\n{ c'4 }\n```\n\n$$\na^2\n$$\n\n- see [[Other|other concept]]";
+  const out = definitionExcerpt(md, 200);
+  assert.equal(out, 'Title The weight matrix \\mathbf{W} maps inputs to outputs x . a^2 see other concept');
+  assert.ok(!/[<>$`]|https?:|c'4/.test(out), out);
+  const long = definitionExcerpt('word '.repeat(80), 50);
+  assert.ok(long.length <= 50 && long.endsWith('…'), long);
+  assert.equal(definitionExcerpt(null), '');
+});

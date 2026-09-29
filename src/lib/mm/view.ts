@@ -117,3 +117,34 @@ export function pageErrorState(err: unknown): 'notFound' | 'unavailable' {
   const domain = e?.name === 'ForumError' || e?.name === 'ConceptError' || e?.name === 'MmApiError';
   return domain && e?.status === 404 ? 'notFound' : 'unavailable';
 }
+
+/**
+ * Plain-text excerpt of a markdown definition (meta descriptions, lists):
+ * code/LilyPond fences and HTML dropped, math delimiters, link/image/wiki
+ * syntax and emphasis markers removed, whitespace collapsed, at most `max`
+ * characters (cut at a word boundary, with an ellipsis). Text only: callers
+ * must still escape it (Astro does).
+ */
+export function definitionExcerpt(markdown: unknown, max = 200): string {
+  let s = typeof markdown === 'string' ? markdown : '';
+  s = s
+    .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[`~]*[ \t]*(?=\n|$)|$)/gm, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/?[A-Za-z][^>]*>/g, ' ')
+    .replace(/\$\$([\s\S]*?)\$\$/g, ' $1 ')
+    .replace(/\$([^$\n]+)\$/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, '$2')
+    .replace(/\[\[([^\]]*)\]\]/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/^ {0,3}(#{1,6}|>+|[-*+]|\d+[.)])[ \t]+/gm, '')
+    .replace(/(\*\*|__|~~|==)(?=\S)([\s\S]*?\S)\1/g, '$2')
+    .replace(/(^|[\s(])[*_](?=\S)([^*_\n]*?\S)[*_](?=[\s).,;:!?]|$)/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, Math.max(1, max - 1));
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}

@@ -15,9 +15,14 @@
 // Languages: English is the source (v1 at creation, required); Bokmål/Nynorsk
 // versions exist only when written or adopted by a person. Nothing here ever
 // fills a missing language from another one.
+//
+// Definitions are markdown (KaTeX, ```lily fences, [@key] citations). getConcept
+// returns the raw `definition` (for editing/adopt forms and exports) and a
+// `definitionHtml` produced by the injected `render` — mm passes its sanitized
+// forum renderer (concepts.ts); without one, escaped plain text.
 
 import { can, type MmAction, type MmPolicyCtx } from './policy.ts';
-import { COMMONS_ROLES, isUuid, type CommonsRole } from '../tenant/space-roles.ts';
+import { COMMONS_ROLES, isUuid, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
 import { publicName } from './view.ts';
 
@@ -368,7 +373,10 @@ export async function createConcept(
 export type ConceptVersionView = {
   id: string;
   lang: ConceptLang;
+  /** Raw markdown as written (editing, adopt dialogs, exports). Never render as HTML. */
   definition: string;
+  /** Sanitized HTML of `definition` from the injected renderer; the only HTML pages may use. */
+  definitionHtml: string;
   sources: Source[];
   editedBy: UserRef;
   credited: UserRef;
@@ -415,6 +423,57 @@ export function currentByLang(versions: ConceptVersionView[]): Partial<Record<Co
   return out;
 }
 
+/** What the definition renderer is told about a version (cache key material; same shape as a forum post ref). */
+export type DefinitionRenderRef = {
+  id: string;
+  updatedAt: string | null;
+  forumId?: string | null;
+  forumBibliography?: string | null;
+};
+export type DefinitionRender = (markdown: string, ref?: DefinitionRenderRef) => Promise<string>;
+
+const escapeHtml = (s: string) =>
+  s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+
+/** Fallback rendering: escaped text, line breaks kept. */
+export const plainDefinitionHtml: DefinitionRender = async (md) => `<p class="mm-pre-line">${escapeHtml(md)}</p>`;
+
+/**
+ * A forum's bibliography link (Seshat library id + normalized owner email)
+ * from its raw `settings` JSON: part of the render cache key, so re-linking a
+ * forum's library re-renders its posts and concept definitions. Server-side
+ * only (hashed into the key, never shown).
+ */
+export function forumBibliographyKey(rawSettings: unknown): string {
+  let obj: unknown = rawSettings;
+  if (typeof obj === 'string') {
+    try {
+      obj = JSON.parse(obj);
+    } catch {
+      obj = {};
+    }
+  }
+  const rec = obj && typeof obj === 'object' && !Array.isArray(obj) ? (obj as Record<string, unknown>) : {};
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+  const library = str(rec.seshatLibraryId);
+  const owner = str(rec.ownerEmail);
+  return `${library}|${owner ? normalizeEmail(owner) : ''}`;
+}
+
+/** Runs `fn` over `items` with at most `limit` in flight, keeping order. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 function parseSources(raw: unknown): Source[] {
   if (Array.isArray(raw)) return raw as Source[];
   if (typeof raw === 'string') {
@@ -428,16 +487,26 @@ function parseSources(raw: unknown): Source[] {
   return [];
 }
 
+/**
+ * `render` turns each version's markdown into `definitionHtml` (mm: the
+ * sanitized forum renderer, citations against the concept's forum). A render
+ * failure falls back to escaped text for that version.
+ */
 export async function getConcept(
   q: QueryFn,
-  { spaceId, slug, viewerUserId = null }: { spaceId: string; slug: string; viewerUserId?: string | null },
+  {
+    spaceId,
+    slug,
+    viewerUserId = null,
+    render = plainDefinitionHtml,
+  }: { spaceId: string; slug: string; viewerUserId?: string | null; render?: DefinitionRender },
 ): Promise<ConceptView | null> {
   if (typeof spaceId !== 'string' || !isUuid(spaceId) || typeof slug !== 'string' || !slug) return null;
   const rows = await run(
     q,
     `SELECT c.id, c."spaceId", c.slug, c.label, c."labelNb", c.status, c."threadId", c."createdBy",
             c."createdAt", c."updatedAt", u.name AS "createdByName",
-            f.id AS "forumId", f.slug AS "forumSlug", f.title AS "forumTitle"
+            f.id AS "forumId", f.slug AS "forumSlug", f.title AS "forumTitle", f.settings AS "forumSettings"
      FROM "Concept" c
      LEFT JOIN "User" u ON u.id = c."createdBy"
      LEFT JOIN "ForumBoard" f ON f.id = c."forumId"
@@ -459,10 +528,26 @@ export async function getConcept(
      ORDER BY v."createdAt" DESC, v.id DESC`,
     [c.id],
   );
-  const history: ConceptVersionView[] = versionRows.map((v: any) => ({
+  const forumId: string | null = c.forumId ?? null;
+  const forumBibliography = forumId ? forumBibliographyKey(c.forumSettings) : '';
+  const renderDefinition = async (v: any): Promise<string> => {
+    const markdown = typeof v.definition === 'string' ? v.definition : '';
+    if (!markdown) return '';
+    const createdAt = v.createdAt instanceof Date ? v.createdAt.toISOString() : v.createdAt ? String(v.createdAt) : null;
+    try {
+      // Versions are immutable: the id (+ createdAt) identifies the text.
+      return await render(markdown, { id: `concept-version:${v.id}`, updatedAt: createdAt, forumId, forumBibliography });
+    } catch (err) {
+      console.error('[mm/concepts-core] definition render failed:', err);
+      return plainDefinitionHtml(markdown);
+    }
+  };
+  const htmls = await mapLimit(versionRows, 4, renderDefinition);
+  const history: ConceptVersionView[] = versionRows.map((v: any, i: number) => ({
     id: v.id,
     lang: v.lang,
     definition: v.definition,
+    definitionHtml: htmls[i],
     sources: parseSources(v.sources),
     editedBy: userRef(v.editedBy, v.editedByName),
     credited: userRef(v.creditedUserId, v.creditedName),

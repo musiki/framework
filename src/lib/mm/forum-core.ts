@@ -16,7 +16,7 @@
 // (forum.ts binds musiki's renderForumMarkdown: KaTeX, LilyPond, @citekey).
 
 import { can, type MmAction } from './policy.ts';
-import { getCommonsRole, withTransaction, type QueryFn } from './concepts-core.ts';
+import { forumBibliographyKey, getCommonsRole, withTransaction, type QueryFn } from './concepts-core.ts';
 import { isUuid, isValidEmail, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
 import { publicName } from './view.ts';
@@ -669,8 +669,7 @@ export async function listPosts(
 
   const role = await viewerRole(q, spaceId, viewerUserId);
   const canModerate = can(role, 'moderate');
-  const bib = parseSettings(t.forumSettings);
-  const forumBibliography = `${bib.seshatLibraryId ?? ''}|${bib.ownerEmail ? normalizeEmail(bib.ownerEmail) : ''}`;
+  const forumBibliography = forumBibliographyKey(t.forumSettings);
 
   const rows = await run(
     q,
