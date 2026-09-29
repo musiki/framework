@@ -42,14 +42,14 @@ test('sanitize keeps KaTeX math (rendered after sanitizing)', async () => {
 test('sanitize keeps a LilyPond figure (inline svg replaced by its image) and remote figures', async () => {
   const local = await safe('<figure class="lilypond-block lily-score" data-lily-url="/lily/abc123.svg" data-midi-url="/lily/abc123.midi"><svg onload="alert(1)"><script>x</script></svg></figure>');
   assert.match(local, /<figure class="lilypond-block lily-score" data-lily-url="\/lily\/abc123\.svg" data-midi-url="\/lily\/abc123\.midi">/);
-  assert.match(local, /<img src="\/lily\/abc123\.svg" alt="Musical score" loading="lazy"/);
+  assert.match(local, /<img src="\/lily\/abc123\.svg" alt="" loading="lazy"/);
   assert.ok(!/<svg|onload|<script/.test(local), local);
 
   // Remote (third-party) scores are not loaded in sanitize mode.
-  const remote = await safe('<figure class="lilypond-block lily-score" data-lily-url="https://lily.test/s.svg" data-midi-url="https://lily.test/s.midi"><img src="https://lily.test/s.svg" alt="Musical score" loading="lazy" /></figure>');
+  const remote = await safe('<figure class="lilypond-block lily-score" data-lily-url="https://lily.test/s.svg" data-midi-url="https://lily.test/s.midi"><img src="https://lily.test/s.svg" alt="" loading="lazy" /></figure>');
   assert.ok(!/<img/.test(remote), remote);
   assert.ok(!/data-lily-url|data-midi-url/.test(remote), remote);
-  assert.match(remote, /<a rel="nofollow noopener noreferrer" href="https:\/\/lily\.test\/s\.svg">\[image: Musical score\]<\/a>/);
+  assert.match(remote, /<a rel="nofollow noopener noreferrer" href="https:\/\/lily\.test\/s\.svg">\[image\]<\/a>/);
   const remoteNoImg = await safe('<figure class="lilypond-block lily-score" data-lily-url="https://lily.test/s.svg"></figure>');
   assert.ok(!/<img|lily\.test/.test(remoteNoImg), remoteNoImg);
 
@@ -184,11 +184,11 @@ test('sanitize: `% rendered:` stripping splits on every line terminator', async 
 test('lilypond scores never get a visible caption from their alt text', async () => {
   const { default: rehypeObsidianImageSize } = await import('../plugins/rehype-obsidian-image-size.mjs');
   const tree = { type: 'root', children: [{ type: 'element', tagName: 'figure', properties: { className: ['lilypond-block', 'lily-score'] }, children: [
-    { type: 'element', tagName: 'img', properties: { src: '/lily/abc.svg', alt: 'Musical score' }, children: [] },
+    { type: 'element', tagName: 'img', properties: { src: '/lily/abc.svg', alt: '' }, children: [] },
   ] }] };
   rehypeObsidianImageSize()(tree);
   const fig = tree.children[0];
   assert.equal(fig.children.length, 1);
   assert.equal(fig.children[0].tagName, 'img');
-  assert.equal(fig.children[0].properties.alt, 'Musical score');
+  assert.equal(fig.children[0].properties.alt, '');
 });

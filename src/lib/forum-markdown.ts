@@ -211,7 +211,7 @@ export function rehypeLilyFigureImage() {
     const url = String(node.properties?.dataLilyUrl ?? '');
     if (hasImg || !LILY_URL_RE.test(url)) return;
     node.children = [
-      { type: 'element', tagName: 'img', properties: { src: url, alt: 'Musical score', loading: 'lazy' }, children: [] },
+      { type: 'element', tagName: 'img', properties: { src: url, alt: '', loading: 'lazy' }, children: [] },
     ];
   };
   return (tree: any) => visitNode(tree);
