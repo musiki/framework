@@ -185,3 +185,58 @@ test('context loader falls back on undefined column/table, rethrows others', asy
   const bad = async () => ({ data: null, error: { code: '22P02' } });
   await assert.rejects(() => loadSpaceAccessContext(bad, 't', 'u1'));
 });
+
+test('removal sticks against email/domain rules in commons spaces; an invite still re-admits', () => {
+  const rules = [
+    { spaceId: 's1', kind: 'email', value: 'ana@nmh.no', role: 'member' },
+    { spaceId: 's1', kind: 'domain', value: 'nmh.no', role: 'guest' },
+  ];
+  const d = decideSpaceAccess({ ...base, spaces: [commons({ openJoin: true })], blockedSpaceIds: ['s1'], rules });
+  assert.deepEqual(d, { allowed: false, reason: 'no-grant' });
+  const i = decideSpaceAccess({ ...base, spaces: [commons()], blockedSpaceIds: ['s1'], rules, invites: [invite({ role: 'member' })] });
+  assert.deepEqual(i.grants.map((g) => g.via), ['invite']);
+  // Blocks only apply to commons spaces; dissertation rules are unaffected.
+  const diss = decideSpaceAccess({ ...base, blockedSpaceIds: ['s1'], rules: [{ spaceId: 's1', kind: 'domain', value: 'nmh.no', role: 'guest' }] });
+  assert.equal(diss.grants[0].via, 'domain-rule');
+});
+
+import { unblockOnInvite } from './access-unblock.ts';
+
+const fakeClient = (failDelete) => {
+  const calls = [];
+  return {
+    calls,
+    query: async (text, params) => {
+      calls.push(text.trim().split(/\s+/).slice(0, 3).join(' '));
+      if (text.includes('SpaceMemberBlock') && failDelete) throw failDelete;
+      return { rows: [] };
+    },
+  };
+};
+const commonsSpaces = [{ id: 's1', kind: 'commons' }];
+
+test('unblockOnInvite: only invite grants into commons spaces delete the block', async () => {
+  for (const grant of [
+    { spaceId: 's1', role: 'member', via: 'email-rule' },
+    { spaceId: 's1', role: 'member', via: 'open-join' },
+  ]) {
+    const c = fakeClient();
+    assert.equal(await unblockOnInvite(c, grant, 'u1', commonsSpaces), false);
+    assert.deepEqual(c.calls, []);
+  }
+  const diss = fakeClient();
+  assert.equal(await unblockOnInvite(diss, { spaceId: 's2', role: 'guest', via: 'invite', inviteId: 'i1' }, 'u1', [{ id: 's2', kind: 'dissertation' }]), false);
+  assert.deepEqual(diss.calls, []);
+  const c = fakeClient();
+  assert.equal(await unblockOnInvite(c, { spaceId: 's1', role: 'member', via: 'invite', inviteId: 'i1' }, 'u1', commonsSpaces), true);
+  assert.deepEqual(c.calls, ['SAVEPOINT unblock', 'DELETE FROM "SpaceMemberBlock"', 'RELEASE SAVEPOINT unblock']);
+});
+
+test('unblockOnInvite tolerates a missing block table (42P01) via savepoint; rethrows other errors', async () => {
+  const grant = { spaceId: 's1', role: 'member', via: 'invite', inviteId: 'i1' };
+  const missing = fakeClient(Object.assign(new Error('relation does not exist'), { code: '42P01' }));
+  assert.equal(await unblockOnInvite(missing, grant, 'u1', commonsSpaces), false);
+  assert.deepEqual(missing.calls, ['SAVEPOINT unblock', 'DELETE FROM "SpaceMemberBlock"', 'ROLLBACK TO SAVEPOINT']);
+  const other = fakeClient(Object.assign(new Error('deadlock'), { code: '40P01' }));
+  await assert.rejects(unblockOnInvite(other, grant, 'u1', commonsSpaces), /deadlock/);
+});

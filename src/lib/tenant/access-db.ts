@@ -2,6 +2,7 @@ import { getClient, query } from '../db/pool';
 import { resolveUserIdByEmail } from '../user-email';
 import { decideSpaceAccess, shouldRejectMusikiSignIn, type AccessRuleRow, type InviteRow } from './access';
 import { loadSpaceAccessContext } from './access-context';
+import { unblockOnInvite } from './access-unblock.ts';
 import { emailDomain, normalizeEmail } from './space-roles';
 import { DEFAULT_TENANT_ID, type TenantId } from './tenants';
 
@@ -82,23 +83,7 @@ export async function authorizeTenantSignIn(
            ON CONFLICT ("spaceId", "userId") DO NOTHING`,
           [grant.spaceId, userId, grant.role],
         );
-        // Being (re-)admitted to a commons space lifts an earlier removal's
-        // open-join block (open-join grants never target blocked spaces, so this
-        // only fires for invites/rules). Savepoint: a not-yet-migrated block
-        // table (42P01) must not abort sign-in.
-        if (spaces.some((sp) => sp.id === grant.spaceId && sp.kind === 'commons')) {
-          await client.query('SAVEPOINT unblock');
-          try {
-            await client.query(
-              `DELETE FROM "SpaceMemberBlock" WHERE "spaceId" = $1 AND "userId" = $2`,
-              [grant.spaceId, userId],
-            );
-            await client.query('RELEASE SAVEPOINT unblock');
-          } catch (err: any) {
-            if (err?.code !== '42P01') throw err;
-            await client.query('ROLLBACK TO SAVEPOINT unblock');
-          }
-        }
+        await unblockOnInvite(client, grant, userId as string, spaces);
         if (grant.inviteId) {
           await client.query(
             `UPDATE "SpaceInvite" SET "acceptedAt" = now() WHERE "id" = $1 AND "acceptedAt" IS NULL`,

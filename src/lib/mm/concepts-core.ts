@@ -98,12 +98,18 @@ export async function withTransaction<T>(q: QueryFn, fn: () => Promise<T>): Prom
 
 /**
  * Whether a pooled client that ran a failed core call must be destroyed rather
- * than returned to the pool: only expected domain errors (ConceptError < 500,
+ * than returned to the pool: only expected domain errors (ConceptError,
+ * ForumError or MmApiError < 500,
  * thrown before BEGIN or after a successful ROLLBACK) leave it clean.
  */
 export function shouldDestroyClient(err: unknown, rollbackFailed: boolean): boolean {
   if (rollbackFailed) return true;
-  return !(err instanceof ConceptError && err.status < 500);
+  // Name check (not instanceof) so forum-core's ForumError and api-core's
+  // MmApiError count too without a circular import.
+  const name = (err as { name?: unknown })?.name;
+  const status = Number((err as { status?: unknown })?.status);
+  const domain = err instanceof ConceptError || name === 'ForumError' || name === 'MmApiError';
+  return !(domain && err instanceof Error && Number.isFinite(status) && status < 500);
 }
 
 const isUniqueViolation = (err: unknown) => (err as { code?: unknown })?.code === '23505';

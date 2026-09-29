@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mmHandler, errorResponse, requireUuidParam, readJsonObject, conceptPatchKind, loadMmSpace, MmApiError, SPACE_SQL,
+  createWriteLimiter, apiLang,
 } from './api-core.ts';
-import { ConceptError } from './concepts-core.ts';
+import { ConceptError, shouldDestroyClient } from './concepts-core.ts';
 import { ForumError } from './forum-core.ts';
 
 const SPACE = { id: '00000000-0000-4000-8000-000000000001', settings: {} };
@@ -15,12 +16,13 @@ const deps = (over = {}) => ({
   loadSpace: async () => SPACE,
   loadUserId: async (locals) => (locals.session ? USER : null),
   q: async () => ({ data: [], error: null }),
+  allowWrite: () => true,
   ...over,
 });
 
-const ctx = ({ tenant = 'mm', method = 'GET', headers = {}, session = null, body, params = {} } = {}) => {
+const ctx = ({ tenant = 'mm', method = 'GET', headers = {}, session = null, body, params = {}, clientAddress } = {}) => {
   const request = new Request(`${ORIGIN}/api/mm/x`, { method, headers, body });
-  return { request, url: new URL(request.url), params, locals: { tenant: tenant === null ? undefined : { id: tenant }, session } };
+  return { request, url: new URL(request.url), params, clientAddress, locals: { tenant: tenant === null ? undefined : { id: tenant }, session } };
 };
 
 const ok = async (_c, env) => new Response(JSON.stringify({ ok: true, userId: env.userId, space: env.space.id }), { status: 200 });
@@ -111,6 +113,78 @@ test('readJsonObject rejects malformed and non-object bodies', async () => {
   await assert.rejects(readJsonObject(req('[1]')), (e) => e.status === 400);
   await assert.rejects(readJsonObject(req('null')), (e) => e.status === 400);
   assert.deepEqual(await readJsonObject(req('{"a":1}')), { a: 1 });
+});
+
+test('concept PATCH rejects unknown extra keys', () => {
+  assert.throws(() => conceptPatchKind({ definition: 'x', spaceId: 'y' }), (e) => e.status === 400 && /unexpected field: spaceId/.test(e.message));
+  assert.throws(() => conceptPatchKind({ status: 'assimilated', lang: 'nb' }), (e) => e.status === 400);
+  assert.throws(() => conceptPatchKind({ label: 'X', sources: [] }), (e) => e.status === 400);
+  assert.equal(conceptPatchKind({ definition: 'x', lang: 'nb', sources: [] }), 'definition');
+  assert.equal(conceptPatchKind({ label: 'X', labelNb: 'Y' }), 'labels');
+});
+
+test('API languages are en and nb only (nn is a UI fallback)', () => {
+  assert.equal(apiLang(undefined), 'en');
+  assert.equal(apiLang('en'), 'en');
+  assert.equal(apiLang('nb'), 'nb');
+  for (const bad of ['nn', 'no', 'EN', 1]) assert.throws(() => apiLang(bad), (e) => e.status === 400);
+});
+
+test('shouldDestroyClient: ForumError/MmApiError < 500 are clean like ConceptError', () => {
+  for (const status of [400, 401, 403, 404, 409]) {
+    assert.equal(shouldDestroyClient(new ForumError(status, 'x'), false), false);
+    assert.equal(shouldDestroyClient(new MmApiError(status, 'x'), false), false);
+  }
+  assert.equal(shouldDestroyClient(new ForumError(500, 'x'), false), true);
+  assert.equal(shouldDestroyClient(new MmApiError(409, 'x'), true), true);
+  assert.equal(shouldDestroyClient({ name: 'ForumError', status: 400 }, false), true);
+  assert.equal(shouldDestroyClient(Object.assign(new Error('x'), { status: 400 }), false), true);
+});
+
+test('write limiter: 30/min and 300/hour per key; votes in a looser separate bucket', () => {
+  let t = 0;
+  const allow = createWriteLimiter(() => t);
+  for (let i = 0; i < 30; i++) assert.equal(allow('write', 'u:a'), true);
+  assert.equal(allow('write', 'u:a'), false);
+  assert.equal(allow('write', 'u:b'), true, 'per key');
+  assert.equal(allow('vote', 'u:a'), true, 'votes counted separately');
+  // Hourly cap: 300 writes spread over minutes.
+  const hourly = createWriteLimiter(() => t);
+  t = 0;
+  let allowed = 0;
+  for (let m = 0; m < 59; m++) { t = m * 60_000; for (let i = 0; i < 30; i++) if (hourly('write', 'u:c')) allowed++; }
+  assert.equal(allowed, 300);
+  t = 3_600_001;
+  assert.equal(hourly('write', 'u:c'), true, 'resets after the hour');
+  let v = 0;
+  const votes = createWriteLimiter(() => 0);
+  for (let i = 0; i < 200; i++) if (votes('vote', 'u:d')) v++;
+  assert.equal(v, 120);
+});
+
+test('mmHandler: mutations are rate-limited per user (429), keyed by user id, bucket from opts; reads are not', async () => {
+  const seen = [];
+  const d = deps({ allowWrite: (bucket, key) => { seen.push([bucket, key]); return seen.length <= 1; } });
+  const session = { user: { email: 'a@b.c' } };
+  const post = () => ctx({ method: 'POST', session, headers: { 'content-type': 'application/json' }, body: '{}' });
+  const h = mmHandler({ mutation: true, rateBucket: 'vote' }, ok, d);
+  assert.equal((await h(post())).status, 200);
+  const limited = await h(post());
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get('retry-after'), '60');
+  assert.deepEqual(seen[0], ['vote', `u:${USER}`]);
+  await mmHandler({}, ok, d)(ctx());
+  assert.equal(seen.length, 2, 'GET does not count');
+  // Anonymous mutation without auth requirement → keyed by client address.
+  const anon = [];
+  const a = mmHandler({ mutation: true, auth: false }, ok, deps({ allowWrite: (b, k) => { anon.push(k); return true; } }));
+  await a(ctx({ method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.9' }, body: '{}' }));
+  assert.deepEqual(anon, ['ip:203.0.113.9']);
+  // Anonymous writes needing auth are 401 before counting.
+  const none = [];
+  const w = mmHandler({ mutation: true }, ok, deps({ allowWrite: (b, k) => { none.push(k); return true; } }));
+  assert.equal((await w(ctx({ method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }))).status, 401);
+  assert.deepEqual(none, []);
 });
 
 test('concept PATCH carries exactly one kind of change', () => {

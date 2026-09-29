@@ -4,7 +4,8 @@
 //      so anything but tenant `mm` gets a JSON 404;
 //   2. CSRF on mutations (same rule as studio's assertSameOriginJson);
 //   3. the mm commons space (resolved once per request; 404 when not seeded);
-//   4. the session user id (401 on writes that need one; reads get null);
+//   4. the session user id (401 on writes that need one; reads get null),
+//      then a per-user write rate limit on mutations (429);
 //   5. the handler, with domain errors (ConceptError/ForumError/MmApiError:
 //      numeric `status` 400–409) mapped to their status and anything else
 //      logged server-side and returned as a generic 500.
@@ -14,6 +15,8 @@
 import { sameOriginJsonRejection } from '../tenant/same-origin.ts';
 import { isUuid } from '../tenant/space-roles.ts';
 import type { QueryFn } from './concepts-core.ts';
+import { createRateLimiter } from './bibliography.ts';
+import { clientKey } from './client-key.ts';
 
 export const MM_TENANT_ID = 'mm';
 export const MM_SPACE_SLUG = 'mishmash';
@@ -68,6 +71,28 @@ export async function readJsonObject(request: Request): Promise<Record<string, u
   return body as Record<string, unknown>;
 }
 
+// ---------------------------------------------------------------------------
+// Write rate limits (per user; per client address when there is no user)
+// ---------------------------------------------------------------------------
+
+export type RateBucket = 'write' | 'vote';
+export const RATE_LIMITS: Record<RateBucket, Array<{ max: number; windowMs: number }>> = {
+  write: [{ max: 30, windowMs: 60_000 }, { max: 300, windowMs: 3_600_000 }],
+  vote: [{ max: 120, windowMs: 60_000 }, { max: 1000, windowMs: 3_600_000 }],
+};
+
+/** `(bucket, key) => allowed`; every window of the bucket counts the hit. In-process (single node). */
+export function createWriteLimiter(now: () => number = Date.now): (bucket: RateBucket, key: string) => boolean {
+  const limiters = Object.fromEntries(
+    (Object.keys(RATE_LIMITS) as RateBucket[]).map((b) => [b, RATE_LIMITS[b].map((l) => createRateLimiter(l.max, l.windowMs, now))]),
+  ) as Record<RateBucket, Array<(key: string) => boolean>>;
+  return (bucket, key) => {
+    let ok = true;
+    for (const allow of limiters[bucket]) if (!allow(key)) ok = false;
+    return ok;
+  };
+}
+
 export type MmDeps = {
   /** The tenant-aware origin mutations must come from (resolveRequestAuthOrigin). */
   expectedOrigin: (request: Request) => string;
@@ -76,6 +101,8 @@ export type MmDeps = {
   /** The signed-in user's id, or null. */
   loadUserId: (locals: any) => Promise<string | null>;
   q: QueryFn;
+  /** Mutation rate limit; see createWriteLimiter. */
+  allowWrite: (bucket: RateBucket, key: string) => boolean;
 };
 
 export type MmCtx = {
@@ -83,6 +110,8 @@ export type MmCtx = {
   url: URL;
   params: Record<string, string | undefined>;
   locals: any;
+  /** Adapter client address (fallback rate-limit key for anonymous mutations). */
+  clientAddress?: string;
 };
 
 export type MmEnv = {
@@ -100,6 +129,8 @@ export type MmHandlerOptions = {
   auth?: boolean;
   /** Log tag for 500s. */
   tag?: string;
+  /** Rate-limit bucket for mutations (default 'write'). */
+  rateBucket?: RateBucket;
 };
 
 export function mmHandler(
@@ -122,6 +153,12 @@ export function mmHandler(
       if (!space) return json({ error: 'Not found' }, 404);
       const userId = await deps.loadUserId(ctx.locals);
       if (requireAuth && !userId) return json({ error: 'Not authenticated' }, 401);
+      if (mutation) {
+        const key = userId ? `u:${userId}` : `ip:${clientKey(ctx.request.headers, ctx.clientAddress)}`;
+        if (!deps.allowWrite(opts.rateBucket ?? 'write', key)) {
+          return json({ error: 'Too many requests' }, 429, { 'Retry-After': '60' });
+        }
+      }
       return await fn(ctx, { space, userId, q: deps.q });
     } catch (err) {
       return errorResponse(err, opts.tag);
@@ -177,11 +214,24 @@ export async function assertRelationInSpace(q: QueryFn, spaceId: string, relatio
  * PATCH /concepts/[slug] carries exactly one kind of change: a definition
  * version (`definition` + `lang` [+ `sources`]), a status, or labels.
  */
+const PATCH_KEYS = { definition: ['definition', 'lang', 'sources'], status: ['status'], labels: ['label', 'labelNb'] } as const;
+
 export function conceptPatchKind(body: Record<string, unknown>): 'definition' | 'status' | 'labels' {
   const kinds: Array<'definition' | 'status' | 'labels'> = [];
   if ('definition' in body) kinds.push('definition');
   if ('status' in body) kinds.push('status');
   if ('label' in body || 'labelNb' in body) kinds.push('labels');
   if (kinds.length !== 1) throw new MmApiError(400, 'send exactly one of: definition, status, label/labelNb');
+  const allowed: readonly string[] = PATCH_KEYS[kinds[0]];
+  const extra = Object.keys(body).filter((k) => !allowed.includes(k));
+  if (extra.length) throw new MmApiError(400, `unexpected field: ${extra[0].slice(0, 40)}`);
   return kinds[0];
+}
+
+/** Languages the API writes: English (source) and hand-written Bokmål. Nynorsk is a UI fallback only. */
+export const API_LANGS = ['en', 'nb'] as const;
+export function apiLang(raw: unknown): 'en' | 'nb' {
+  if (raw === undefined || raw === null || raw === '') return 'en';
+  if (raw === 'en' || raw === 'nb') return raw;
+  throw new MmApiError(400, 'lang must be en or nb');
 }

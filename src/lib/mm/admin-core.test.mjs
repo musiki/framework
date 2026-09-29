@@ -35,28 +35,52 @@ test('invites/rules for commons never grant admin', () => {
   assert.equal(validateAccessRuleInput({ kind: 'domain', value: 'uio.no', role: 'member' }, 'commons').ok, true);
 });
 
-test('setMemberRole: commons roles only, not yourself, 404 for non-members', async () => {
-  const { q } = fakeQ([[/UPDATE "SpaceMember"/, (_t, p) => ({ data: p[2] === OTHER ? [{ role: p[0] }] : [], error: null })]]);
+const admins = (...ids) => [/role = 'admin' ORDER BY "userId" FOR UPDATE/, () => ({ data: ids.map((userId) => ({ userId })), error: null })];
+
+test('setMemberRole: commons roles only, not yourself, 404 for non-members, in a transaction', async () => {
+  const { q, calls } = fakeQ([
+    admins(ADMIN),
+    [/UPDATE "SpaceMember"/, (_t, p) => ({ data: p[2] === OTHER ? [{ role: p[0] }] : [], error: null })],
+  ]);
   assert.deepEqual(await setMemberRole(q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER, role: 'curator' }), { userId: OTHER, role: 'curator' });
+  assert.equal(calls[0].text, 'BEGIN');
+  assert.match(calls[1].text, /FOR UPDATE/);
+  assert.equal(calls.at(-1).text, 'COMMIT');
   await assert.rejects(setMemberRole(q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER, role: 'author' }), (e) => e.status === 400);
   await assert.rejects(setMemberRole(q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: 'x', role: 'guest' }), (e) => e.status === 400);
   await assert.rejects(setMemberRole(q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: ADMIN, role: 'guest' }), (e) => e.status === 409);
   await assert.rejects(setMemberRole(q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: id(9), role: 'guest' }), (e) => e.status === 404);
 });
 
-test('removeMember deletes the membership and inserts a SpaceMemberBlock row in one transaction', async () => {
-  const { q, calls } = fakeQ([[/DELETE FROM "SpaceMember"/, () => ({ data: [{ userId: OTHER }], error: null })]]);
+test('admin lockout guard: actor must still be admin; never zero admins', async () => {
+  // Actor was demoted concurrently: the locked admin set no longer contains them.
+  const gone = fakeQ([admins(OTHER)]);
+  await assert.rejects(setMemberRole(gone.q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER, role: 'guest' }), (e) => e.status === 403);
+  assert.ok(gone.calls.some((c) => c.text === 'ROLLBACK'));
+  assert.ok(!gone.calls.some((c) => /UPDATE "SpaceMember"/.test(c.text)));
+  // Demoting/removing the other admin while two exist is fine; the count check uses the locked rows.
+  const two = fakeQ([admins(ADMIN, OTHER), [/UPDATE "SpaceMember"/, () => ({ data: [{ role: 'member' }], error: null })],
+    [/DELETE FROM "SpaceMember"/, () => ({ data: [{ userId: OTHER }], error: null })]]);
+  assert.equal((await setMemberRole(two.q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER, role: 'member' })).role, 'member');
+  assert.deepEqual(await removeMember(two.q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER }), { removed: true });
+  // Promoting to admin never trips the guard.
+  const one = fakeQ([admins(ADMIN), [/UPDATE "SpaceMember"/, () => ({ data: [{ role: 'admin' }], error: null })]]);
+  assert.equal((await setMemberRole(one.q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER, role: 'admin' })).role, 'admin');
+});
+
+test('removeMember locks admins, deletes the membership and inserts a SpaceMemberBlock row in one transaction', async () => {
+  const { q, calls } = fakeQ([admins(ADMIN), [/DELETE FROM "SpaceMember"/, () => ({ data: [{ userId: OTHER }], error: null })]]);
   assert.deepEqual(await removeMember(q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER }), { removed: true });
-  const texts = calls.map((c) => c.text.trim().split(/\s+/).slice(0, 3).join(' '));
-  assert.equal(texts[0], 'BEGIN');
-  assert.match(calls[1].text, /DELETE FROM "SpaceMember"/);
-  assert.match(calls[2].text, /INSERT INTO "SpaceMemberBlock" \("spaceId", "userId"\)/);
-  assert.deepEqual(calls[2].params, [SPACE, OTHER]);
-  assert.equal(texts.at(-1), 'COMMIT');
+  assert.equal(calls[0].text, 'BEGIN');
+  assert.match(calls[1].text, /FOR UPDATE/);
+  assert.match(calls[2].text, /DELETE FROM "SpaceMember"/);
+  assert.match(calls[3].text, /INSERT INTO "SpaceMemberBlock" \("spaceId", "userId"\)/);
+  assert.deepEqual(calls[3].params, [SPACE, OTHER]);
+  assert.equal(calls.at(-1).text, 'COMMIT');
 });
 
 test('removeMember: non-member → 404 and rollback, never blocks', async () => {
-  const { q, calls } = fakeQ([]);
+  const { q, calls } = fakeQ([admins(ADMIN)]);
   await assert.rejects(removeMember(q, { spaceId: SPACE, actorUserId: ADMIN, targetUserId: OTHER }), (e) => e.status === 404);
   assert.ok(calls.some((c) => c.text === 'ROLLBACK'));
   assert.ok(!calls.some((c) => /SpaceMemberBlock/.test(c.text)));

@@ -53,8 +53,34 @@ function requireTarget(actorUserId: string, targetUserId: unknown): string {
 }
 
 /**
+ * Locks the space's admin rows (FOR UPDATE; call inside a transaction) and
+ * refuses when the acting admin lost admin meanwhile (403) or when the change
+ * would leave the space without an admin (409). Concurrent demotions serialize
+ * on these locks, so two admins cannot demote each other to zero.
+ */
+async function guardAdmins(
+  q: QueryFn,
+  spaceId: string,
+  actorUserId: string,
+  targetUserId: string,
+  targetStaysAdmin: boolean,
+): Promise<void> {
+  const admins = (
+    await run(
+      q,
+      `SELECT "userId" FROM "SpaceMember" WHERE "spaceId" = $1::uuid AND role = 'admin' ORDER BY "userId" FOR UPDATE`,
+      [spaceId],
+    )
+  ).map((r) => r.userId as string);
+  if (!admins.includes(actorUserId)) throw new MmApiError(403, 'Forbidden');
+  const remaining = admins.filter((u) => u !== targetUserId).length + (targetStaysAdmin ? 1 : 0);
+  if (remaining < 1) throw new MmApiError(409, 'the space must keep at least one admin');
+}
+
+/**
  * Any commons role (admins may promote to admin; invites/rules never grant it).
- * An admin cannot change their own role, so the space always keeps the acting admin.
+ * Never your own membership; never leaves zero admins. One transaction; `q`
+ * must be bound to one client.
  */
 export async function setMemberRole(
   q: QueryFn,
@@ -62,19 +88,24 @@ export async function setMemberRole(
 ): Promise<{ userId: string; role: CommonsRole }> {
   const target = requireTarget(input.actorUserId, input.targetUserId);
   if (!isRoleForKind('commons', input.role)) throw new MmApiError(400, 'invalid-role');
-  const r = await run(
-    q,
-    `UPDATE "SpaceMember" SET role = $1 WHERE "spaceId" = $2::uuid AND "userId" = $3::uuid RETURNING role`,
-    [input.role, input.spaceId, target],
-  );
-  if (!r.length) throw new MmApiError(404, 'member not found');
-  return { userId: target, role: r[0].role };
+  const role = input.role as CommonsRole;
+  return withTransaction(q, async () => {
+    await guardAdmins(q, input.spaceId, input.actorUserId, target, role === 'admin');
+    const r = await run(
+      q,
+      `UPDATE "SpaceMember" SET role = $1 WHERE "spaceId" = $2::uuid AND "userId" = $3::uuid RETURNING role`,
+      [role, input.spaceId, target],
+    );
+    if (!r.length) throw new MmApiError(404, 'member not found');
+    return { userId: target, role: r[0].role };
+  });
 }
 
 /**
- * Removes a member and records a SpaceMemberBlock row so open-join does not
- * re-admit them (an explicit invite or rule still can; accepting one deletes
- * the block). One transaction; `q` must be bound to one client.
+ * Removes a member and records a SpaceMemberBlock row so neither open-join
+ * nor email/domain rules re-admit them (only an explicit invite does, and
+ * accepting it deletes the block). Never your own membership; never the last
+ * admin. One transaction; `q` must be bound to one client.
  */
 export async function removeMember(
   q: QueryFn,
@@ -82,6 +113,7 @@ export async function removeMember(
 ): Promise<{ removed: true }> {
   const target = requireTarget(input.actorUserId, input.targetUserId);
   return withTransaction(q, async () => {
+    await guardAdmins(q, input.spaceId, input.actorUserId, target, false);
     const r = await run(
       q,
       `DELETE FROM "SpaceMember" WHERE "spaceId" = $1::uuid AND "userId" = $2::uuid RETURNING "userId"`,

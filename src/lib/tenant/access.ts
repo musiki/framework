@@ -20,7 +20,7 @@ export function decideSpaceAccess(input: {
   spaces?: SpaceInfo[];
   /** Spaces the user already belongs to (open-join never re-grants these). */
   memberSpaceIds?: string[];
-  /** Spaces the user was removed from: open-join skips them (invites/rules still work). */
+  /** Commons spaces the user was removed from: open-join and rules skip them (invites still work). */
   blockedSpaceIds?: string[];
 }): AccessDecision {
   const email = normalizeEmail(input.email);
@@ -40,12 +40,18 @@ export function decideSpaceAccess(input: {
     if (!isGrantableForKind(kindOf(inv.spaceId), inv.role)) continue;
     add({ spaceId: inv.spaceId, role: inv.role, via: 'invite', inviteId: inv.id });
   }
+  // A removal from a commons space (SpaceMemberBlock) sticks against email/domain
+  // rules and open-join; only an explicit invite re-admits.
+  const blocked = new Set(input.blockedSpaceIds ?? []);
+  const ruleBlocked = (spaceId: string) => blocked.has(spaceId) && kindOf(spaceId) === 'commons';
   for (const rule of input.rules) {
+    if (ruleBlocked(rule.spaceId)) continue;
     if (rule.kind === 'email' && rule.value === email && isGrantableForKind(kindOf(rule.spaceId), rule.role)) {
       add({ spaceId: rule.spaceId, role: rule.role, via: 'email-rule' });
     }
   }
   for (const rule of input.rules) {
+    if (ruleBlocked(rule.spaceId)) continue;
     if (rule.kind === 'domain' && domain && rule.value === domain && isGrantableForKind(kindOf(rule.spaceId), rule.role)) {
       add({ spaceId: rule.spaceId, role: rule.role, via: 'domain-rule' });
     }
@@ -53,7 +59,6 @@ export function decideSpaceAccess(input: {
 
   // Open-join: commons spaces only, verified email (checked above), no other grant, not already a member.
   const members = new Set(input.memberSpaceIds ?? []);
-  const blocked = new Set(input.blockedSpaceIds ?? []);
   for (const sp of info.values()) {
     if (sp.kind === 'commons' && sp.openJoin === true && !bySpace.has(sp.id) && !members.has(sp.id) && !blocked.has(sp.id)) {
       add({ spaceId: sp.id, role: 'member', via: 'open-join' });
