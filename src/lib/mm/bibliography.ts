@@ -63,19 +63,21 @@ const settingsObject = (raw: unknown): Record<string, unknown> => {
 };
 
 /**
- * Effective settings of a board: its own value per key, else (for a channel)
- * its group's (`row.parentSettings`, null for a top-level forum). Same rule as
- * forum-core effectiveSettings.
+ * Effective settings of a board (same rule as forum-core effectiveSettings):
+ * the Seshat link (library id + owner) is inherited as a PAIR — the channel's
+ * own pair when it has either key, else the group's (`row.parentSettings`,
+ * null for a top-level forum) — never the channel's library read on behalf
+ * of the group's owner. The Zotero collection is inherited on its own.
  */
 function toSettings(row: any): ForumBibliographySettings {
   const own = settingsObject(row.settings);
   const parent = settingsObject(row.parentSettings);
-  const pick = (k: string) => str(own[k]) ?? str(parent[k]);
-  const email = pick('ownerEmail')?.toLowerCase() ?? null;
+  const pairSource = str(own.seshatLibraryId) || str(own.ownerEmail) ? own : parent;
+  const email = str(pairSource.ownerEmail)?.toLowerCase() ?? null;
   return {
     forumId: String(row.id),
-    seshatLibraryId: pick('seshatLibraryId'),
-    zoteroCollection: pick('zoteroCollection'),
+    seshatLibraryId: str(pairSource.seshatLibraryId),
+    zoteroCollection: str(own.zoteroCollection) ?? str(parent.zoteroCollection),
     ownerEmail: email && email.length <= 320 && EMAIL_RE.test(email) ? email : null,
   };
 }

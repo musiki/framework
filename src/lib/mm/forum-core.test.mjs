@@ -108,6 +108,11 @@ test('cleanSettingsPatch: known keys only, validated, null/"" clears', () => {
   );
   assert.deepEqual(cleanSettingsPatch({ ownerEmail: null, zoteroCollection: '' }), { ownerEmail: null, zoteroCollection: null });
   assert.deepEqual(cleanSettingsPatch({ zoteroCollection: 'ABCD1234' }), { zoteroCollection: 'ABCD1234' });
+  // collection names may contain spaces; URLs must be https without whitespace
+  assert.deepEqual(cleanSettingsPatch({ zoteroCollection: ' Stiegler reading group ' }), { zoteroCollection: 'Stiegler reading group' });
+  for (const bad of ['https://x.org/a b', 'ftp://x.org/c', 'data:text/html,x', 'a<b', 'line\nbreak']) {
+    assert.throws(() => cleanSettingsPatch({ zoteroCollection: bad }), (e) => e.status === 400, bad);
+  }
   for (const bad of [
     { other: 'x' }, { ownerEmail: 'nope' }, { seshatLibraryId: 'has space' }, { zoteroCollection: 'javascript:alert(1)' },
     { zoteroCollection: 'http://insecure' }, { seshatLibraryId: 5 }, [], 'x',
@@ -712,9 +717,14 @@ const channelSummary = (cid, slug, title, over = {}) => summaryRow({
   settings: {}, parentSettings: forumRow().settings, threadCount: 1, conceptCount: 0, ...over,
 });
 
-test('effectiveSettings: own value per key, else the group\'s', () => {
-  assert.deepEqual(effectiveSettings({ seshatLibraryId: 'ch' }, { seshatLibraryId: 'g', ownerEmail: 'o@x.org' }),
-    { seshatLibraryId: 'ch', ownerEmail: 'o@x.org' });
+test('effectiveSettings: library+owner inherited as a pair, zotero on its own', () => {
+  const group = { seshatLibraryId: 'g', ownerEmail: 'o@x.org', zoteroCollection: 'GZ' };
+  // own library without owner: the channel's pair (no owner), never the group's owner
+  assert.deepEqual(effectiveSettings({ seshatLibraryId: 'ch' }, group), { seshatLibraryId: 'ch', zoteroCollection: 'GZ' });
+  assert.deepEqual(effectiveSettings({ ownerEmail: 'me@x.org' }, group), { ownerEmail: 'me@x.org', zoteroCollection: 'GZ' });
+  assert.deepEqual(effectiveSettings({ seshatLibraryId: 'ch', ownerEmail: 'me@x.org' }, group), { seshatLibraryId: 'ch', ownerEmail: 'me@x.org', zoteroCollection: 'GZ' });
+  assert.deepEqual(effectiveSettings({ zoteroCollection: 'Mine' }, group), { seshatLibraryId: 'g', ownerEmail: 'o@x.org', zoteroCollection: 'Mine' });
+  assert.deepEqual(effectiveSettings({}, group), group);
   assert.deepEqual(effectiveSettings({ zoteroCollection: 'Z' }, null), { zoteroCollection: 'Z' });
   assert.deepEqual(effectiveSettings('{}', '{"zoteroCollection":"G"}'), { zoteroCollection: 'G' });
 });
@@ -736,7 +746,7 @@ test('listForums: groups with nested channels; channels inherit the public bibli
   assert.deepEqual(tt.settings, { zoteroCollection: 'https://www.zotero.org/groups/1/c', hasBibliography: true });
   assert.equal(tt.overridesBibliography, false);
   assert.deepEqual(welcome.settings, { zoteroCollection: 'OWN', hasBibliography: true });
-  assert.equal(welcome.overridesBibliography, true);
+  assert.equal(welcome.overridesBibliography, false, 'a Zotero collection alone does not replace the Seshat link');
   noEmail(forums);
   // archived groups hide their channels; group counts include active channels
   assert.match(calls[0].text, /\(pb\.id IS NULL OR pb\."isArchived" = false\)/);
@@ -830,17 +840,40 @@ test('createForum with parentId: a channel of an active group; sibling slug chec
   await rejectsStatus(createForum(trig.q, { spaceId: SPACE, actorUserId: U.admin, title: 'Race', parentId: GROUP }), 400);
 });
 
-test('channel bibliography override: curators are checked against the inherited owner', async () => {
+test('channel bibliography override: the library/owner pair is never split across channel and group (C1)', async () => {
+  const GROUP_SETTINGS = forumRow().settings; // lib-1 owned by owner@uni.no (not the curator's)
   const base = [memberRoute, ownEmailsRoute({ [U.curator]: ['me@uni.no'] }), boardRoute(BOARDS), ['SELECT id FROM "ForumBoard"', () => []], insertBoard];
   const { q } = fakeQuery(base);
-  // library id alone would pair with the group owner (owner@uni.no, not the curator's)
-  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9' } }), 403);
-  await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9', ownerEmail: 'me@uni.no' } });
-  await createForum(q, { spaceId: SPACE, actorUserId: U.admin, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9' } });
+  const eff = (own) => effectiveSettings(own, GROUP_SETTINGS);
 
-  const upd = fakeQuery([...base, ['UPDATE "ForumBoard"', () => [BOARDS[CH_WELCOME]]]]);
-  await rejectsStatus(updateForum(upd.q, { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-9' } }), 403);
-  await updateForum(upd.q, { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, title: 'Welcome!', isArchived: true });
+  // Exploit path 1 (single request): own library + ownerEmail:null must not pair with the group owner.
+  const one = await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9', ownerEmail: null } });
+  assert.deepEqual(eff(one.settings), { seshatLibraryId: 'lib-9', zoteroCollection: GROUP_SETTINGS.zoteroCollection });
+  assert.equal(publicSettings(eff(one.settings)).hasBibliography, false);
+  // same with the library id alone
+  const alone = await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9' } });
+  assert.equal(eff(alone.settings).ownerEmail, undefined);
+
+  // Exploit path 2 (two steps): own pair with the curator's email, then PATCH ownerEmail:null.
+  const mineRow = forumRow({ id: CH_WELCOME, slug: 'welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9', ownerEmail: 'me@uni.no' }, parentSettings: GROUP_SETTINGS, parentArchived: false });
+  const upd = (row) => fakeQuery([...base.slice(0, 2), boardRoute({ [CH_WELCOME]: row }), ['UPDATE "ForumBoard"', () => [row]]]).q;
+  await updateForum(upd(mineRow), { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, settings: { ownerEmail: null } });
+  assert.deepEqual(eff({ seshatLibraryId: 'lib-9' }), { seshatLibraryId: 'lib-9', zoteroCollection: GROUP_SETTINGS.zoteroCollection },
+    'after step 2 the channel has a library without owner: no bibliography, never the group owner');
+
+  // A foreign owner on the channel is refused for curators, allowed for admins.
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9', ownerEmail: 'owner@uni.no' } }), 403);
+  await createForum(q, { spaceId: SPACE, actorUserId: U.admin, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9', ownerEmail: 'x@y.org' } });
+  await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9', ownerEmail: 'me@uni.no' } });
+
+  // Curator on a channel whose own pair is someone else's: changing the library keeps that owner → 403.
+  const foreignRow = { ...mineRow, settings: { seshatLibraryId: 'lib-9', ownerEmail: 'owner@uni.no' } };
+  await rejectsStatus(updateForum(upd(foreignRow), { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-x' } }), 403);
+  // ...their own pair may change its library; clearing the override falls back to exactly the group's pair.
+  await updateForum(upd(mineRow), { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-x' } });
+  await updateForum(upd(foreignRow), { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, settings: { seshatLibraryId: null, ownerEmail: null } });
+  // other fields never need the check
+  await updateForum(upd(foreignRow), { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, title: 'Welcome!', isArchived: true });
 });
 
 test('a channel of an archived group is closed (threads, posts, votes)', async () => {

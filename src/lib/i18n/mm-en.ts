@@ -406,7 +406,7 @@ export const mmEn = {
       channelSlugHelp: 'Lowercase letters, digits and hyphens; the channel is found at /f/{group}/ and this address. “t” is reserved. It cannot be changed later.',
       createChannel: 'Create channel',
       overrideBib: 'Override the group’s bibliography',
-      overrideBibHelp: 'Leave these empty to use the group’s bibliography. Each field you fill replaces the group’s value for this channel only.',
+      overrideBibHelp: 'Leave these empty to use the group’s bibliography. The library and its owner go together: fill both to use another library in this channel (filling only one leaves the channel without citations). A Zotero collection filled here replaces the group’s.',
       inheritsBib: 'Uses the group’s bibliography.',
       save: 'Save',
       cancel: 'Cancel',

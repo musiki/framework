@@ -188,8 +188,10 @@ export function cleanSettingsPatch(raw: unknown): Partial<Record<ForumSettingsKe
       if (!LIBRARY_ID_RE.test(v)) throw new ForumError(400, 'invalid seshatLibraryId');
       out[k] = v;
     } else if (k === 'zoteroCollection') {
-      if (v.length > 500 || /[\s<>"]/.test(v)) throw new ForumError(400, 'invalid zoteroCollection');
-      if (/^[a-z][a-z0-9+.-]*:/i.test(v) && !/^https:\/\//i.test(v)) throw new ForumError(400, 'zoteroCollection URL must be https');
+      // A collection name (spaces allowed) or an https link to it (no whitespace).
+      if (v.length > 500 || /[<>"\u0000-\u001f\u007f]/.test(v)) throw new ForumError(400, 'invalid zoteroCollection');
+      const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) || /^(javascript|data|vbscript|file):/i.test(v);
+      if (isUrl && !/^https:\/\/\S+$/i.test(v)) throw new ForumError(400, 'zoteroCollection URL must be https');
       out[k] = v;
     } else {
       const email = normalizeEmail(v);
@@ -200,25 +202,44 @@ export function cleanSettingsPatch(raw: unknown): Partial<Record<ForumSettingsKe
   return out;
 }
 
+/** Own settings after applying a patch (set keys overwrite, null keys are removed). */
+export function applySettingsPatch(own: unknown, patch: Partial<Record<ForumSettingsKey, string | null>>): ForumSettings {
+  const out: ForumSettings = { ...parseSettings(own) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v) out[k as ForumSettingsKey] = v;
+    else delete out[k as ForumSettingsKey];
+  }
+  return out;
+}
+
+const samePair = (a: ForumSettings, b: ForumSettings) =>
+  (a.seshatLibraryId ?? '') === (b.seshatLibraryId ?? '') &&
+  (a.ownerEmail ? normalizeEmail(a.ownerEmail) : '') === (b.ownerEmail ? normalizeEmail(b.ownerEmail) : '');
+
 /**
  * Who may link a forum bibliography (spec: the library is read on behalf of
- * `ownerEmail`): space admins may set any owner/library; a curator may set
- * `ownerEmail`/`seshatLibraryId` only when the resulting owner is one of the
- * curator's OWN emails (UserEmail rows, i.e. addresses they signed in with).
- * Clearing is always allowed.
+ * `ownerEmail`): space admins may set any owner/library; a curator's change to
+ * `ownerEmail`/`seshatLibraryId` is judged on the EFFECTIVE result (a
+ * channel's pair after inheritance, never the patch alone): when that result
+ * is an active bibliography (library + owner) its owner must be one of the
+ * curator's OWN emails (UserEmail rows). Results without an active
+ * bibliography (cleared, library without owner) are always allowed, and so is
+ * a channel falling back to exactly its group's pair (inheriting what an
+ * admin or curator already set on the group).
  */
 async function assertBibliographyAllowed(
   q: QueryFn,
   role: CommonsRole,
   actorUserId: string,
   patch: Partial<Record<ForumSettingsKey, string | null>>,
-  current: ForumSettings,
+  current: { own: unknown; parent: unknown },
 ): Promise<void> {
   if (role === 'admin') return;
-  if (!patch.ownerEmail && !patch.seshatLibraryId) return;
-  const owner = 'ownerEmail' in patch ? patch.ownerEmail : current.ownerEmail ? normalizeEmail(current.ownerEmail) : null;
-  if (!owner) return;
-  await assertOwnEmail(q, actorUserId, owner);
+  if (!('ownerEmail' in patch) && !('seshatLibraryId' in patch)) return;
+  const next = effectiveSettings(applySettingsPatch(current.own, patch), current.parent);
+  if (!next.seshatLibraryId || !next.ownerEmail) return;
+  if (current.parent !== null && current.parent !== undefined && samePair(next, parseSettings(current.parent))) return;
+  await assertOwnEmail(q, actorUserId, normalizeEmail(next.ownerEmail));
 }
 
 /** The I4 rule's core: `owner` must be one of the actor's own UserEmail addresses. */
@@ -266,19 +287,25 @@ function parseSettings(raw: unknown): ForumSettings {
 }
 
 /**
- * A channel's effective settings: its own value per key when set, else its
- * parent group's (spec: channels inherit the group's bibliography unless they
- * override it). For a top-level forum `parent` is null and this is a no-op.
+ * A channel's effective settings (spec: channels inherit the group's
+ * bibliography unless they override it). The Seshat link — `seshatLibraryId`
+ * + `ownerEmail` — is inherited as a PAIR: when the channel has its own value
+ * for either key, only the channel's pair counts (a library without an owner
+ * is then no bibliography at all), otherwise the group's pair. Never one key
+ * from each: that would read the channel's library on behalf of the group's
+ * owner. `zoteroCollection` is inherited on its own. For a top-level forum
+ * `parent` is null and this is its own settings.
  */
 export function effectiveSettings(own: unknown, parent: unknown): ForumSettings {
   const o = parseSettings(own);
   if (parent === null || parent === undefined) return o;
   const p = parseSettings(parent);
+  const pair = o.seshatLibraryId || o.ownerEmail ? o : p;
   const out: ForumSettings = {};
-  for (const k of SETTINGS_KEYS) {
-    const v = o[k] ?? p[k];
-    if (v) out[k] = v;
-  }
+  if (pair.seshatLibraryId) out.seshatLibraryId = pair.seshatLibraryId;
+  if (pair.ownerEmail) out.ownerEmail = pair.ownerEmail;
+  const zotero = o.zoteroCollection ?? p.zoteroCollection;
+  if (zotero) out.zoteroCollection = zotero;
   return out;
 }
 
@@ -314,7 +341,7 @@ export type ForumSummary = {
   parent: ForumRef | null;
   /** Public view of the EFFECTIVE settings (a channel inherits its group's). */
   settings: { zoteroCollection: string | null; hasBibliography: boolean };
-  /** Whether a channel overrides (part of) its group's bibliography. */
+  /** Whether a channel has its own Seshat link (library + owner pair) instead of its group's. */
   overridesBibliography: boolean;
   /** Active threads of the forum and, for a group, of its active channels. */
   threadCount: number;
@@ -356,7 +383,7 @@ const toForumSummary = (r: any): ForumSummary => {
     description: r.description ?? null,
     parent,
     settings: publicSettings(effectiveSettings(r.settings, parent ? r.parentSettings ?? {} : null)),
-    overridesBibliography: !!parent && !!(own.seshatLibraryId || own.ownerEmail || own.zoteroCollection),
+    overridesBibliography: !!parent && !!(own.seshatLibraryId || own.ownerEmail),
     threadCount: Number(r.threadCount ?? 0),
     conceptCount: Number(r.conceptCount ?? 0),
     lastActivityAt: r.lastActivityAt ?? null,
@@ -538,7 +565,9 @@ export async function createForum(
     if (parent.parentId) throw new ForumError(400, 'channels cannot have channels');
     if (isReservedChannelSlug(slug)) throw new ForumError(400, `the channel slug "${slug}" is reserved`);
   }
-  await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, parent ? parseSettings(parent.settings) : {});
+  await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, {
+    own: {}, parent: parent ? parent.settings ?? {} : null,
+  });
   const settings: ForumSettings = {};
   for (const [k, v] of Object.entries(patch)) if (v) settings[k as ForumSettingsKey] = v;
 
@@ -599,9 +628,10 @@ export async function updateForum(
   }
   if (input.settings !== undefined) {
     const patch = cleanSettingsPatch(input.settings);
-    // A channel is checked against its effective settings (own over the group's).
-    const current = effectiveSettings(forum.settings, forum.parentId ? forum.parentSettings ?? {} : null);
-    await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, current);
+    // Judged on the effective result after the patch (a channel inherits its group's pair).
+    await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, {
+      own: forum.settings, parent: forum.parentId ? forum.parentSettings ?? {} : null,
+    });
     if (Object.keys(patch).length) {
       // Merge: set keys overwrite, null keys are removed (settings values are flat strings).
       push((n) => `settings = jsonb_strip_nulls(COALESCE(settings, '{}'::jsonb) || ${n}::jsonb)`, JSON.stringify(patch));

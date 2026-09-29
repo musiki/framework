@@ -409,7 +409,7 @@ export const nb: Pick<Dict, 'mm'> = {
         channelSlugHelp: 'Små bokstaver, sifre og bindestreker; kanalen finnes under /f/{group}/ og denne adressen. «t» er reservert. Den kan ikke endres senere.',
         createChannel: 'Opprett kanal',
         overrideBib: 'Overstyr gruppens litteraturliste',
-        overrideBibHelp: 'La feltene stå tomme for å bruke gruppens litteraturliste. Hvert felt du fyller ut, erstatter gruppens verdi bare for denne kanalen.',
+        overrideBibHelp: 'La feltene stå tomme for å bruke gruppens litteraturliste. Biblioteket og eieren hører sammen: fyll ut begge for å bruke et annet bibliotek i denne kanalen (fyller du bare ut ett av dem, får kanalen ingen sitater). En Zotero-samling som fylles ut her, erstatter gruppens.',
         inheritsBib: 'Bruker gruppens litteraturliste.',
         save: 'Lagre',
         cancel: 'Avbryt',

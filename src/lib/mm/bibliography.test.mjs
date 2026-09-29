@@ -145,7 +145,7 @@ test('listOwnerLibraries: missing route/token -> unavailable, failures -> 502, b
   await assert.rejects(listOwnerLibraries('nope', '', { env, fetch: never }), { status: 400 });
 });
 
-test('channels inherit the group bibliography key by key (by id and by ref)', async () => {
+test('channels inherit the group library+owner as a pair (by id and by ref)', async () => {
   const { loadForumBibliographyById } = await import('./bibliography.ts');
   const ch = '22222222-2222-4222-8222-222222222222';
   const sql = [];
@@ -161,7 +161,8 @@ test('channels inherit the group bibliography key by key (by id and by ref)', as
     };
   };
   const byId = await loadForumBibliographyById(q, ch);
-  assert.deepEqual(byId, { forumId: ch, seshatLibraryId: 'CH-LIB', zoteroCollection: 'Z', ownerEmail: 'g@x.org' });
+  // C1: the channel's own library is never read on behalf of the group's owner
+  assert.deepEqual(byId, { forumId: ch, seshatLibraryId: 'CH-LIB', zoteroCollection: 'Z', ownerEmail: null });
   assert.match(sql[0], /LEFT JOIN "ForumBoard" pb ON pb\."id" = b\."parentId"/);
   const byRef = await loadForumBibliography(q, ch);
   assert.deepEqual(byRef, byId);
@@ -173,4 +174,17 @@ test('channels inherit the group bibliography key by key (by id and by ref)', as
   // a group with no parent: own settings only
   const g = await loadForumBibliographyById(async () => ({ data: [{ id: ch, settings: { zoteroCollection: 'Z2' }, parentSettings: null }], error: null }), ch);
   assert.deepEqual(g, { forumId: ch, seshatLibraryId: null, zoteroCollection: 'Z2', ownerEmail: null });
+});
+
+test('pair inheritance: no own pair → the group pair; own pair → only the channel pair', async () => {
+  const { loadForumBibliographyById } = await import('./bibliography.ts');
+  const ch = '33333333-3333-4333-8333-333333333333';
+  const group = { seshatLibraryId: 'G-LIB', ownerEmail: 'g@x.org', zoteroCollection: 'Z' };
+  const load = (settings) => loadForumBibliographyById(async () => ({ data: [{ id: ch, settings, parentSettings: group }], error: null }), ch);
+  assert.deepEqual(await load({}), { forumId: ch, seshatLibraryId: 'G-LIB', zoteroCollection: 'Z', ownerEmail: 'g@x.org' });
+  assert.deepEqual(await load({ zoteroCollection: 'OWN' }), { forumId: ch, seshatLibraryId: 'G-LIB', zoteroCollection: 'OWN', ownerEmail: 'g@x.org' });
+  assert.deepEqual(await load({ seshatLibraryId: 'C', ownerEmail: 'c@x.org' }), { forumId: ch, seshatLibraryId: 'C', zoteroCollection: 'Z', ownerEmail: 'c@x.org' });
+  assert.deepEqual(await load({ ownerEmail: 'c@x.org' }), { forumId: ch, seshatLibraryId: null, zoteroCollection: 'Z', ownerEmail: 'c@x.org' });
+  // a pair missing half never searches Seshat
+  assert.deepEqual(await searchForumCitations(await load({ seshatLibraryId: 'C' }), 'x', { env, fetch: async () => { throw new Error('no fetch'); } }), []);
 });
