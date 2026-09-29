@@ -1,0 +1,21 @@
+---
+// Full mm page for "not found" (404) and "unavailable" (503: no database,
+// space not seeded, …). The calling page sets Astro.response.status; this
+// renders inline in the MishMash shell (never Astro.rewrite to /mm-app/*).
+import MmLayout from '../../layouts/MmLayout.astro';
+import { t } from '../../lib/i18n';
+import type { MmLang } from '../../lib/mm/ui-lang';
+
+interface Props {
+  lang: MmLang;
+  kind: 'notFound' | 'unavailable';
+}
+const { lang, kind } = Astro.props;
+const title = kind === 'notFound' ? t(lang, 'mm.notFound.title') : t(lang, 'mm.common.unavailableTitle');
+const lead = kind === 'notFound' ? t(lang, 'mm.notFound.lead') : t(lang, 'mm.common.unavailableLead');
+---
+<MmLayout lang={lang} title={title} noindex>
+  <h1>{title}</h1>
+  <p class="mm-lead">{lead}</p>
+  <p><a class="mm-more" href="/">{t(lang, 'mm.notFound.home')}</a></p>
+</MmLayout>

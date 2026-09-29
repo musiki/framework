@@ -1,12 +1,16 @@
 ---
 // Internal page for mm.zztt.org "/" (middleware rewrites public mm paths to
 // /mm-app/*; this mount is never reachable by URL). Landing: what the
-// Concept Machine is, forums (filled in by Task 10), graph, taking part.
+// Concept Machine is, the forums (read server-side from the forum core; a
+// friendly note when the database is unavailable), graph, taking part.
 // Do not Astro.rewrite() to another /mm-app path from here: that re-runs the
 // middleware, which 404s /mm-app/*.
 import MmLayout from '../../layouts/MmLayout.astro';
 import { t } from '../../lib/i18n';
 import { applyMmLang } from '../../lib/mm/ui-lang';
+import { listForums, type ForumSummary } from '../../lib/mm/forum';
+import { loadMmViewer, logPageError } from '../../lib/mm/page-data';
+import { formatDate, forumPath } from '../../lib/mm/view';
 export const prerender = false;
 
 const isMm = Astro.locals.tenant?.id === 'mm';
@@ -14,6 +18,18 @@ if (!isMm) Astro.response.status = 404;
 const lang = applyMmLang(Astro);
 const signedIn = Boolean(Astro.locals.session?.user);
 const LAB_URL = 'https://zzigo.github.io/mishmash-web/lab/concept-machine/';
+
+let forums: ForumSummary[] = [];
+let forumsFailed = false;
+if (isMm) {
+  try {
+    const viewer = await loadMmViewer(Astro.locals);
+    forums = await listForums({ spaceId: viewer.space.id });
+  } catch (err) {
+    logPageError('home', err);
+    forumsFailed = true;
+  }
+}
 ---
 {isMm ? (
   <MmLayout lang={lang}>
@@ -23,9 +39,26 @@ const LAB_URL = 'https://zzigo.github.io/mishmash-web/lab/concept-machine/';
 
     <section aria-labelledby="mm-forums" class="mm-forums">
       <h2 id="mm-forums">{t(lang, 'mm.home.forumsTitle')}</h2>
-      <div data-mm-forums class="mm-card mm-tint-green">
-        <p class="mm-muted">{t(lang, 'mm.home.forumsEmpty')}</p>
-      </div>
+      {forumsFailed ? (
+        <p class="mm-note">{t(lang, 'mm.common.unavailableLead')}</p>
+      ) : forums.length ? (
+        <ul class="mm-list">
+          {forums.map((f) => (
+            <li>
+              <a class="mm-list-title" href={forumPath(f.slug)}>{f.title}</a>
+              {f.description && <p class="mm-list-desc mm-pre-line">{f.description}</p>}
+              <p class="mm-meta">
+                <span>{t(lang, 'mm.forumList.counts', { threads: f.threadCount, concepts: f.conceptCount })}</span>
+                {f.lastActivityAt && <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(f.lastActivityAt, lang) })}</span>}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div class="mm-card mm-tint-green">
+          <p class="mm-muted">{t(lang, 'mm.home.forumsEmpty')}</p>
+        </div>
+      )}
     </section>
 
     <div class="mm-grid">

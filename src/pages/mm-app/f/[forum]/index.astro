@@ -1,0 +1,202 @@
+---
+// Internal page for mm "/f/<forum>" (middleware rewrite; never reachable as
+// /mm-app/… by URL). Forum: description, bibliography, threads, concepts born
+// here; members start threads and propose concepts (client: forms.ts,
+// composer.ts). Data is read server-side from the cores; a missing forum
+// renders the mm 404 inline, a data failure the "unavailable" state.
+import MmLayout from '../../../../layouts/MmLayout.astro';
+import MmStatus from '../../../../components/mm/MmStatus.astro';
+import { t, type MessageKey } from '../../../../lib/i18n';
+import { applyMmLang } from '../../../../lib/mm/ui-lang';
+import { getForum, listThreads, POST_MOVES, type ForumSummary, type ThreadSummary } from '../../../../lib/mm/forum';
+import { listConcepts, type ConceptListItem } from '../../../../lib/mm/concepts';
+import { can } from '../../../../lib/mm/policy';
+import { loadMmViewer, logPageError, type MmViewer } from '../../../../lib/mm/page-data';
+import { clientStrings } from '../../../../lib/mm/page-strings';
+import { conceptLabel, conceptPath, displayName, formatDate, threadPath, pageErrorState } from '../../../../lib/mm/view';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+const slug = String(Astro.params.forum ?? '');
+
+let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
+let viewer: MmViewer | null = null;
+let forum: ForumSummary | null = null;
+let threads: ThreadSummary[] = [];
+let concepts: ConceptListItem[] = [];
+
+if (!isMm) state = 'notFound';
+else {
+  try {
+    viewer = await loadMmViewer(Astro.locals);
+    forum = await getForum({ spaceId: viewer.space.id, slug });
+    if (!forum) state = 'notFound';
+    else {
+      [threads, concepts] = await Promise.all([
+        listThreads({ spaceId: viewer.space.id, forumId: forum.id, viewerUserId: viewer.userId }),
+        listConcepts({ spaceId: viewer.space.id, forumId: forum.id }),
+      ]);
+    }
+  } catch (err) {
+    logPageError('forum', err);
+    state = pageErrorState(err);
+  }
+}
+if (state === 'notFound') Astro.response.status = 404;
+if (state === 'unavailable') Astro.response.status = 503;
+
+const role = viewer?.role ?? null;
+const canPost = can(role, 'post');
+const canPropose = can(role, 'proposeConcept');
+const formerMember = t(lang, 'mm.common.formerMember');
+const strings = clientStrings(lang, {
+  'cite.label': t(lang, 'mm.thread.citations.label'),
+  'cite.searching': t(lang, 'mm.thread.citations.searching'),
+  'cite.none': t(lang, 'mm.thread.citations.none'),
+  'cite.unavailable': t(lang, 'mm.thread.citations.unavailable'),
+});
+const apiSlug = encodeURIComponent(slug);
+---
+{!isMm ? (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
+) : state !== 'ok' || !forum ? (
+  <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
+) : (
+  <MmLayout lang={lang} title={forum.title} description={forum.description ?? undefined}>
+    <div data-mm-i18n={strings}>
+      <h1>{forum.title}</h1>
+      {forum.description && <p class="mm-lead mm-pre-line">{forum.description}</p>}
+      <p class="mm-alert" data-mm-flash role="alert" hidden></p>
+
+      <div class="mm-layout-2">
+        <div>
+          <section aria-labelledby="mm-threads">
+            <h2 id="mm-threads">{t(lang, 'mm.forum.threadsTitle')}</h2>
+            {threads.length ? (
+              <ul class="mm-list">
+                {threads.map((th) => (
+                  <li>
+                    <a class="mm-list-title" href={threadPath(forum!.slug, th.id)}>{th.title}</a>
+                    <ul class="mm-inline-list">
+                      {th.isPinned && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.pinned')}</span></li>}
+                      {th.isLocked && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.locked')}</span></li>}
+                      {th.concept && (
+                        <li>
+                          <a href={conceptPath(th.concept.slug)}>{t(lang, 'mm.forum.conceptThread', { label: th.concept.label })}</a>
+                        </li>
+                      )}
+                    </ul>
+                    <p class="mm-meta">
+                      <span>{t(lang, 'mm.forum.startedBy', { name: displayName(th.createdBy, formerMember) })}</span>
+                      <span>{th.postCount === 1 ? t(lang, 'mm.forum.postsOne') : t(lang, 'mm.forum.posts', { n: th.postCount })}</span>
+                      <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(th.lastActivityAt, lang) })}</span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="mm-muted">{t(lang, 'mm.forum.threadsEmpty')}</p>
+            )}
+          </section>
+
+          {canPost ? (
+            <section aria-labelledby="mm-new-thread" class="mm-panel">
+              <h2 id="mm-new-thread">{t(lang, 'mm.forum.newThreadTitle')}</h2>
+              <form class="mm-form" data-mm-form data-method="POST" data-endpoint={`/api/mm/forums/${apiSlug}/threads`} data-then="go-thread" data-forum={forum.slug}>
+                <div class="mm-form-row">
+                  <label for="mm-thread-title">{t(lang, 'mm.forum.threadTitle')}</label>
+                  <input id="mm-thread-title" type="text" name="title" required minlength="3" maxlength="140" autocomplete="off" />
+                </div>
+                <div class="mm-form-row">
+                  <label for="mm-thread-move">{t(lang, 'mm.moves.label')}</label>
+                  <select id="mm-thread-move" name="move" aria-describedby="mm-thread-move-help">
+                    {POST_MOVES.map((m) => <option value={m} selected={m === 'comment'}>{t(lang, `mm.moves.${m}` as MessageKey)}</option>)}
+                  </select>
+                  <p id="mm-thread-move-help" class="mm-help">{t(lang, 'mm.moves.help')}</p>
+                </div>
+                <div class="mm-form-row">
+                  <label for="mm-thread-body">{t(lang, 'mm.forum.firstPost')}</label>
+                  <textarea id="mm-thread-body" name="body" required maxlength="20000" data-mm-cite={forum.slug} aria-describedby="mm-thread-body-help"></textarea>
+                  <p id="mm-thread-body-help" class="mm-help">{t(lang, 'mm.thread.bodyHelp')}</p>
+                </div>
+                <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+                <div class="mm-form-actions"><button class="mm-button" type="submit">{t(lang, 'mm.forum.createThread')}</button></div>
+              </form>
+            </section>
+          ) : viewer?.signedIn ? (
+            <p class="mm-note">{t(lang, 'mm.common.membersOnly')}</p>
+          ) : (
+            <p><a class="mm-button" href="/join">{t(lang, 'mm.common.signInToTakePart')}</a></p>
+          )}
+        </div>
+
+        <aside>
+          <section aria-labelledby="mm-bib" class="mm-card mm-tint-blue">
+            <h2 id="mm-bib">{t(lang, 'mm.forum.bibliographyTitle')}</h2>
+            {forum.settings.hasBibliography ? (
+              <p>{t(lang, 'mm.forum.bibliographyLinked')}</p>
+            ) : (
+              <p class="mm-muted">{t(lang, 'mm.forum.bibliographyNone')}</p>
+            )}
+            {forum.settings.zoteroCollection && (
+              <p class="mm-meta">{t(lang, 'mm.forum.bibliographyZotero', { name: forum.settings.zoteroCollection })}</p>
+            )}
+          </section>
+
+          <section aria-labelledby="mm-born">
+            <h2 id="mm-born">{t(lang, 'mm.forum.conceptsTitle')}</h2>
+            {concepts.length ? (
+              <ul class="mm-concept-list">
+                {concepts.map((c) => {
+                  const label = conceptLabel(c, lang);
+                  return (
+                    <li class={`mm-st-${c.status}`}>
+                      <a href={conceptPath(c.slug)} lang={label.lang}>{label.text}</a>
+                      <span class="mm-meta"> · {t(lang, `mm.status.${c.status}` as MessageKey)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p class="mm-muted">{t(lang, 'mm.forum.conceptsEmpty')}</p>
+            )}
+          </section>
+        </aside>
+      </div>
+
+      {canPropose && (
+        <section aria-labelledby="mm-propose" class="mm-panel mm-tint-pink">
+          <h2 id="mm-propose">{t(lang, 'mm.forum.proposeTitle')}</h2>
+          <p class="mm-prose">{t(lang, 'mm.forum.proposeLead')}</p>
+          <form class="mm-form" data-mm-form data-method="POST" data-endpoint="/api/mm/concepts" data-then="go-concept">
+            <input type="hidden" name="forum" value={forum.slug} />
+            <div class="mm-form-row">
+              <label for="mm-c-label">{t(lang, 'mm.forum.conceptLabel')}</label>
+              <input id="mm-c-label" type="text" name="label" required maxlength="200" autocomplete="off" lang="en" />
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-c-def">{t(lang, 'mm.forum.conceptDefinition')}</label>
+              <textarea id="mm-c-def" name="definition" required maxlength="20000" lang="en"></textarea>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-c-label-nb">{t(lang, 'mm.forum.conceptLabelNb')}</label>
+              <input id="mm-c-label-nb" type="text" name="labelNb" maxlength="200" autocomplete="off" lang="nb" />
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-c-def-nb">{t(lang, 'mm.forum.conceptDefinitionNb')}</label>
+              <textarea id="mm-c-def-nb" name="definitionNb" maxlength="20000" lang="nb"></textarea>
+            </div>
+            <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+            <div class="mm-form-actions"><button class="mm-button" type="submit">{t(lang, 'mm.forum.propose')}</button></div>
+          </form>
+        </section>
+      )}
+    </div>
+  </MmLayout>
+)}
+
+<script>
+  import '../../../../scripts/mm/forms.ts';
+  import '../../../../scripts/mm/composer.ts';
+</script>

@@ -1,0 +1,271 @@
+---
+// Internal page for mm "/c/<slug>" (middleware rewrite). Concept: current
+// definition in the reader's language (Bokmål when written by hand; otherwise
+// a visible "no Bokmål definition yet" note and the English text; never
+// machine translation; nn readers get nb), credit, sources, history with
+// credited authors, relations (+ picker for members, remove own/any), status
+// (curators), new version (author/curators), link to the discussion thread.
+// Definitions are plain text (rendered as text, never as HTML).
+import MmLayout from '../../../layouts/MmLayout.astro';
+import MmStatus from '../../../components/mm/MmStatus.astro';
+import { t, type MessageKey } from '../../../lib/i18n';
+import { applyMmLang, langSwitchHref } from '../../../lib/mm/ui-lang';
+import {
+  CONCEPT_STATUSES, RELATION_TYPES, getConcept, listConcepts, type ConceptListItem, type ConceptView,
+} from '../../../lib/mm/concepts';
+import { can } from '../../../lib/mm/policy';
+import { isConceptAuthor, loadMmViewer, logPageError, type MmViewer } from '../../../lib/mm/page-data';
+import { clientStrings } from '../../../lib/mm/page-strings';
+import {
+  conceptLabel, conceptPath, displayName, formatDate, forumPath, pickDefinition, safeHttpUrl, threadPath, pageErrorState } from '../../../lib/mm/view';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+const slug = String(Astro.params.slug ?? '');
+
+let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
+let viewer: MmViewer | null = null;
+let concept: ConceptView | null = null;
+let others: ConceptListItem[] = [];
+let isAuthor = false;
+
+if (!isMm || !slug || slug.length > 200) state = 'notFound';
+else {
+  try {
+    viewer = await loadMmViewer(Astro.locals);
+    concept = await getConcept({ spaceId: viewer.space.id, slug, viewerUserId: viewer.userId });
+    if (!concept) state = 'notFound';
+    else {
+      const role = viewer.role;
+      [isAuthor, others] = await Promise.all([
+        role === 'member' ? isConceptAuthor(concept.id, viewer.userId) : Promise.resolve(false),
+        can(role, 'createRelation') ? listConcepts({ spaceId: viewer.space.id }) : Promise.resolve([]),
+      ]);
+      others = others.filter((c) => c.slug !== concept!.slug);
+    }
+  } catch (err) {
+    logPageError('concept', err);
+    state = pageErrorState(err);
+  }
+}
+if (state === 'notFound') Astro.response.status = 404;
+if (state === 'unavailable') Astro.response.status = 503;
+
+const role = viewer?.role ?? null;
+const formerMember = t(lang, 'mm.common.formerMember');
+const label = concept ? conceptLabel(concept, lang) : { text: '', lang: 'en' as const };
+const pick = concept ? pickDefinition(concept.current, lang) : null;
+const shown = pick?.version ?? null;
+const canEdit = can(role, 'editDefinition', { isAuthor });
+const canStatus = can(role, 'changeStatus');
+const canRelate = can(role, 'createRelation');
+const apiSlug = encodeURIComponent(slug);
+const discussion = concept?.threadId && concept.forum ? threadPath(concept.forum.slug, concept.threadId) : null;
+const langName = (l: string | null) =>
+  l === 'nb' ? t(lang, 'mm.common.langNb') : l === 'nn' ? t(lang, 'mm.common.langNn') : t(lang, 'mm.common.langEn');
+const relLabel = (type: string) => t(lang, `mm.relationTypes.${type}` as MessageKey);
+const strings = clientStrings(lang);
+const selfPath = concept ? conceptPath(concept.slug) : '/';
+const postLink = (postId: string | null) => (postId && concept?.forum && concept.threadId ? `${threadPath(concept.forum.slug, concept.threadId)}#post-${postId}` : null);
+---
+{!isMm ? (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
+) : state !== 'ok' || !concept ? (
+  <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
+) : (
+  <MmLayout lang={lang} title={label.text} description={shown?.definition.slice(0, 200)}>
+    <div data-mm-i18n={strings} class={`mm-st-${concept.status}`}>
+      <p class="mm-meta">
+        {concept.forum && <a class="mm-more" href={forumPath(concept.forum.slug)}>{t(lang, 'mm.concept.proposedIn', { forum: concept.forum.title })}</a>}
+      </p>
+      <h1 lang={label.lang}>{label.text}</h1>
+      <p class="mm-meta">
+        <span><span class="mm-badge" title={t(lang, `mm.status.help.${concept.status}` as MessageKey)}>{t(lang, `mm.status.${concept.status}` as MessageKey)}</span></span>
+        <span>{t(lang, 'mm.concept.proposedBy', { name: displayName(concept.createdBy, formerMember) })}</span>
+        <span>{formatDate(concept.createdAt, lang)}</span>
+      </p>
+      <p class="mm-alert" data-mm-flash role="alert" hidden></p>
+
+      <section aria-labelledby="mm-def">
+        <h2 id="mm-def">{t(lang, 'mm.concept.definitionTitle')}</h2>
+        {pick?.missingTranslation && <p class="mm-note">{t(lang, 'mm.concept.missingNb')}</p>}
+        {shown ? (
+          <>
+            <blockquote class="mm-definition" lang={shown.lang}><p class="mm-pre-line">{shown.definition}</p></blockquote>
+            <p class="mm-meta">
+              <span>{t(lang, 'mm.concept.credit', { name: displayName(shown.credited, formerMember) })}</span>
+              {shown.fromPostId && (postLink(shown.fromPostId)
+                ? <a href={postLink(shown.fromPostId)!}>{t(lang, 'mm.concept.fromPost')}</a>
+                : <span>{t(lang, 'mm.concept.fromPost')}</span>)}
+              <span>{formatDate(shown.createdAt, lang)}</span>
+            </p>
+            {shown.sources.length > 0 && (
+              <>
+                <h3>{t(lang, 'mm.concept.sources')}</h3>
+                <ul class="mm-sources">
+                  {shown.sources.map((s) => {
+                    const url = safeHttpUrl(s.url);
+                    return (
+                      <li>
+                        {s.citekey && <code>@{s.citekey}</code>}
+                        {url && <a href={url} rel="noopener noreferrer nofollow">{url}</a>}
+                        {!url && s.url && <span>{s.url}</span>}
+                        {s.note && <span>{s.note}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </>
+        ) : (
+          <p class="mm-muted">{t(lang, 'mm.concept.noDefinition')}</p>
+        )}
+        {pick?.alternate === 'nb' && <p><a href={langSwitchHref(selfPath, 'nb')} hreflang="nb" lang="nb">{t(lang, 'mm.concept.readNb')}</a></p>}
+        {pick?.alternate === 'en' && <p><a href={langSwitchHref(selfPath, 'en')} hreflang="en" lang="en">{t(lang, 'mm.concept.readEn')}</a></p>}
+        {discussion && <p><a class="mm-more" href={discussion}>{t(lang, 'mm.concept.discussionLink')}</a></p>}
+      </section>
+
+      {canEdit && (
+        <section aria-labelledby="mm-edit" class="mm-panel">
+          <h2 id="mm-edit">{t(lang, 'mm.concept.editTitle')}</h2>
+          <p class="mm-help">{t(lang, 'mm.concept.editLead')}</p>
+          <form class="mm-form" data-mm-form data-mm-definition-form data-method="PATCH" data-endpoint={`/api/mm/concepts/${apiSlug}`} data-then="reload"
+            data-current-en={concept.current.en?.definition ?? ''} data-current-nb={concept.current.nb?.definition ?? ''}>
+            <div class="mm-form-row">
+              <label for="mm-edit-lang">{t(lang, 'mm.concept.editLang')}</label>
+              <select id="mm-edit-lang" name="lang">
+                <option value="en" selected={lang === 'en'}>{t(lang, 'mm.common.langEn')}</option>
+                <option value="nb" selected={lang === 'nb'}>{t(lang, 'mm.common.langNb')}</option>
+              </select>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-edit-text">{t(lang, 'mm.concept.editText')}</label>
+              <textarea id="mm-edit-text" name="definition" required maxlength="20000" lang={lang}>{(lang === 'nb' ? concept.current.nb?.definition : concept.current.en?.definition) ?? ''}</textarea>
+            </div>
+            <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+            <div class="mm-form-actions"><button class="mm-button" type="submit">{t(lang, 'mm.concept.saveDefinition')}</button></div>
+          </form>
+        </section>
+      )}
+
+      <section aria-labelledby="mm-rel">
+        <h2 id="mm-rel">{t(lang, 'mm.concept.relationsTitle')}</h2>
+        {concept.relations.length ? (
+          <div class="mm-table-wrap">
+            <table class="mm-table">
+              <thead>
+                <tr>
+                  <th scope="col">{t(lang, 'mm.graph.source')}</th>
+                  <th scope="col">{t(lang, 'mm.concept.relationType')}</th>
+                  <th scope="col">{t(lang, 'mm.graph.target')}</th>
+                  <th scope="col"><span class="mm-visually-hidden">{t(lang, 'mm.concept.removeRelation')}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {concept.relations.map((r) => {
+                  const other = conceptLabel(r.other, lang);
+                  const otherCell = <a href={conceptPath(r.other.slug)} lang={other.lang}>{other.text}</a>;
+                  const selfCell = <span lang={label.lang}>{label.text}</span>;
+                  return (
+                    <tr>
+                      <td>{r.direction === 'out' ? selfCell : otherCell}</td>
+                      <td>{relLabel(r.type)}</td>
+                      <td>{r.direction === 'out' ? otherCell : selfCell}</td>
+                      <td>
+                        {can(role, 'deleteRelation', { isOwnRelation: r.own }) && (
+                          <button type="button" class="mm-textbutton" data-mm-action data-method="DELETE" data-endpoint={`/api/mm/relations/${r.id}`} data-then="reload"
+                            title={t(lang, 'mm.concept.relationBy', { name: displayName(r.createdBy, formerMember) })}>{t(lang, 'mm.concept.removeRelation')}</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p class="mm-muted">{t(lang, 'mm.concept.relationsEmpty')}</p>
+        )}
+
+        {canRelate && (
+          <div class="mm-panel">
+            <h3>{t(lang, 'mm.concept.addRelationTitle')}</h3>
+            {others.length ? (
+              <form class="mm-form mm-inline-form" data-mm-form data-method="POST" data-endpoint="/api/mm/relations" data-then="reload">
+                <input type="hidden" name="source" value={concept.slug} />
+                <p class="mm-form-row"><span>{t(lang, 'mm.concept.relationThis')}</span><strong lang={label.lang}>{label.text}</strong></p>
+                <div class="mm-form-row">
+                  <label for="mm-rel-type">{t(lang, 'mm.concept.relationType')}</label>
+                  <select id="mm-rel-type" name="type" required>
+                    {RELATION_TYPES.map((r) => <option value={r}>{relLabel(r)}</option>)}
+                  </select>
+                </div>
+                <div class="mm-form-row">
+                  <label for="mm-rel-target">{t(lang, 'mm.concept.relationOther')}</label>
+                  <select id="mm-rel-target" name="target" required>
+                    {others.map((c) => {
+                      const l = conceptLabel(c, lang);
+                      return <option value={c.slug} lang={l.lang}>{l.text}</option>;
+                    })}
+                  </select>
+                </div>
+                <div class="mm-form-actions"><button class="mm-button mm-button-small" type="submit">{t(lang, 'mm.concept.addRelation')}</button></div>
+                <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+              </form>
+            ) : (
+              <p class="mm-muted">{t(lang, 'mm.concept.noOtherConcepts')}</p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {canStatus && (
+        <section aria-labelledby="mm-status" class="mm-panel">
+          <h2 id="mm-status">{t(lang, 'mm.concept.statusTitle')}</h2>
+          <form class="mm-form mm-inline-form" data-mm-form data-method="PATCH" data-endpoint={`/api/mm/concepts/${apiSlug}`} data-then="reload">
+            <div class="mm-form-row">
+              <label for="mm-status-select">{t(lang, 'mm.status.label')}</label>
+              <select id="mm-status-select" name="status">
+                {CONCEPT_STATUSES.map((s) => <option value={s} selected={s === concept!.status}>{t(lang, `mm.status.${s}` as MessageKey)}</option>)}
+              </select>
+            </div>
+            <div class="mm-form-actions"><button class="mm-button mm-button-small" type="submit">{t(lang, 'mm.concept.saveStatus')}</button></div>
+            <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+          </form>
+        </section>
+      )}
+
+      <section aria-labelledby="mm-history">
+        <h2 id="mm-history">{t(lang, 'mm.concept.historyTitle')}</h2>
+        <p class="mm-help">{t(lang, 'mm.concept.historyLead')}</p>
+        <ol class="mm-history" reversed>
+          {concept.history.map((v) => {
+            const credited = displayName(v.credited, formerMember);
+            const editor = displayName(v.editedBy, formerMember);
+            return (
+              <li>
+                <p class="mm-meta">
+                  <span><strong>{langName(v.lang)}</strong></span>
+                  <span>{formatDate(v.createdAt, lang)}</span>
+                  <span>{t(lang, 'mm.concept.credit', { name: credited })}</span>
+                  {editor !== credited && <span>{t(lang, 'mm.concept.editedBy', { name: editor })}</span>}
+                  {v.fromPostId && (postLink(v.fromPostId)
+                    ? <a href={postLink(v.fromPostId)!}>{t(lang, 'mm.concept.fromPost')}</a>
+                    : <span>{t(lang, 'mm.concept.fromPost')}</span>)}
+                </p>
+                <blockquote lang={v.lang}><p class="mm-pre-line">{v.definition}</p></blockquote>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    </div>
+  </MmLayout>
+)}
+
+<script>
+  import '../../../scripts/mm/forms.ts';
+  import '../../../scripts/mm/concept.ts';
+</script>
