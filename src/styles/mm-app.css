@@ -208,3 +208,4 @@ h3 .mm-dot { margin-right: 0.45rem; }
 .mm-admin-channels > li { padding: 0.5rem 0; border-bottom: 1px solid var(--mm-ink-15); display: grid; gap: 0.4rem; }
 .mm-admin-channels > li > p { margin: 0; }
 .mm-admin-channels-title { font-size: 1rem; margin: 0.4rem 0 0; }
+.mm-card .mm-meta { overflow-wrap: anywhere; }

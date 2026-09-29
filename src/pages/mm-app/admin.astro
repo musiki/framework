@@ -277,7 +277,7 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
             <summary>{A('forums.overrideBib')}</summary>
             <fieldset class="mm-admin-bib" aria-describedby="mm-cc-bib-lead">
               <legend>{A('forums.bibTitle')}</legend>
-              <p id="mm-cc-bib-lead" class="mm-help">{A('forums.overrideBibHelp')} {A('forums.bibLead')}</p>
+              <p id="mm-cc-bib-lead" class="mm-help">{`${A('forums.overrideBibHelp')} ${A('forums.bibLead')}`}</p>
               <div class="mm-form-row">
                 <label for="mm-cc-owner">{A('forums.owner')}</label>
                 <input id="mm-cc-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-cc-owner-help" />
