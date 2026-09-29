@@ -34,11 +34,21 @@ function parseImageOptions(rawAlt) {
   return { caption, width, height };
 }
 
+function isLilypondFigure(node) {
+  if (!node || node.tagName !== 'figure') return false;
+  const cls = node.properties && node.properties.className;
+  const list = Array.isArray(cls) ? cls : String(cls || '').split(/\s+/);
+  return list.includes('lilypond-block');
+}
+
 export default function rehypeObsidianImageSize() {
   return (tree) => {
-    visit(tree, 'element', (node) => {
+    visit(tree, 'element', (node, _index, parent) => {
       if (!node || node.tagName !== 'img') return;
       if (node.properties && node.properties.__processed) return;
+      // Rendered LilyPond scores keep their alt for screen readers but never
+      // get a visible caption.
+      if (isLilypondFigure(parent)) return;
 
       const props = node.properties || {};
       const parsed = parseImageOptions(props.alt);

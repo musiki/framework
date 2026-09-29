@@ -72,7 +72,7 @@ test('definitionHtml: sanitized, KaTeX kept, lily fence → same-origin score im
   assert.match(html, /<math/);
   const hash = crypto.createHash('md5').update(LILY).digest('hex');
   assert.match(html, new RegExp(`<figure class="lilypond-block lily-score" data-lily-url="/lily/${hash}\\.svg" data-midi-url="/lily/${hash}\\.midi">`));
-  assert.match(html, new RegExp(`<img src="/lily/${hash}\\.svg" alt="LilyPond notation render" loading="lazy"`));
+  assert.match(html, new RegExp(`<img src="/lily/${hash}\\.svg" alt="Musical score" loading="lazy"`));
   assert.ok(!/<svg/i.test(html), 'no inline SVG in sanitized output');
   assert.ok(fs.existsSync(path.join(store, `${hash}.svg`)), 'score written to LILYPOND_ASSET_DIR');
   assert.ok(fs.existsSync(path.join(store, `${hash}.midi`)));
