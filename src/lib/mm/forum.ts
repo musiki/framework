@@ -8,6 +8,9 @@ import { query } from '../db/pool';
 import { renderForumMarkdown } from '../forum-markdown';
 import { onClient } from './concepts';
 import { createRenderCache } from './forum-render-cache.ts';
+import { createMmPostRenderer } from './post-render.ts';
+import { loadForumBibliographyById, resolveForumCitations } from './bibliography.ts';
+import type { MmLang } from './ui-lang.ts';
 import * as core from './forum-core.ts';
 import type { QueryFn } from './forum-core.ts';
 
@@ -20,13 +23,18 @@ export type {
 const poolQ: QueryFn = (text, params) => query(text, params as any[]);
 
 /**
- * musiki forum renderer for mm: ALWAYS sanitized (posts are public to
- * anonymous readers), remote LilyPond on as in the course forum UI, and cached
- * per post version (bounded LRU) so remote renders/MIDI lookups are not
- * repeated on every read.
+ * musiki forum renderer for mm (see post-render.ts): ALWAYS sanitized (posts
+ * are public to anonymous readers), no remote LilyPond and same-origin media
+ * only (no third-party requests), `[@key]` citations resolved against the
+ * post's forum bibliography, cached per forum + lang + post version (bounded
+ * LRU).
  */
-const mmRenderCache = createRenderCache((markdown) =>
-  renderForumMarkdown(markdown, { remoteLilypond: true, sanitize: true }),
+const mmRenderCache = createRenderCache(
+  createMmPostRenderer({
+    renderMarkdown: renderForumMarkdown,
+    loadForum: (forumId) => loadForumBibliographyById(poolQ, forumId),
+    resolve: (settings, keys) => resolveForumCitations(settings, keys),
+  }),
 );
 export const renderMmPost: core.Render = mmRenderCache.render;
 
@@ -36,8 +44,9 @@ export const listForumsAdmin = (args: Parameters<typeof core.listForumsAdmin>[1]
 export const createForum = (args: Parameters<typeof core.createForum>[1]) => core.createForum(poolQ, args);
 export const updateForum = (args: Parameters<typeof core.updateForum>[1]) => core.updateForum(poolQ, args);
 export const listThreads = (args: Parameters<typeof core.listThreads>[1]) => core.listThreads(poolQ, args);
-export const listPosts = (args: Omit<Parameters<typeof core.listPosts>[1], 'render'>) =>
-  core.listPosts(poolQ, { ...args, render: renderMmPost });
+/** `lang` picks the citation locale / references heading (default en). */
+export const listPosts = ({ lang = 'en', ...args }: Omit<Parameters<typeof core.listPosts>[1], 'render'> & { lang?: MmLang }) =>
+  core.listPosts(poolQ, { ...args, render: (md, post) => mmRenderCache.render(md, post ? { ...post, lang } : post) });
 export const vote = (args: Parameters<typeof core.vote>[1]) => core.vote(poolQ, args);
 export const moderatePost = (args: Parameters<typeof core.moderatePost>[1]) => core.moderatePost(poolQ, args);
 

@@ -45,6 +45,16 @@ export type RenderForumMarkdownOptions = {
    * keeps the historical default (false) until it is raised separately.
    */
   sanitize?: boolean;
+  /**
+   * Seshat citation rendering. Omitted: musiki's defaults (Spanish heading,
+   * global SESHAT_CITATION_OWNER_EMAIL). mm passes a localized heading/lang
+   * and a `resolve` scoped to the forum's own library owner.
+   */
+  citations?: {
+    headingText?: string;
+    lang?: string;
+    resolve?: (keys: string[]) => Promise<Map<string, unknown> | Iterable<[string, unknown]>>;
+  };
 };
 
 const withDefault = (tag: string, extra: NonNullable<SanitizeSchema['attributes']>[string]) => [
@@ -90,12 +100,103 @@ export const forumSanitizeSchema: SanitizeSchema = {
   },
 };
 
-const LILY_URL_RE = /^(?:\/lily\/[A-Za-z0-9._-]+\.svg|https:\/\/[^\s"'<>]+)$/;
+/**
+ * rehypeLilyFigureImage only runs in sanitize mode (mm), where scores must be
+ * same-origin: no third-party request may leave a reader's browser.
+ */
+const LILY_URL_RE = /^\/lily\/[A-Za-z0-9._-]+\.svg$/;
+
+const LILY_LANGS = new Set(['lily', 'lilypond', 'ly']);
+const RENDERED_COMMENT_RE = /^\s*%\s*rendered:/i;
+
+/**
+ * Sanitize mode: drops `% rendered: <url>` annotation lines from LilyPond
+ * fences so an author cannot point a score at a third-party render URL.
+ */
+export function remarkStripLilyRenderedComments() {
+  const visitNode = (node: any) => {
+    if (!node) return;
+    if (node.type === 'code' && LILY_LANGS.has(String(node.lang ?? '').trim().toLowerCase())) {
+      node.value = String(node.value ?? '')
+        .split('\n')
+        .filter((line: string) => !RENDERED_COMMENT_RE.test(line))
+        .join('\n');
+    }
+    if (Array.isArray(node.children)) for (const child of node.children) visitNode(child);
+  };
+  return (tree: any) => visitNode(tree);
+}
+
+/** Same-origin media paths an mm post may load: LilyPond renders and mm's own files. */
+const SAME_ORIGIN_MEDIA_RE = /^\/(?:lily|mm)\/[A-Za-z0-9._~%\/-]*$/;
+export const isSameOriginMediaPath = (value: unknown): boolean => {
+  const v = String(value ?? '');
+  return SAME_ORIGIN_MEDIA_RE.test(v) && !v.includes('..') && !v.includes('//');
+};
+
+const HTTP_URL_RE = /^https?:\/\//i;
+const MEDIA_TAGS = new Set(['img', 'audio', 'video']);
+
+const textOf = (node: any): string =>
+  node?.type === 'text' ? String(node.value ?? '') : Array.isArray(node?.children) ? node.children.map(textOf).join('') : '';
+
+/**
+ * Sanitize mode only (mm "no tracking"): after rehype-sanitize, <img>,
+ * <audio>, <video> and <source> may load only same-origin /lily/ or /mm/
+ * paths; anything else becomes a plain link the reader can choose to follow
+ * (`<a rel="nofollow noopener noreferrer">[image: alt]</a>`, href only for
+ * http(s)). Non-same-origin posters and LilyPond data URLs are dropped.
+ */
+export function rehypeSameOriginMedia() {
+  const toLink = (url: string, label: string, insideLink: boolean) => {
+    // No nested <a>: inside a link the label alone replaces the media.
+    if (insideLink) return { type: 'text', value: label };
+    const properties: Record<string, unknown> = { rel: ['nofollow', 'noopener', 'noreferrer'] };
+    if (HTTP_URL_RE.test(url)) properties.href = url;
+    return { type: 'element', tagName: 'a', properties, children: [{ type: 'text', value: label }] };
+  };
+  const visitNode = (node: any, insideLink: boolean) => {
+    if (!node || !Array.isArray(node.children)) return;
+    node.children = node.children.map((child: any) => {
+      if (child?.type !== 'element') {
+        visitNode(child, insideLink);
+        return child;
+      }
+      const tag = child.tagName;
+      const props = child.properties ?? (child.properties = {});
+      if (tag === 'figure') {
+        if (props.dataLilyUrl != null && !isSameOriginMediaPath(props.dataLilyUrl)) delete props.dataLilyUrl;
+        if (props.dataMidiUrl != null && !isSameOriginMediaPath(props.dataMidiUrl)) delete props.dataMidiUrl;
+      }
+      if (MEDIA_TAGS.has(tag)) {
+        if (props.poster != null && !isSameOriginMediaPath(props.poster)) delete props.poster;
+        const sources = [
+          ...(props.src != null ? [String(props.src)] : []),
+          ...(Array.isArray(child.children) ? child.children : [])
+            .filter((c: any) => c?.type === 'element' && c.tagName === 'source' && c.properties?.src != null)
+            .map((c: any) => String(c.properties.src)),
+        ];
+        const external = sources.find((src) => !isSameOriginMediaPath(src));
+        if (external !== undefined) {
+          const alt = tag === 'img' ? String(props.alt ?? '').trim() : textOf(child).trim();
+          const kind = tag === 'img' ? 'image' : tag;
+          return toLink(external, alt ? `[${kind}: ${alt}]` : `[${kind}]`, insideLink);
+        }
+      }
+      if (tag === 'source' && props.src != null && !isSameOriginMediaPath(props.src)) {
+        return toLink(String(props.src), '[media]', insideLink);
+      }
+      visitNode(child, insideLink || tag === 'a');
+      return child;
+    });
+  };
+  return (tree: any) => visitNode(tree, false);
+}
 
 /**
  * After sanitizing, a locally rendered LilyPond figure has lost its inline
  * <svg>; show the same score through its data-lily-url as an <img> instead
- * (only same-origin /lily/*.svg or https URLs).
+ * (only same-origin /lily/*.svg).
  */
 export function rehypeLilyFigureImage() {
   const visitNode = (node: any) => {
@@ -127,6 +228,10 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     processor = processor.use(remarkStrudelBlocks);
   }
 
+  if (options.sanitize === true) {
+    processor = processor.use(remarkStripLilyRenderedComments);
+  }
+
   processor = processor
     .use(remarkMermaid)
     .use(remarkWikiLink)
@@ -134,7 +239,7 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     .use(remarkLily)
     .use(remarkObsidianHighlight)
     .use(remarkDataviewLite)
-    .use(remarkSeshatCitations)
+    .use(remarkSeshatCitations, options.citations ?? {})
     .use(remarkRemoteLilypond, {
       enabled: options.remoteLilypond !== false,
       timeoutMs: 10_000,
@@ -147,7 +252,7 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     .use(rehypeRaw)
     // Untrusted author HTML is cleaned here, before the trusted passes below
     // (KaTeX, highlight, code syntax) generate their own markup.
-    .use(options.sanitize === true ? [[rehypeSanitize, forumSanitizeSchema], rehypeLilyFigureImage] : [])
+    .use(options.sanitize === true ? [[rehypeSanitize, forumSanitizeSchema], rehypeLilyFigureImage, rehypeSameOriginMedia] : [])
     .use(rehypeObsidianImageSize)
     .use(rehypeKatex, { strict: false })
     .use(rehypeHighlight, {

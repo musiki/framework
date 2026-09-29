@@ -70,3 +70,45 @@ test('rate limiter blocks after max within the window and resets', () => {
   t = 1001;
   assert.ok(allow('a'));
 });
+
+test('loadForumBibliographyById scopes to mm commons by uuid', async () => {
+  const { loadForumBibliographyById } = await import('./bibliography.ts');
+  const id = '11111111-1111-4111-8111-111111111111';
+  let sql = '';
+  const q = async (text, params) => {
+    sql = text;
+    assert.deepEqual(params, [id]);
+    return { data: [{ id, settings: { seshatLibraryId: 'L', ownerEmail: 'o@x.org' } }], error: null };
+  };
+  const s = await loadForumBibliographyById(q, id);
+  assert.match(sql, /'mm'/);
+  assert.equal(s.ownerEmail, 'o@x.org');
+  assert.equal(await loadForumBibliographyById(async () => { throw new Error('no'); }, 'nope'), null);
+});
+
+test('resolveForumCitations uses the FORUM owner, never the global owner env', async () => {
+  const { resolveForumCitations } = await import('./bibliography.ts');
+  let call;
+  const fetch = async (u, init) => {
+    call = { u: new URL(u), init };
+    return Response.json({ items: [{ id: 'k1', title: 'T' }, { id: 'intruder', title: 'X' }], missing: ['k2'] });
+  };
+  const out = await resolveForumCitations(settings, ['k1', 'k2', 'k1', 'bad key!'], {
+    env: { ...env, SESHAT_CITATION_OWNER_EMAIL: 'global@musiki' }, fetch,
+  });
+  assert.equal(call.u.pathname, '/api/integrations/citations/resolve');
+  assert.deepEqual(call.u.searchParams.getAll('key'), ['k1', 'k2']);
+  assert.equal(call.u.searchParams.get('libraryId'), 'lib1');
+  assert.equal(call.init.headers['X-Seshat-Owner'], 'o@x.org');
+  assert.equal(call.init.headers.Authorization, 'Bearer tok');
+  assert.deepEqual([...out.keys()], ['k1']);
+});
+
+test('resolveForumCitations: no library/owner -> no request; upstream failure throws', async () => {
+  const { resolveForumCitations } = await import('./bibliography.ts');
+  const never = async () => { throw new Error('should not fetch'); };
+  assert.equal((await resolveForumCitations({ ...settings, ownerEmail: null }, ['k'], { env, fetch: never })).size, 0);
+  assert.equal((await resolveForumCitations(null, ['k'], { env, fetch: never })).size, 0);
+  await assert.rejects(resolveForumCitations(settings, ['k'], { env, fetch: async () => new Response('x', { status: 500 }) }), BibliographyError);
+  await assert.rejects(resolveForumCitations(settings, ['k'], { env: {}, fetch: never }), BibliographyError);
+});

@@ -610,5 +610,5 @@ test('listPosts passes the post identity to the renderer (render cache key)', as
   await listPosts(postsDb().q, {
     spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; },
   });
-  assert.deepEqual(seen, [{ id: POST, updatedAt: 't2' }]);
+  assert.deepEqual(seen, [{ id: POST, updatedAt: 't2', forumId: FORUM }]);
 });

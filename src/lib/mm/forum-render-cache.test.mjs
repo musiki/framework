@@ -60,3 +60,44 @@ test('failed renders are not cached', async () => {
   fail = false;
   assert.equal(await cache.render('x', { id: 'p', updatedAt: 't' }), 'x');
 });
+
+test('forum id and lang are part of the key', async () => {
+  const { render, calls } = counting();
+  const cache = createRenderCache(render);
+  await cache.render('x', { id: 'p', updatedAt: 't', forumId: 'f1', lang: 'en' });
+  await cache.render('x', { id: 'p', updatedAt: 't', forumId: 'f2', lang: 'en' });
+  await cache.render('x', { id: 'p', updatedAt: 't', forumId: 'f2', lang: 'nb' });
+  await cache.render('x', { id: 'p', updatedAt: 't', forumId: 'f2', lang: 'nb' });
+  assert.equal(calls.length, 3);
+});
+
+test('renders marked not cacheable are not cached', async () => {
+  let n = 0;
+  const cache = createRenderCache(async (md) => ({ html: `${md}${(n += 1)}`, cacheable: false }));
+  assert.equal(await cache.render('x', { id: 'p', updatedAt: 't' }), 'x1');
+  assert.equal(await cache.render('x', { id: 'p', updatedAt: 't' }), 'x2');
+  assert.equal(cache.size(), 0);
+});
+
+test('a lilypond fence without a rendered figure is not cached', async () => {
+  const { lilypondRenderMissing } = await import('./forum-render-cache.ts');
+  const md = 'Score:\n\n```lilypond\n{ c4 }\n```\n';
+  assert.equal(lilypondRenderMissing(md, '<pre><code>{ c4 }</code></pre>'), true);
+  assert.equal(lilypondRenderMissing(md, '<figure class="lilypond-block lily-score"><img src="/lily/a.svg"></figure>'), false);
+  assert.equal(lilypondRenderMissing('```js\nx\n```', '<pre></pre>'), false);
+
+  let figure = false;
+  let n = 0;
+  const cache = createRenderCache(async () => {
+    n += 1;
+    return figure ? '<figure class="lilypond-block"></figure>' : '<pre>{ c4 }</pre>';
+  });
+  const post = { id: 'p', updatedAt: 't' };
+  await cache.render(md, post);
+  await cache.render(md, post);
+  assert.equal(n, 2);
+  figure = true;
+  await cache.render(md, post);
+  await cache.render(md, post);
+  assert.equal(n, 3);
+});

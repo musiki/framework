@@ -48,8 +48,12 @@ export class ForumError extends Error {
 }
 
 export type UserRef = { name: string | null; deleted: boolean };
-/** `post` identifies the rendered post (id + updatedAt) so callers can cache renders. */
-export type Render = (markdown: string, post?: { id: string; updatedAt: string | null }) => Promise<string>;
+/**
+ * `post` identifies the rendered post (id + updatedAt) and its forum (whose
+ * bibliography scopes citations) so callers can cache renders.
+ */
+export type RenderPostRef = { id: string; updatedAt: string | null; forumId?: string | null };
+export type Render = (markdown: string, post?: RenderPostRef) => Promise<string>;
 
 const TITLE_MIN = 3;
 const FORUM_TITLE_MAX = 90;
@@ -557,7 +561,7 @@ const escapeHtml = (s: string) =>
 
 const plainRender: Render = async (md) => `<p>${escapeHtml(md)}</p>`;
 
-async function safeRender(render: Render, body: string, post?: { id: string; updatedAt: string | null }): Promise<string> {
+async function safeRender(render: Render, body: string, post?: RenderPostRef): Promise<string> {
   try {
     return await render(body, post);
   } catch (err) {
@@ -654,7 +658,7 @@ export async function listPosts(
       move: isPostMove(p.move) ? p.move : null,
       status,
       body,
-      bodyHtml: body ? await safeRender(render, body, { id: p.id, updatedAt: p.updatedAt ?? null }) : '',
+      bodyHtml: body ? await safeRender(render, body, { id: p.id, updatedAt: p.updatedAt ?? null, forumId: t.forumId ?? null }) : '',
       author: userRef(p.authorUserId, p.authorName),
       own: !!viewerUserId && p.authorUserId === viewerUserId,
       votes: v?.votes ?? emptyVotes(),

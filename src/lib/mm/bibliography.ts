@@ -48,6 +48,19 @@ const str = (v: unknown): string | null => {
   return s || null;
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function toSettings(row: any): ForumBibliographySettings {
+  const settings = row.settings && typeof row.settings === 'object' ? row.settings : {};
+  const email = str(settings.ownerEmail)?.toLowerCase() ?? null;
+  return {
+    forumId: String(row.id),
+    seshatLibraryId: str(settings.seshatLibraryId),
+    zoteroCollection: str(settings.zoteroCollection),
+    ownerEmail: email && email.length <= 320 && EMAIL_RE.test(email) ? email : null,
+  };
+}
+
 /** Loads a forum's bibliography settings. Assumes mm has a single commons space; ORDER BY keeps the pick deterministic if that ever changes. */
 export async function loadForumBibliography(q: QueryFn, slug: string): Promise<ForumBibliographySettings | null> {
   if (!SLUG_RE.test(slug)) return null;
@@ -62,15 +75,23 @@ export async function loadForumBibliography(q: QueryFn, slug: string): Promise<F
   );
   if (error) throw new BibliographyError(500, 'database error');
   const row = data?.[0];
-  if (!row) return null;
-  const settings = row.settings && typeof row.settings === 'object' ? row.settings : {};
-  const email = str(settings.ownerEmail)?.toLowerCase() ?? null;
-  return {
-    forumId: String(row.id),
-    seshatLibraryId: str(settings.seshatLibraryId),
-    zoteroCollection: str(settings.zoteroCollection),
-    ownerEmail: email && email.length <= 320 && EMAIL_RE.test(email) ? email : null,
-  };
+  return row ? toSettings(row) : null;
+}
+
+/** Same as loadForumBibliography, by forum id (post rendering knows the thread's forum id). */
+export async function loadForumBibliographyById(q: QueryFn, forumId: string): Promise<ForumBibliographySettings | null> {
+  if (typeof forumId !== 'string' || !UUID_RE.test(forumId)) return null;
+  const { data, error } = await q(
+    `SELECT b."id", b."settings"
+       FROM "ForumBoard" b
+       JOIN "Space" s ON s."id" = b."spaceId" AND s."tenantId" = 'mm' AND s."kind" = 'commons'
+      WHERE b."id" = $1::uuid
+      LIMIT 1`,
+    [forumId],
+  );
+  if (error) throw new BibliographyError(500, 'database error');
+  const row = data?.[0];
+  return row ? toSettings(row) : null;
 }
 
 const firstOf = (v: unknown): string | null => (Array.isArray(v) ? str(v[0]) : str(v));
@@ -131,6 +152,54 @@ export async function searchForumCitations(
   const payload: any = await response.json().catch(() => null);
   const items = Array.isArray(payload?.items) ? payload.items : [];
   return items.map(toCitation).filter((c: Citation | null): c is Citation => !!c).slice(0, limit);
+}
+
+const CITEKEY_RE = /^[A-Za-z0-9:_-]{1,160}$/;
+export const MAX_RESOLVE_KEYS = 100;
+
+/**
+ * Resolves `[@key]` citekeys to CSL-JSON items (for remark-seshat-citations'
+ * `resolve` option) on behalf of the FORUM's owner (never musiki's global
+ * SESHAT_CITATION_OWNER_EMAIL). Returns an empty map, without any request,
+ * when the forum has no library/owner linked. The upstream resolve endpoint
+ * resolves across the owner's catalog; libraryId is sent for when it scopes.
+ * Throws BibliographyError when Seshat is unreachable/misconfigured.
+ */
+export async function resolveForumCitations(
+  settings: ForumBibliographySettings | null,
+  keys: string[],
+  opts: SearchOptions = {},
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  if (!settings?.seshatLibraryId || !settings.ownerEmail) return out;
+  const wanted = [...new Set(keys.filter((k) => typeof k === 'string' && CITEKEY_RE.test(k)))].slice(0, MAX_RESOLVE_KEYS);
+  if (!wanted.length) return out;
+  const env = opts.env ?? (process.env as Record<string, string | undefined>);
+  const token = String(env.SESHAT_INTEGRATION_TOKEN || '').trim();
+  if (!token) throw new BibliographyError(503, 'bibliography unavailable');
+  const base = String(env.SESHAT_API_URL || 'https://seshat.zztt.org').trim().replace(/\/$/, '');
+  const upstream = new URL('/api/integrations/citations/resolve', base);
+  for (const key of wanted) upstream.searchParams.append('key', key);
+  upstream.searchParams.set('libraryId', settings.seshatLibraryId.slice(0, 200));
+
+  const doFetch = opts.fetch ?? fetch;
+  let response: Response;
+  try {
+    response = await doFetch(upstream, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'X-Seshat-Owner': settings.ownerEmail },
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    throw new BibliographyError(502, 'bibliography unavailable');
+  }
+  if (!response.ok) throw new BibliographyError(502, 'bibliography unavailable');
+  const payload: any = await response.json().catch(() => null);
+  const wantedSet = new Set(wanted);
+  for (const item of Array.isArray(payload?.items) ? payload.items : []) {
+    const id = typeof item?.id === 'string' ? item.id : '';
+    if (wantedSet.has(id) && item && typeof item === 'object') out.set(id, item);
+  }
+  return out;
 }
 
 /** Small in-memory fixed-window limiter (per key). Returns true when allowed. */

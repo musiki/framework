@@ -18,8 +18,11 @@ test('no citekey query for e-mails, plain text or caret elsewhere', () => {
 });
 
 test('insert citekey replaces the partial and adds one space', () => {
-  assert.deepEqual(insertCitekey('see @stie', 4, 9, 'stiegler1998'), { text: 'see @stiegler1998 ', caret: 18 });
-  assert.deepEqual(insertCitekey('see @st and', 4, 7, 'stiegler1998'), { text: 'see @stiegler1998 and', caret: 17 });
+  assert.deepEqual(insertCitekey('see @stie', 4, 9, 'stiegler1998'), { text: 'see [@stiegler1998] ', caret: 20 });
+  assert.deepEqual(insertCitekey('see @st and', 4, 7, 'stiegler1998'), { text: 'see [@stiegler1998] and', caret: 19 });
+  assert.deepEqual(insertCitekey('see [@st] and', 5, 8, 'stiegler1998'), { text: 'see [@stiegler1998] and', caret: 19 });
+  assert.deepEqual(insertCitekey('see [@st', 5, 8, 'stiegler1998'), { text: 'see [@stiegler1998] ', caret: 20 });
+  assert.deepEqual(insertCitekey('(@st).', 1, 4, 'k'), { text: '([@k]).', caret: 5 });
 });
 
 test('api error kinds', () => {

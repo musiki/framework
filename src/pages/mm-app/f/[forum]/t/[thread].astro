@@ -29,7 +29,7 @@ if (!isMm || !isUuid(threadId)) state = 'notFound';
 else {
   try {
     const viewer = await loadMmViewer(Astro.locals);
-    view = await listPosts({ spaceId: viewer.space.id, threadId, viewerUserId: viewer.userId });
+    view = await listPosts({ spaceId: viewer.space.id, threadId, viewerUserId: viewer.userId, lang });
     // The thread must belong to the forum in the URL.
     if (!view || view.thread.forum?.slug !== forumSlug) state = 'notFound';
   } catch (err) {

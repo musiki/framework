@@ -1,5 +1,5 @@
 // Pure helpers shared by the mm client scripts (src/scripts/mm/*): `@citekey`
-// detection/insertion in the composer and API error → message mapping.
+// detection and `[@citekey]` insertion in the composer and API error → message mapping.
 // No DOM, no fetch: tested in client-core.test.mjs.
 
 /** Characters Seshat citekeys use after the `@` (remark-seshat-citations style). */
@@ -24,13 +24,21 @@ export function findCitekeyQuery(text: string, caret: number): { start: number; 
   return { start: at, query };
 }
 
-/** Replaces `@partial` (from `start` to `caret`) with `@citekey ` and returns the new text and caret. */
+/**
+ * Replaces `@partial` (from `start` to `caret`) with `[@citekey] ` — the
+ * bracketed form the renderer (remark-seshat-citations) resolves — and
+ * returns the new text and caret. An opening `[` typed before the `@` and a
+ * closing `]` right after the caret are absorbed, so `[@sti]` does not become
+ * `[[@key]]]`.
+ */
 export function insertCitekey(text: string, start: number, caret: number, citekey: string): { text: string; caret: number } {
-  const insert = `@${citekey}`;
-  const after = text.slice(caret);
-  const spacer = after.startsWith(' ') || after.startsWith('\n') ? '' : ' ';
-  const next = text.slice(0, start) + insert + spacer + after;
-  return { text: next, caret: start + insert.length + spacer.length };
+  const from = start > 0 && text[start - 1] === '[' ? start - 1 : start;
+  let after = text.slice(caret);
+  if (after.startsWith(']')) after = after.slice(1);
+  const insert = `[@${citekey}]`;
+  const spacer = after === '' || /^[\s.,;:!?)\]]/.test(after) ? (after === '' ? ' ' : '') : ' ';
+  const next = text.slice(0, from) + insert + spacer + after;
+  return { text: next, caret: from + insert.length + spacer.length };
 }
 
 export type ApiErrorKind = 'rateLimited' | 'signIn' | 'forbidden' | 'notFound' | 'conflict' | 'invalid' | 'generic';
