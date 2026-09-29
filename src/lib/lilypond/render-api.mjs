@@ -1,16 +1,21 @@
 // Framework-independent core of /api/lily/render (src/pages/api/lily/render.ts).
 //
 // POST { code, format? } → renders through the sandboxed lilypond-service and
-//   stores public/lily/<md5(source)>.{svg,midi,pdf}; JSON shape unchanged:
+//   stores <store>/<md5(source)>.{svg,midi,pdf} (store.mjs getLilyDir); JSON shape unchanged:
 //   { success, hash, url, midiUrl, pdfUrl, generated, cached?, remote? }.
 // GET ?url=<.../<hash>.<svg|midi|mid|pdf>> → serves the local asset (SVG
 //   sanitized), or proxies a legacy rendered object — only from a configured
 //   R2 host AND only when the engine's own render cache already knows the URL.
+// handleLilyFileGet(<hash>.<ext>) is the core of GET /lily/<hash>.<ext>
+//   (src/pages/lily/[file].ts): store first, then legacy dist/client/lily and
+//   public/lily.
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { renderLilypond } from './service.mjs';
 import {
   getLilyDir,
+  getLilyReadDirs,
+  isSafeLilyHash,
   lilyAssetPaths,
   md5Hex,
   readSanitizedSvg,
@@ -42,7 +47,7 @@ function mimeFor(kind) {
   return 'audio/midi';
 }
 
-function assetResponse(kind, body, hash) {
+export function assetResponse(kind, body, hash) {
   const base = kind === 'svg'
     ? SVG_HEADERS
     : {
@@ -56,6 +61,24 @@ function assetResponse(kind, body, hash) {
     headers: { ...base, 'Cache-Control': 'public, max-age=31536000, immutable' },
     body,
   };
+}
+
+/**
+ * First local copy of <hash> as `kind` in `dirs` (in order), as a response;
+ * null when none exists. SVG is sanitized on read.
+ */
+export async function serveLocalLilyAsset(hash, kind, dirs) {
+  for (const dir of dirs) {
+    const paths = lilyAssetPaths(hash, dir);
+    if (kind === 'svg') {
+      const svg = await readSanitizedSvg(paths.svgPath);
+      if (svg) return assetResponse('svg', svg, hash);
+      continue;
+    }
+    const filePath = kind === 'pdf' ? (fs.existsSync(paths.pdfPath) ? paths.pdfPath : '') : resolveMidiPath(hash, dir);
+    if (filePath) return assetResponse(kind, await fsp.readFile(filePath), hash);
+  }
+  return null;
 }
 
 function replaceExtension(assetUrl, extension) {
@@ -280,6 +303,7 @@ export async function handleLilyRenderPost(payload, deps = {}) {
  */
 export async function handleLilyAssetGet(requestedUrl, deps = {}) {
   const dir = deps.dir ?? getLilyDir(deps.env);
+  const readDirs = deps.readDirs ?? (deps.dir ? [deps.dir] : getLilyReadDirs(deps.env));
   const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
   const env = deps.env ?? process.env;
   const text = (status, body) => ({ status, headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body });
@@ -307,15 +331,8 @@ export async function handleLilyAssetGet(requestedUrl, deps = {}) {
   const hash = isRemote ? md5Hex(replaceExtension(remoteUrl, 'svg')) : hashMatch[1].toLowerCase();
 
   await fsp.mkdir(dir, { recursive: true });
-  const serveLocal = async () => {
-    const paths = lilyAssetPaths(hash, dir);
-    if (kind === 'svg') {
-      const svg = await readSanitizedSvg(paths.svgPath);
-      return svg ? assetResponse('svg', svg, hash) : null;
-    }
-    const filePath = kind === 'pdf' ? (fs.existsSync(paths.pdfPath) ? paths.pdfPath : '') : resolveMidiPath(hash, dir);
-    return filePath ? assetResponse(kind, await fsp.readFile(filePath), hash) : null;
-  };
+  // Remote objects are only ever downloaded into the store (`dir`).
+  const serveLocal = () => serveLocalLilyAsset(hash, kind, isRemote ? [dir] : readDirs);
 
   const local = await serveLocal();
   if (local) return local;
@@ -329,4 +346,25 @@ export async function handleLilyAssetGet(requestedUrl, deps = {}) {
   if (kind === 'midi') return text(404, 'Remote LilyPond MIDI unavailable');
   if (kind === 'pdf') return text(404, 'Remote LilyPond PDF unavailable');
   return text(404, 'LilyPond asset unavailable');
+}
+
+const LILY_FILE_RE = /^([a-f0-9]{32,64})\.(svg|midi|mid|pdf)$/;
+
+/**
+ * GET /lily/<file>: a rendered asset by its content-hash name. Only
+ * `<32-64 lowercase hex>.<svg|midi|mid|pdf>` is accepted (no path segments,
+ * so no traversal); served from the store, then dist/client/lily, then
+ * public/lily. Same headers as the ?url= form (SVG CSP sandbox, MIDI/PDF as
+ * sandboxed attachments), cached immutably since names are content hashes.
+ * @param {string|undefined|null} file decoded route param
+ * @param {{readDirs?: string[], env?: Record<string, string|undefined>}} [deps]
+ */
+export async function handleLilyFileGet(file, deps = {}) {
+  const notFound = { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' }, body: 'Not found' };
+  const match = LILY_FILE_RE.exec(String(file ?? ''));
+  if (!match || !isSafeLilyHash(match[1])) return notFound;
+  const [, hash, ext] = match;
+  const kind = ext === 'svg' ? 'svg' : ext === 'pdf' ? 'pdf' : 'midi';
+  const readDirs = deps.readDirs ?? getLilyReadDirs(deps.env);
+  return (await serveLocalLilyAsset(hash, kind, readDirs)) ?? notFound;
 }

@@ -211,4 +211,37 @@ LILYPOND_SOCKET=/run/lilypond/lily.sock
 `REMOTE_LILYPOND_RENDER_URL` y `LILYPOND_RENDER_STRATEGY` ya no se usan. Si el
 servicio no responde, los bloques LilyPond quedan como código (se loguea una
 vez) y los que tienen `% rendered:` siguen mostrando su imagen en R2.
-Los resultados se guardan en `public/lily/<md5>.svg|midi|pdf` (SVG saneado).
+Los resultados se guardan en un almacén persistente **fuera del árbol del
+deploy** (`<store>/<md5>.svg|midi|pdf`, SVG saneado):
+
+```env
+# por defecto: /opt/musiki/data/lily en producción (NODE_ENV=production) si el
+# directorio existe; si no, <cwd>/public/lily (desarrollo).
+# LILYPOND_PUBLIC_DIR es el nombre anterior y se sigue aceptando.
+LILYPOND_ASSET_DIR=/opt/musiki/data/lily
+```
+
+- El workflow sincroniza el framework con `rsync -a --delete`, y en producción
+  sólo `dist/client` se sirve como estático: cualquier render escrito dentro de
+  `/opt/musiki/framework` (p. ej. `public/lily`) se pierde o nunca se sirve.
+  El almacén vive afuera y el deploy nunca lo borra.
+- `GET /lily/<hash>.<svg|midi|mid|pdf>` (`src/pages/lily/[file].ts`) sirve el
+  almacén; si falta, `dist/client/lily` y luego `public/lily` (archivos
+  legados). Sólo nombres `<hex 32-64>.<ext>`; SVG con CSP `sandbox` +
+  `nosniff`; MIDI/PDF como adjunto; cache inmutable (nombres por hash).
+  `GET /api/lily/render?url=` lee los mismos directorios.
+- El tenant `mm` tiene la familia de rutas `lily` (`/lily/*`); Caddy de
+  mm.zztt.org ya proxya `/lily/*` al engine.
+- `scripts/vps/deploy-framework-local.sh` crea el almacén (si puede),
+  exporta `LILYPOND_ASSET_DIR` para el build (remark-lily escribe ahí) y
+  corre `scripts/sanitize-lily-assets.mjs` sobre el almacén y el
+  `public/lily` legado.
+
+Preparación única en el VPS:
+
+```bash
+sudo mkdir -p /opt/musiki/data/lily
+sudo chown -R zz:zz /opt/musiki/data
+# y en /opt/musiki/framework/.env (lo lee ecosystem.config.cjs):
+# LILYPOND_ASSET_DIR=/opt/musiki/data/lily
+```

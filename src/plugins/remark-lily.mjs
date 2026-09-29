@@ -1,8 +1,9 @@
 // ```lily / ```lilypond / ```ly code blocks → inline SVG score.
 //
 // Rendering goes through the sandboxed lilypond-service (src/lib/lilypond/service.mjs);
-// the engine never runs LilyPond itself. Output is cached as
-// public/lily/<md5(code)>.svg / .midi (same names and markup as before), and
+// the engine never runs LilyPond itself. Output is cached in the LilyPond asset
+// store (LILYPOND_ASSET_DIR, see lib/lilypond/store.mjs getLilyDir) as
+// <md5(code)>.svg / .midi, served as /lily/<md5>.* (same names and markup as before), and
 // every SVG is security-sanitized before it is written or inlined. When the
 // service is unreachable the code block is left as is (remark-remote-lilypond
 // may still show a previously rendered R2 image).
