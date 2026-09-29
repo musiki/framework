@@ -147,3 +147,50 @@ h3 .mm-dot { margin-right: 0.45rem; }
 .mm-sources { padding-left: 1.2rem; }
 .mm-sources li > * + * { margin-left: 0.5em; }
 .mm-form-row > select { justify-self: start; }
+
+/* Admin page. */
+.mm-form input[type='email'] {
+  font: inherit; color: var(--mm-ink); background: var(--mm-white); border: var(--mm-rule); border-radius: 0;
+  padding: 0.5rem 0.6rem; width: 100%;
+}
+.mm-inline-form .mm-grow { flex: 1 1 16rem; }
+.mm-admin-toc { margin: 0 0 0.75rem; }
+.mm-admin-roles { max-width: 46rem; }
+.mm-admin-result:empty { display: none; }
+.mm-admin-result { border-left: 6px solid var(--mm-green); background: var(--mm-green-tint); padding: 0.6rem 1rem; margin: 1rem 0; }
+.mm-admin-result p { margin: 0; }
+.mm-admin-result p + p { margin-top: 0.35rem; }
+.mm-admin-link { overflow-wrap: anywhere; user-select: all; }
+.mm-admin-list { list-style: none; margin: 0; padding: 0; border-top: var(--mm-rule); }
+.mm-admin-list > li { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; justify-content: space-between; padding: 0.55rem 0; border-bottom: 1px solid var(--mm-ink-15); }
+.mm-admin-main { overflow-wrap: anywhere; min-width: 0; }
+.mm-admin-main > .mm-meta { display: inline; }
+.mm-admin-members td { vertical-align: middle; }
+.mm-admin-email { overflow-wrap: anywhere; }
+.mm-admin-role { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.mm-admin-role select { font: inherit; border: var(--mm-rule); border-radius: 0; padding: 0.25rem 0.4rem; background: var(--mm-white); color: var(--mm-ink); }
+.mm-nowrap { white-space: nowrap; }
+.mm-check { display: flex; gap: 0.6rem; align-items: flex-start; }
+.mm-check input { width: 1.25rem; height: 1.25rem; margin: 0.15rem 0 0; accent-color: var(--mm-ink); flex: none; }
+.mm-check label { font-weight: 700; }
+.mm-form .mm-admin-bib { border: 1px solid var(--mm-ink-15); padding: 0.9rem 1rem 1rem; display: grid; gap: 0.9rem; }
+.mm-admin-bib legend { padding: 0 0.35rem; }
+.mm-admin-forums { list-style: none; margin: 0 0 1.5rem; padding: 0; border-top: var(--mm-rule); }
+.mm-admin-forums > li { padding: 0.85rem 0; border-bottom: 1px solid var(--mm-ink-15); display: grid; gap: 0.45rem; }
+.mm-admin-forums > li > p { margin: 0; }
+.mm-admin-forum-title { font-size: 1.1rem; }
+.mm-admin-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.15rem 0.9rem; margin: 0; font-size: 0.9rem; }
+.mm-admin-dl dt { color: var(--mm-ink-70); }
+.mm-admin-dl dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 30rem) { .mm-admin-dl { grid-template-columns: minmax(0, 1fr); } .mm-admin-dl dd { margin-bottom: 0.3rem; } }
+.mm-admin-edit { border: var(--mm-rule); padding: 1rem; margin-top: 0.4rem; max-width: none; }
+.mm-inline-form input, .mm-inline-form select, .mm-inline-form .mm-button { min-height: 2.75rem; }
+[data-section] > h3 { margin-top: 1.75rem; }
+@media (max-width: 40rem) {
+  .mm-admin-members thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .mm-admin-members, .mm-admin-members tbody, .mm-admin-members tr, .mm-admin-members td { display: block; }
+  .mm-admin-members tr { border-bottom: 1px solid var(--mm-ink-15); padding: 0.5rem 0; }
+  .mm-admin-members td { border: 0; padding: 0.2rem 0; }
+  .mm-admin-members td:empty { display: none; }
+  .mm-admin-members td[data-label]::before { content: attr(data-label); display: block; font-size: 0.8rem; color: var(--mm-ink-70); }
+}

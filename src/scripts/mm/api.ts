@@ -22,10 +22,13 @@ export function pageStrings(): Strings {
 
 export class ApiFailure extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** The API's own (English) error string, when it sent one. */
+  detail: string | null;
+  constructor(status: number, message: string, detail: string | null = null) {
     super(message);
     this.name = 'ApiFailure';
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -59,7 +62,10 @@ export async function mmApi<T = any>(url: string, init: { method?: string; body?
   } catch {
     data = null;
   }
-  if (!res.ok) throw new ApiFailure(res.status, apiErrorMessage(res.status, data?.error, errorStrings()));
+  if (!res.ok) {
+    const detail = typeof data?.error === 'string' ? data.error : null;
+    throw new ApiFailure(res.status, apiErrorMessage(res.status, data?.error, errorStrings()), detail);
+  }
   return data as T;
 }
 

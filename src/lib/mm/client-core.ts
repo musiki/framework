@@ -62,3 +62,18 @@ export function apiErrorMessage(
   if ((kind === 'invalid' || kind === 'conflict') && detail) return `${lead} (${detail})`;
   return lead;
 }
+
+export type AdminErrorKind = 'lastAdmin' | 'self' | 'slugTaken';
+
+/**
+ * Admin page: the 409s the admin APIs return for a reason the admin can act
+ * on (src/lib/mm/admin-core.ts, forum-core.ts createForum) get their own
+ * localized message instead of the generic "changed in the meantime".
+ */
+export function adminErrorKind(status: number, apiMessage: unknown): AdminErrorKind | null {
+  if (status !== 409 || typeof apiMessage !== 'string') return null;
+  if (/at least one admin/i.test(apiMessage)) return 'lastAdmin';
+  if (/your own membership/i.test(apiMessage)) return 'self';
+  if (/slug already exists/i.test(apiMessage)) return 'slugTaken';
+  return null;
+}

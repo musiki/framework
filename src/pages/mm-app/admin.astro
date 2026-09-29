@@ -1,0 +1,260 @@
+---
+// Internal page for mm "/admin" (middleware rewrite; never reachable as
+// /mm-app/… by URL). Admins only: invitations, access rules, members, the
+// open-join switch, and forums (create, edit, archive, bibliography link).
+// Anonymous readers get a sign-in prompt (401) and signed-in non-admins the
+// mm 404, both without any data. The lists are loaded by the client script
+// (src/scripts/mm/admin.ts) from the admin APIs, which check the role again,
+// and rendered with textContent only.
+import MmLayout from '../../layouts/MmLayout.astro';
+import MmStatus from '../../components/mm/MmStatus.astro';
+import { t, type MessageKey } from '../../lib/i18n';
+import { mmEn } from '../../lib/i18n/mm-en';
+import { applyMmLang } from '../../lib/mm/ui-lang';
+import { can } from '../../lib/mm/policy';
+import { loadMmViewer, logPageError, type MmViewer } from '../../lib/mm/page-data';
+import { clientStrings } from '../../lib/mm/page-strings';
+import { pageErrorState } from '../../lib/mm/view';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+
+let state: 'ok' | 'signIn' | 'notFound' | 'unavailable' = 'ok';
+let viewer: MmViewer | null = null;
+if (!isMm) state = 'notFound';
+else {
+  try {
+    viewer = await loadMmViewer(Astro.locals);
+    if (!viewer.signedIn) state = 'signIn';
+    else if (!can(viewer.role, 'manageAccess')) state = 'notFound';
+  } catch (err) {
+    logPageError('admin', err);
+    state = pageErrorState(err);
+  }
+}
+if (state === 'signIn') Astro.response.status = 401;
+if (state === 'notFound') Astro.response.status = 404;
+if (state === 'unavailable') Astro.response.status = 503;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+// Every mm.admin.* string, flattened, for the client script.
+function adminStrings(node: Record<string, unknown>, prefix: string, out: Record<string, string>): Record<string, string> {
+  for (const [k, v] of Object.entries(node)) {
+    if (typeof v === 'string') out[`${prefix}${k}`] = t(lang, `mm.${prefix}${k}` as MessageKey);
+    else adminStrings(v as Record<string, unknown>, `${prefix}${k}.`, out);
+  }
+  return out;
+}
+const strings = clientStrings(lang, adminStrings(mmEn.admin, 'admin.', {}));
+const A = (key: string, vars?: Record<string, string | number>) => t(lang, `mm.admin.${key}` as MessageKey, vars);
+const GRANTABLE = ['curator', 'member', 'guest'] as const;
+---
+{!isMm ? (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
+) : state === 'notFound' || state === 'unavailable' ? (
+  <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
+) : state === 'signIn' ? (
+  <MmLayout lang={lang} title={A('signInTitle')} noindex>
+    <div class="mm-prose">
+      <h1>{A('signInTitle')}</h1>
+      <p class="mm-lead">{A('signInLead')}</p>
+      <p><a class="mm-button" href="/join">{t(lang, 'mm.nav.signIn')}</a></p>
+    </div>
+  </MmLayout>
+) : (
+  <MmLayout lang={lang} title={A('title')} noindex>
+    <div data-mm-i18n={strings} data-mm-admin data-mm-lang={lang} data-mm-self={viewer?.userId ?? ''}>
+      <h1>{A('title')}</h1>
+      <p class="mm-lead">{A('lead')}</p>
+      <nav aria-label={A('sectionsLabel')}>
+        <ul class="mm-inline-list mm-admin-toc">
+          <li><a href="#mm-a-invites">{A('invites.title')}</a></li>
+          <li><a href="#mm-a-rules">{A('rules.title')}</a></li>
+          <li><a href="#mm-a-members">{A('members.title')}</a></li>
+          <li><a href="#mm-a-open">{A('openJoin.title')}</a></li>
+          <li><a href="#mm-a-forums">{A('forums.title')}</a></li>
+        </ul>
+      </nav>
+      <p class="mm-help mm-admin-roles">{A('rolesHelp')}</p>
+
+      <section aria-labelledby="mm-a-invites" class="mm-panel" data-section="invites">
+        <h2 id="mm-a-invites">{A('invites.title')}</h2>
+        <p>{A('invites.lead')}</p>
+        <form class="mm-form" data-admin-form="invite" novalidate>
+          <div class="mm-inline-form">
+            <div class="mm-form-row mm-grow">
+              <label for="mm-inv-email">{A('invites.email')}</label>
+              <input id="mm-inv-email" type="email" name="email" required maxlength="320" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-inv-role">{A('invites.role')}</label>
+              <select id="mm-inv-role" name="role">
+                {GRANTABLE.map((r) => <option value={r} selected={r === 'member'}>{A(`roles.${r}`)}</option>)}
+              </select>
+            </div>
+            <div class="mm-form-row"><button class="mm-button" type="submit">{A('invites.submit')}</button></div>
+          </div>
+        </form>
+        <div class="mm-admin-result" data-ok role="status" aria-live="polite"></div>
+        <p class="mm-alert" data-err role="alert" hidden></p>
+        <h3 id="mm-a-invites-list" tabindex="-1">{A('invites.listTitle')}</h3>
+        <div data-list aria-busy="true"><p class="mm-muted">{A('loading')}</p></div>
+      </section>
+
+      <section aria-labelledby="mm-a-rules" class="mm-panel" data-section="rules">
+        <h2 id="mm-a-rules">{A('rules.title')}</h2>
+        <p>{A('rules.lead')}</p>
+        <p class="mm-note">{A('rules.note')}</p>
+        <form class="mm-form" data-admin-form="rule" novalidate>
+          <fieldset>
+            <legend>{A('rules.kind')}</legend>
+            <div class="mm-radios">
+              <label><input type="radio" name="kind" value="email" checked /> {A('rules.kindEmail')}</label>
+              <label><input type="radio" name="kind" value="domain" /> {A('rules.kindDomain')}</label>
+            </div>
+          </fieldset>
+          <div class="mm-inline-form">
+            <div class="mm-form-row mm-grow">
+              <label for="mm-rule-value">{A('rules.value')}</label>
+              <input id="mm-rule-value" type="text" name="value" required maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-rule-value-help" />
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-rule-role">{A('rules.role')}</label>
+              <select id="mm-rule-role" name="role">
+                {GRANTABLE.map((r) => <option value={r} selected={r === 'member'}>{A(`roles.${r}`)}</option>)}
+              </select>
+            </div>
+            <div class="mm-form-row"><button class="mm-button" type="submit">{A('rules.submit')}</button></div>
+          </div>
+          <p id="mm-rule-value-help" class="mm-help">{A('rules.valueHelp')}</p>
+        </form>
+        <div class="mm-admin-result" data-ok role="status" aria-live="polite"></div>
+        <p class="mm-alert" data-err role="alert" hidden></p>
+        <h3 id="mm-a-rules-list" tabindex="-1">{A('rules.listTitle')}</h3>
+        <div data-list aria-busy="true"><p class="mm-muted">{A('loading')}</p></div>
+      </section>
+
+      <section aria-labelledby="mm-a-members" class="mm-panel" data-section="members">
+        <h2 id="mm-a-members" tabindex="-1">{A('members.title')}</h2>
+        <p>{A('members.lead')}</p>
+        <div class="mm-admin-result" data-ok role="status" aria-live="polite"></div>
+        <p class="mm-alert" data-err role="alert" hidden></p>
+        <div data-list aria-busy="true"><p class="mm-muted">{A('loading')}</p></div>
+      </section>
+
+      <section aria-labelledby="mm-a-open" class="mm-panel" data-section="open">
+        <h2 id="mm-a-open">{A('openJoin.title')}</h2>
+        <div class="mm-form">
+          <div class="mm-check">
+            <input id="mm-open-join" type="checkbox" role="switch" data-open-join disabled aria-describedby="mm-open-join-help" />
+            <label for="mm-open-join">{A('openJoin.label')}</label>
+          </div>
+          <p id="mm-open-join-help" class="mm-help">{A('openJoin.help')}</p>
+        </div>
+        <div class="mm-admin-result" data-ok role="status" aria-live="polite"></div>
+        <p class="mm-alert" data-err role="alert" hidden></p>
+      </section>
+
+      <section aria-labelledby="mm-a-forums" class="mm-panel" data-section="forums">
+        <h2 id="mm-a-forums">{A('forums.title')}</h2>
+        <p>{A('forums.lead')}</p>
+        <div class="mm-admin-result" data-ok role="status" aria-live="polite"></div>
+        <p class="mm-alert" data-err role="alert" hidden></p>
+        <h3 id="mm-a-forums-list" tabindex="-1">{A('forums.listTitle')}</h3>
+        <div data-list aria-busy="true"><p class="mm-muted">{A('loading')}</p></div>
+
+        <h3 id="mm-a-forum-new">{A('forums.createTitle')}</h3>
+        <form class="mm-form" data-admin-form="forum-create" aria-labelledby="mm-a-forum-new" novalidate>
+          <div class="mm-form-row">
+            <label for="mm-fc-title">{A('forums.fTitle')}</label>
+            <input id="mm-fc-title" type="text" name="title" required maxlength="90" autocomplete="off" />
+          </div>
+          <div class="mm-form-row">
+            <label for="mm-fc-slug">{A('forums.slug')}</label>
+            <input id="mm-fc-slug" type="text" name="slug" maxlength="48" pattern="[a-z0-9]+(-[a-z0-9]+)*" autocomplete="off" spellcheck="false" aria-describedby="mm-fc-slug-help" />
+            <p id="mm-fc-slug-help" class="mm-help">{A('forums.slugHelp')}</p>
+          </div>
+          <div class="mm-form-row">
+            <label for="mm-fc-desc">{A('forums.description')}</label>
+            <textarea id="mm-fc-desc" name="description" maxlength="2000"></textarea>
+          </div>
+          <fieldset class="mm-admin-bib" aria-describedby="mm-fc-bib-lead">
+            <legend>{A('forums.bibTitle')}</legend>
+            <p id="mm-fc-bib-lead" class="mm-help">{A('forums.bibLead')}</p>
+            <div class="mm-form-row">
+              <label for="mm-fc-seshat">{A('forums.seshat')}</label>
+              <input id="mm-fc-seshat" type="text" name="seshatLibraryId" maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="mm-fc-seshat-help" />
+              <p id="mm-fc-seshat-help" class="mm-help">{A('forums.seshatHelp')}</p>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-fc-zotero">{A('forums.zotero')}</label>
+              <input id="mm-fc-zotero" type="text" name="zoteroCollection" maxlength="500" autocomplete="off" aria-describedby="mm-fc-zotero-help" />
+              <p id="mm-fc-zotero-help" class="mm-help">{A('forums.zoteroHelp')}</p>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-fc-owner">{A('forums.owner')}</label>
+              <input id="mm-fc-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-fc-owner-help" />
+              <p id="mm-fc-owner-help" class="mm-help">{A('forums.ownerHelp')}</p>
+            </div>
+          </fieldset>
+          <p class="mm-alert" data-form-err role="alert" hidden></p>
+          <div class="mm-form-actions"><button class="mm-button" type="submit">{A('forums.create')}</button></div>
+        </form>
+      </section>
+
+      <template data-tpl="forum-edit">
+        <form class="mm-form mm-admin-edit" data-admin-form="forum-edit" novalidate>
+          <div class="mm-form-row">
+            <label for="mm-fe-title">{A('forums.fTitle')}</label>
+            <input id="mm-fe-title" type="text" name="title" required maxlength="90" autocomplete="off" />
+          </div>
+          <div class="mm-form-row">
+            <label for="mm-fe-desc">{A('forums.description')}</label>
+            <textarea id="mm-fe-desc" name="description" maxlength="2000"></textarea>
+          </div>
+          <fieldset class="mm-admin-bib" aria-describedby="mm-fe-bib-lead">
+            <legend>{A('forums.bibTitle')}</legend>
+            <p id="mm-fe-bib-lead" class="mm-help">{A('forums.bibLead')}</p>
+            <div class="mm-form-row">
+              <label for="mm-fe-seshat">{A('forums.seshat')}</label>
+              <input id="mm-fe-seshat" type="text" name="seshatLibraryId" maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="mm-fe-seshat-help" />
+              <p id="mm-fe-seshat-help" class="mm-help">{A('forums.seshatHelp')}</p>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-fe-zotero">{A('forums.zotero')}</label>
+              <input id="mm-fe-zotero" type="text" name="zoteroCollection" maxlength="500" autocomplete="off" aria-describedby="mm-fe-zotero-help" />
+              <p id="mm-fe-zotero-help" class="mm-help">{A('forums.zoteroHelp')}</p>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-fe-owner">{A('forums.owner')}</label>
+              <input id="mm-fe-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-fe-owner-help" />
+              <p id="mm-fe-owner-help" class="mm-help">{A('forums.ownerHelp')}</p>
+            </div>
+          </fieldset>
+          <p class="mm-alert" data-form-err role="alert" hidden></p>
+          <div class="mm-form-actions">
+            <button class="mm-button" type="submit">{A('forums.save')}</button>
+            <button class="mm-button mm-button-quiet" type="button" data-cancel>{A('forums.cancel')}</button>
+          </div>
+        </form>
+      </template>
+
+      <dialog class="mm-dialog" data-confirm-remove aria-labelledby="mm-rm-title" aria-describedby="mm-rm-lead mm-rm-note">
+        <form method="dialog" class="mm-form">
+          <h2 id="mm-rm-title">{A('members.confirmTitle')}</h2>
+          <p id="mm-rm-lead" data-confirm-lead></p>
+          <p id="mm-rm-note" class="mm-note">{A('members.confirmNote')}</p>
+          <div class="mm-form-actions">
+            <button class="mm-button" type="submit" value="confirm">{A('members.confirm')}</button>
+            <button class="mm-button mm-button-quiet" type="submit" value="cancel" autofocus>{t(lang, 'mm.common.cancel')}</button>
+          </div>
+        </form>
+      </dialog>
+    </div>
+  </MmLayout>
+)}
+
+<script>
+  import '../../scripts/mm/admin.ts';
+</script>

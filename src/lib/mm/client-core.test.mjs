@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findCitekeyQuery, insertCitekey, apiErrorKind, apiErrorMessage } from './client-core.ts';
+import { findCitekeyQuery, insertCitekey, apiErrorKind, apiErrorMessage, adminErrorKind } from './client-core.ts';
 
 test('citekey query right after @', () => {
   assert.deepEqual(findCitekeyQuery('see @stie', 9), { start: 4, query: 'stie' });
@@ -41,4 +41,13 @@ test('api error message: detail only for validation/conflict', () => {
   assert.equal(apiErrorMessage(409, 'post already adopted', s), 'Changed (post already adopted)');
   assert.equal(apiErrorMessage(500, 'Internal error', s), 'Oops');
   assert.equal(apiErrorMessage(400, undefined, s), 'Check');
+});
+
+test('admin 409 reasons map to their own messages', () => {
+  assert.equal(adminErrorKind(409, 'the space must keep at least one admin'), 'lastAdmin');
+  assert.equal(adminErrorKind(409, 'you cannot change or remove your own membership'), 'self');
+  assert.equal(adminErrorKind(409, 'a forum with this slug already exists'), 'slugTaken');
+  assert.equal(adminErrorKind(409, 'something else'), null);
+  assert.equal(adminErrorKind(400, 'the space must keep at least one admin'), null);
+  assert.equal(adminErrorKind(409, undefined), null);
 });
