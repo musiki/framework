@@ -1,0 +1,224 @@
+---
+// Full mm page for a forum board: a group (/f/<group>) or one of its
+// channels (/f/<group>/<channel>). The calling page loads the data
+// (src/lib/mm/board-pages.ts) and sets the status; this renders it.
+//   Group page: description, bibliography, channels (thread counts, latest
+//   activity), the group's own threads (announcements), the group's concepts
+//   (including those born in its channels). A forum without channels is the
+//   pre-channels forum page, unchanged.
+//   Channel page: breadcrumbs group › channel, then the forum page as before
+//   (threads, new thread, concepts born here, propose a concept — the concept
+//   belongs to the group, its discussion thread lives in the channel).
+// Members start threads and propose concepts (client: forms.ts, composer.ts).
+// The API addresses a channel by id (its slug is only unique in its group).
+import MmLayout from '../../layouts/MmLayout.astro';
+import MmStatus from './MmStatus.astro';
+import MmBreadcrumbs from './MmBreadcrumbs.astro';
+import { t, type MessageKey } from '../../lib/i18n';
+import { POST_MOVES } from '../../lib/mm/forum';
+import { can } from '../../lib/mm/policy';
+import { clientStrings } from '../../lib/mm/page-strings';
+import type { BoardPageData } from '../../lib/mm/board-pages';
+import type { MmLang } from '../../lib/mm/ui-lang';
+import {
+  boardPath, boardThreadPath, conceptLabel, conceptPath, displayName, forumCrumbs, formatDate,
+} from '../../lib/mm/view';
+
+interface Props {
+  lang: MmLang;
+  isMm: boolean;
+  data: BoardPageData;
+}
+const { lang, isMm, data } = Astro.props;
+const { state, viewer, forum, group, threads, concepts } = data;
+
+const isChannel = Boolean(forum?.parent);
+const channels = !isChannel ? forum?.channels ?? [] : [];
+const hasChannels = channels.length > 0;
+const role = viewer?.role ?? null;
+const canPost = can(role, 'post');
+const canPropose = can(role, 'proposeConcept');
+const formerMember = t(lang, 'mm.common.formerMember');
+const memberLabel = t(lang, 'mm.common.member');
+const strings = clientStrings(lang, {
+  'cite.label': t(lang, 'mm.thread.citations.label'),
+  'cite.searching': t(lang, 'mm.thread.citations.searching'),
+  'cite.none': t(lang, 'mm.thread.citations.none'),
+  'cite.unavailable': t(lang, 'mm.thread.citations.unavailable'),
+});
+// API reference: group slug for a group, the id for a channel.
+const apiRef = forum ? (isChannel ? forum.id : forum.slug) : '';
+const apiPath = encodeURIComponent(apiRef);
+const crumbs = forum ? forumCrumbs(forum) : [];
+const threadsTitle = hasChannels ? t(lang, 'mm.forum.groupThreadsTitle') : t(lang, 'mm.forum.threadsTitle');
+const threadsEmpty = hasChannels ? t(lang, 'mm.forum.groupThreadsEmpty') : t(lang, 'mm.forum.threadsEmpty');
+const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(lang, 'mm.forum.conceptsTitle');
+---
+{!isMm ? (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
+) : state !== 'ok' || !forum ? (
+  <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
+) : (
+  <MmLayout lang={lang} title={isChannel && group ? `${forum.title} · ${group.title}` : forum.title} description={forum.description ?? undefined}>
+    <div data-mm-i18n={strings}>
+      {isChannel && <MmBreadcrumbs label={t(lang, 'mm.forum.breadcrumb')} crumbs={crumbs} />}
+      <h1>{forum.title}</h1>
+      {forum.description && <p class="mm-lead mm-pre-line">{forum.description}</p>}
+      <p class="mm-alert" data-mm-flash role="alert" hidden></p>
+
+      <div class="mm-layout-2">
+        <div>
+          {hasChannels && (
+            <section aria-labelledby="mm-channels" class="mm-channels">
+              <h2 id="mm-channels">{t(lang, 'mm.forum.channelsTitle')}</h2>
+              <ul class="mm-list">
+                {channels.map((ch) => (
+                  <li>
+                    <a class="mm-list-title" href={boardPath(ch)}>{ch.title}</a>
+                    {ch.description && <p class="mm-list-desc mm-pre-line">{ch.description}</p>}
+                    <p class="mm-meta">
+                      <span>{ch.threadCount === 1 ? t(lang, 'mm.forum.channelThreadsOne') : t(lang, 'mm.forum.channelThreads', { n: ch.threadCount })}</span>
+                      <span>{ch.lastActivityAt ? t(lang, 'mm.forumList.lastActivity', { date: formatDate(ch.lastActivityAt, lang) }) : t(lang, 'mm.forum.noActivity')}</span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section aria-labelledby="mm-threads">
+            <h2 id="mm-threads">{threadsTitle}</h2>
+            {threads.length ? (
+              <ul class="mm-list">
+                {threads.map((th) => (
+                  <li>
+                    <a class="mm-list-title" href={boardThreadPath(forum!, th.id)}>{th.title}</a>
+                    <ul class="mm-inline-list">
+                      {th.isPinned && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.pinned')}</span></li>}
+                      {th.isLocked && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.locked')}</span></li>}
+                      {th.concept && (
+                        <li>
+                          <a href={conceptPath(th.concept.slug)}>{t(lang, 'mm.forum.conceptThread', { label: th.concept.label })}</a>
+                        </li>
+                      )}
+                    </ul>
+                    <p class="mm-meta">
+                      <span>{t(lang, 'mm.forum.startedBy', { name: displayName(th.createdBy, formerMember, memberLabel) })}</span>
+                      <span>{th.postCount === 1 ? t(lang, 'mm.forum.postsOne') : t(lang, 'mm.forum.posts', { n: th.postCount })}</span>
+                      <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(th.lastActivityAt, lang) })}</span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="mm-muted">{threadsEmpty}</p>
+            )}
+          </section>
+
+          {canPost ? (
+            <section aria-labelledby="mm-new-thread" class="mm-panel">
+              <h2 id="mm-new-thread">{t(lang, 'mm.forum.newThreadTitle')}</h2>
+              <form class="mm-form" data-mm-form data-method="POST" data-endpoint={`/api/mm/forums/${apiPath}/threads`} data-then="go-thread" data-forum-path={boardPath(forum)}>
+                <div class="mm-form-row">
+                  <label for="mm-thread-title">{t(lang, 'mm.forum.threadTitle')}</label>
+                  <input id="mm-thread-title" type="text" name="title" required minlength="3" maxlength="140" autocomplete="off" />
+                </div>
+                <div class="mm-form-row">
+                  <label for="mm-thread-move">{t(lang, 'mm.moves.label')}</label>
+                  <select id="mm-thread-move" name="move" aria-describedby="mm-thread-move-help">
+                    {POST_MOVES.map((m) => <option value={m} selected={m === 'comment'}>{t(lang, `mm.moves.${m}` as MessageKey)}</option>)}
+                  </select>
+                  <p id="mm-thread-move-help" class="mm-help">{t(lang, 'mm.moves.help')}</p>
+                </div>
+                <div class="mm-form-row">
+                  <label for="mm-thread-body">{t(lang, 'mm.forum.firstPost')}</label>
+                  <textarea id="mm-thread-body" name="body" required maxlength="20000" data-mm-cite={apiRef} aria-describedby="mm-thread-body-help"></textarea>
+                  <p id="mm-thread-body-help" class="mm-help">{t(lang, 'mm.thread.bodyHelp')}</p>
+                </div>
+                <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+                <div class="mm-form-actions"><button class="mm-button" type="submit">{t(lang, 'mm.forum.createThread')}</button></div>
+              </form>
+            </section>
+          ) : viewer?.signedIn ? (
+            <p class="mm-note">{t(lang, 'mm.common.membersOnly')}</p>
+          ) : (
+            <p><a class="mm-button" href="/join">{t(lang, 'mm.common.signInToTakePart')}</a></p>
+          )}
+        </div>
+
+        <aside>
+          <section aria-labelledby="mm-bib" class="mm-card mm-tint-blue">
+            <h2 id="mm-bib">{t(lang, 'mm.forum.bibliographyTitle')}</h2>
+            {forum.settings.hasBibliography ? (
+              <p>{t(lang, 'mm.forum.bibliographyLinked')}</p>
+            ) : (
+              <p class="mm-muted">{t(lang, 'mm.forum.bibliographyNone')}</p>
+            )}
+            {forum.settings.zoteroCollection && (
+              <p class="mm-meta">{t(lang, 'mm.forum.bibliographyZotero', { name: forum.settings.zoteroCollection })}</p>
+            )}
+            {isChannel && group && (forum.settings.hasBibliography || forum.settings.zoteroCollection) && (
+              <p class="mm-meta">
+                {forum.overridesBibliography
+                  ? t(lang, 'mm.forum.bibliographyOwn')
+                  : t(lang, 'mm.forum.bibliographyInherited', { group: group.title })}
+              </p>
+            )}
+          </section>
+
+          <section aria-labelledby="mm-born">
+            <h2 id="mm-born">{conceptsTitle}</h2>
+            {concepts.length ? (
+              <ul class="mm-concept-list">
+                {concepts.map((c) => {
+                  const label = conceptLabel(c, lang);
+                  return (
+                    <li class={`mm-st-${c.status}`}>
+                      <a href={conceptPath(c.slug)} lang={label.lang}>{label.text}</a>
+                      <span class="mm-meta"> · {t(lang, `mm.status.${c.status}` as MessageKey)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p class="mm-muted">{t(lang, 'mm.forum.conceptsEmpty')}</p>
+            )}
+          </section>
+        </aside>
+      </div>
+
+      {canPropose && (
+        <section aria-labelledby="mm-propose" class="mm-panel mm-tint-pink">
+          <h2 id="mm-propose">{t(lang, 'mm.forum.proposeTitle')}</h2>
+          <p class="mm-prose">{t(lang, 'mm.forum.proposeLead')}</p>
+          <form class="mm-form" data-mm-form data-method="POST" data-endpoint="/api/mm/concepts" data-then="go-concept">
+            <input type="hidden" name="forum" value={apiRef} />
+            <div class="mm-form-row">
+              <label for="mm-c-label">{t(lang, 'mm.forum.conceptLabel')}</label>
+              <input id="mm-c-label" type="text" name="label" required maxlength="200" autocomplete="off" lang="en" />
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-c-def">{t(lang, 'mm.forum.conceptDefinition')}</label>
+              <textarea id="mm-c-def" name="definition" required maxlength="20000" lang="en"></textarea>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-c-label-nb">{t(lang, 'mm.forum.conceptLabelNb')}</label>
+              <input id="mm-c-label-nb" type="text" name="labelNb" maxlength="200" autocomplete="off" lang="nb" />
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-c-def-nb">{t(lang, 'mm.forum.conceptDefinitionNb')}</label>
+              <textarea id="mm-c-def-nb" name="definitionNb" maxlength="20000" lang="nb"></textarea>
+            </div>
+            <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+            <div class="mm-form-actions"><button class="mm-button" type="submit">{t(lang, 'mm.forum.propose')}</button></div>
+          </form>
+        </section>
+      )}
+    </div>
+  </MmLayout>
+)}
+
+<script>
+  import '../../scripts/mm/forms.ts';
+  import '../../scripts/mm/composer.ts';
+</script>

@@ -51,6 +51,15 @@ if (isMm) {
                 <span>{t(lang, 'mm.forumList.counts', { threads: f.threadCount, concepts: f.conceptCount })}</span>
                 {f.lastActivityAt && <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(f.lastActivityAt, lang) })}</span>}
               </p>
+              {f.channels.length > 0 && (
+                <p class="mm-meta">
+                  <span>{t(lang, 'mm.forumList.channels')}:{' '}
+                    {f.channels.map((c, i) => (
+                      <>{i > 0 && ', '}<a href={forumPath(f.slug, c.slug)}>{c.title}</a></>
+                    ))}
+                  </span>
+                </p>
+              )}
             </li>
           ))}
         </ul>

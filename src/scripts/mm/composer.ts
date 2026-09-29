@@ -1,7 +1,9 @@
 // Composer helpers: `@citekey` autocomplete against the forum's bibliography
-// (GET /api/mm/forums/<slug>/citations?q=) and reply targeting.
+// (GET /api/mm/forums/<group slug | forum id>/citations?q=; a channel is
+// addressed by id and uses its effective, inherited bibliography) and reply
+// targeting.
 //
-// <textarea data-mm-cite="<forum slug>"> gets a listbox of references while
+// <textarea data-mm-cite="<group slug | channel id>"> gets a listbox of references while
 // the caret follows `@partial`; ArrowUp/Down move, Enter/Tab insert, Escape
 // closes. Results are rendered with textContent only.
 //

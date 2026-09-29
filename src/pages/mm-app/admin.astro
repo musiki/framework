@@ -1,7 +1,8 @@
 ---
 // Internal page for mm "/admin" (middleware rewrite; never reachable as
 // /mm-app/… by URL). Admins only: invitations, access rules, members, the
-// open-join switch, and forums (create, edit, archive, bibliography link).
+// open-join switch, and forums (create, edit, archive, bibliography link)
+// with their channels (add, edit, archive; bibliography override).
 // Anonymous readers get a sign-in prompt (401) and signed-in non-admins the
 // mm 404, both without any data. The lists are loaded by the client script
 // (src/scripts/mm/admin.ts) from the admin APIs, which check the role again,
@@ -224,6 +225,7 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
           <fieldset class="mm-admin-bib" aria-describedby="mm-fe-bib-lead">
             <legend>{A('forums.bibTitle')}</legend>
             <p id="mm-fe-bib-lead" class="mm-help">{A('forums.bibLead')}</p>
+            <p class="mm-help" data-channel-bib-help hidden>{A('forums.overrideBibHelp')}</p>
             <div class="mm-form-row">
               <label for="mm-fe-owner">{A('forums.owner')}</label>
               <input id="mm-fe-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-fe-owner-help" />
@@ -251,6 +253,59 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
           <p class="mm-alert" data-form-err role="alert" hidden></p>
           <div class="mm-form-actions">
             <button class="mm-button" type="submit">{A('forums.save')}</button>
+            <button class="mm-button mm-button-quiet" type="button" data-cancel>{A('forums.cancel')}</button>
+          </div>
+        </form>
+      </template>
+
+      <template data-tpl="channel-create">
+        <form class="mm-form mm-admin-edit" data-admin-form="channel-create" novalidate>
+          <div class="mm-form-row">
+            <label for="mm-cc-title">{A('forums.fTitle')}</label>
+            <input id="mm-cc-title" type="text" name="title" required maxlength="90" autocomplete="off" />
+          </div>
+          <div class="mm-form-row">
+            <label for="mm-cc-slug">{A('forums.slug')}</label>
+            <input id="mm-cc-slug" type="text" name="slug" maxlength="48" pattern="[a-z0-9]+(-[a-z0-9]+)*" autocomplete="off" spellcheck="false" aria-describedby="mm-cc-slug-help" />
+            <p id="mm-cc-slug-help" class="mm-help" data-channel-slug-help></p>
+          </div>
+          <div class="mm-form-row">
+            <label for="mm-cc-desc">{A('forums.description')}</label>
+            <textarea id="mm-cc-desc" name="description" maxlength="2000"></textarea>
+          </div>
+          <details class="mm-admin-lib-manual" data-bib-override>
+            <summary>{A('forums.overrideBib')}</summary>
+            <fieldset class="mm-admin-bib" aria-describedby="mm-cc-bib-lead">
+              <legend>{A('forums.bibTitle')}</legend>
+              <p id="mm-cc-bib-lead" class="mm-help">{A('forums.overrideBibHelp')} {A('forums.bibLead')}</p>
+              <div class="mm-form-row">
+                <label for="mm-cc-owner">{A('forums.owner')}</label>
+                <input id="mm-cc-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-cc-owner-help" />
+                <p id="mm-cc-owner-help" class="mm-help">{A('forums.ownerHelp')}</p>
+              </div>
+              <div class="mm-form-row" data-lib-picker hidden>
+                <label for="mm-cc-lib">{A('forums.seshatPick')}</label>
+                <select id="mm-cc-lib" data-lib-select aria-describedby="mm-cc-lib-status"></select>
+              </div>
+              <p id="mm-cc-lib-status" class="mm-help" data-lib-status role="status" aria-live="polite">{A('forums.seshatNeedOwner')}</p>
+              <details class="mm-admin-lib-manual" data-lib-manual>
+                <summary>{A('forums.seshatManual')}</summary>
+                <div class="mm-form-row">
+                  <label for="mm-cc-seshat">{A('forums.seshat')}</label>
+                  <input id="mm-cc-seshat" type="text" name="seshatLibraryId" maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="mm-cc-seshat-help" />
+                  <p id="mm-cc-seshat-help" class="mm-help">{A('forums.seshatHelp')}</p>
+                </div>
+              </details>
+              <div class="mm-form-row">
+                <label for="mm-cc-zotero">{A('forums.zotero')}</label>
+                <input id="mm-cc-zotero" type="text" name="zoteroCollection" maxlength="500" autocomplete="off" aria-describedby="mm-cc-zotero-help" />
+                <p id="mm-cc-zotero-help" class="mm-help">{A('forums.zoteroHelp')}</p>
+              </div>
+            </fieldset>
+          </details>
+          <p class="mm-alert" data-form-err role="alert" hidden></p>
+          <div class="mm-form-actions">
+            <button class="mm-button" type="submit">{A('forums.createChannel')}</button>
             <button class="mm-button mm-button-quiet" type="button" data-cancel>{A('forums.cancel')}</button>
           </div>
         </form>

@@ -198,3 +198,13 @@ h3 .mm-dot { margin-right: 0.45rem; }
   .mm-admin-members td:empty { display: none; }
   .mm-admin-members td[data-label]::before { content: attr(data-label); display: block; font-size: 0.8rem; color: var(--mm-ink-70); }
 }
+
+/* Forum channels: breadcrumbs (group › channel › thread) and the channel list. */
+.mm-crumbs ol { list-style: none; display: flex; flex-wrap: wrap; gap: 0.2rem 0.35rem; margin: 0 0 0.6rem; padding: 0; font-size: 0.9rem; color: var(--mm-ink-70); }
+.mm-crumbs li + li::before { content: "\203A"; content: "\203A" / ""; margin-right: 0.35rem; color: var(--mm-ink-70); }
+.mm-crumbs [aria-current="page"] { color: var(--mm-ink, inherit); }
+.mm-channels { margin-bottom: 1.5rem; }
+.mm-admin-channels { list-style: none; margin: 0.35rem 0 0 1rem; padding: 0 0 0 0.9rem; border-left: 2px solid var(--mm-ink-15); display: grid; gap: 0.35rem; }
+.mm-admin-channels > li { padding: 0.5rem 0; border-bottom: 1px solid var(--mm-ink-15); display: grid; gap: 0.4rem; }
+.mm-admin-channels > li > p { margin: 0; }
+.mm-admin-channels-title { font-size: 1rem; margin: 0.4rem 0 0; }

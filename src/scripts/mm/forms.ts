@@ -5,7 +5,8 @@
 //   Bokmål fields, "no move"). data-then:
 //     reload        reload the page
 //     reload-post   reload at #post-<response.post.id>
-//     go-thread     go to /f/<data-forum>/t/<response.threadId>
+//     go-thread     go to <data-forum-path>/t/<response.threadId> (the board's
+//                   public path: /f/<group> or /f/<group>/<channel>)
 //     go-concept    go to /c/<response.slug>
 //   Errors (429 included) show in the form's [data-mm-form-status].
 //
@@ -31,9 +32,10 @@ function after(then: string | undefined, result: any, el: HTMLElement): void {
       reloadAt(result?.post?.id ? `post-${result.post.id}` : undefined);
       return;
     case 'go-thread': {
-      const forum = el.dataset.forum ?? '';
-      if (result?.threadId && forum) {
-        window.location.assign(`/f/${encodeURIComponent(forum)}/t/${encodeURIComponent(result.threadId)}`);
+      const base = el.dataset.forumPath ?? '';
+      // Only a same-site /f/… path (built server-side by boardPath) is followed.
+      if (result?.threadId && /^\/f\/[^/?#]+(\/[^/?#]+)?$/.test(base)) {
+        window.location.assign(`${base}/t/${encodeURIComponent(result.threadId)}`);
         return;
       }
       reloadAt();

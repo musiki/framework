@@ -12,7 +12,8 @@ const allow = createRateLimiter(30, 60_000);
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'Cache-Control': status === 200 ? 'public, max-age=15' : 'no-store' } });
 
-// Public-readable citation metadata for a forum's linked Seshat library.
+// Public-readable citation metadata for a forum's linked Seshat library. `slug` is a
+// group slug or any forum id; a channel uses its effective (inherited) bibliography.
 export const GET: APIRoute = async ({ request, params, url, locals, clientAddress }) => {
   if ((locals as any).tenant?.id !== 'mm') return json({ error: 'Not found' }, 404);
   const addr = (() => { try { return clientAddress; } catch { return undefined; } })();

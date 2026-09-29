@@ -1,0 +1,20 @@
+---
+// Breadcrumbs group › channel › thread for the mm forum pages. The last crumb
+// is the current page (aria-current="page", not a link).
+import type { Crumb } from '../../lib/mm/view';
+
+interface Props {
+  label: string;
+  crumbs: Crumb[];
+}
+const { label, crumbs } = Astro.props;
+---
+{crumbs.length > 1 && (
+  <nav class="mm-crumbs" aria-label={label}>
+    <ol>
+      {crumbs.map((c) => (
+        <li>{c.href ? <a href={c.href}>{c.label}</a> : <span aria-current="page">{c.label}</span>}</li>
+      ))}
+    </ol>
+  </nav>
+)}

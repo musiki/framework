@@ -62,13 +62,16 @@ const canEdit = can(role, 'editDefinition', { isAuthor });
 const canStatus = can(role, 'changeStatus');
 const canRelate = can(role, 'createRelation');
 const apiSlug = encodeURIComponent(slug);
-const discussion = concept?.threadId && concept.forum ? threadPath(concept.forum.slug, concept.threadId) : null;
+// The discussion thread may live in a channel of the concept's group (origin).
+const discussion = concept?.threadId && concept.origin
+  ? threadPath(concept.origin.groupSlug, concept.threadId, concept.origin.channel?.slug ?? null)
+  : null;
 const langName = (l: string | null) =>
   l === 'nb' ? t(lang, 'mm.common.langNb') : l === 'nn' ? t(lang, 'mm.common.langNn') : t(lang, 'mm.common.langEn');
 const relLabel = (type: string) => t(lang, `mm.relationTypes.${type}` as MessageKey);
 const strings = clientStrings(lang);
 const selfPath = concept ? conceptPath(concept.slug) : '/';
-const postLink = (postId: string | null) => (postId && concept?.forum && concept.threadId ? `${threadPath(concept.forum.slug, concept.threadId)}#post-${postId}` : null);
+const postLink = (postId: string | null) => (postId && discussion ? `${discussion}#post-${postId}` : null);
 ---
 {!isMm ? (
   <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
@@ -79,6 +82,9 @@ const postLink = (postId: string | null) => (postId && concept?.forum && concept
     <div data-mm-i18n={strings} class={`mm-st-${concept.status}`}>
       <p class="mm-meta">
         {concept.forum && <a class="mm-more" href={forumPath(concept.forum.slug)}>{t(lang, 'mm.concept.proposedIn', { forum: concept.forum.title })}</a>}
+        {concept.forum && concept.origin?.channel && (
+          <a href={forumPath(concept.origin.groupSlug, concept.origin.channel.slug)}>{t(lang, 'mm.concept.discussedIn', { channel: concept.origin.channel.title })}</a>
+        )}
       </p>
       <h1 lang={label.lang}>{label.text}</h1>
       <p class="mm-meta">

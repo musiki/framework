@@ -21,6 +21,9 @@ type Forum = {
   title: string;
   description: string | null;
   isArchived: boolean;
+  /** Group of a channel; null for a top-level forum. */
+  parentId: string | null;
+  /** The forum's own settings (a channel's empty keys use its group's). */
   settings: { seshatLibraryId?: string; zoteroCollection?: string; ownerEmail?: string };
 };
 
@@ -511,6 +514,7 @@ function initForums(): void {
   const heading = sec.el.querySelector<HTMLElement>('#mm-a-forums-list');
   const createForm = sec.el.querySelector<HTMLFormElement>('[data-admin-form="forum-create"]')!;
   const tpl = root!.querySelector<HTMLTemplateElement>('template[data-tpl="forum-edit"]')!;
+  const channelTpl = root!.querySelector<HTMLTemplateElement>('template[data-tpl="channel-create"]')!;
   const BIB = ['seshatLibraryId', 'zoteroCollection', 'ownerEmail'] as const;
 
   const formErr = (form: HTMLFormElement, message: string | null) => {
@@ -520,24 +524,99 @@ function initForums(): void {
     if (message) sec.okEl.replaceChildren();
   };
 
-  /** The edit form from the template, with ids made unique per forum. */
-  const editForm = (forum: Forum, n: number): HTMLFormElement => {
-    const frag = tpl.content.cloneNode(true) as DocumentFragment;
+  /** A form cloned from a template, with ids made unique by `suffix`. */
+  const cloneForm = (template: HTMLTemplateElement, suffix: string): HTMLFormElement => {
+    const frag = template.content.cloneNode(true) as DocumentFragment;
     const form = frag.querySelector('form')!;
-    const suffix = `-${n}`;
     for (const el of form.querySelectorAll<HTMLElement>('[id]')) el.id += suffix;
     for (const el of form.querySelectorAll<HTMLLabelElement>('label[for]')) el.htmlFor += suffix;
     for (const el of form.querySelectorAll<HTMLElement>('[aria-describedby]')) {
       el.setAttribute('aria-describedby', el.getAttribute('aria-describedby')!.split(/\s+/).map((id) => id + suffix).join(' '));
     }
+    return form;
+  };
+
+  /** The edit form from the template, with ids made unique per forum. */
+  const editForm = (forum: Forum, n: number): HTMLFormElement => {
+    const form = cloneForm(tpl, `-${n}`);
     const set = (name: string, value: string | null | undefined) => {
       (form.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement).value = value ?? '';
     };
     set('title', forum.title);
     set('description', forum.description);
     for (const k of BIB) set(k, forum.settings?.[k]);
+    // A channel's bibliography fields are an override of its group's.
+    const channelHelp = form.querySelector<HTMLElement>('[data-channel-bib-help]');
+    if (channelHelp) channelHelp.hidden = !forum.parentId;
     form.setAttribute('aria-label', S('forums.editLabel', { title: forum.title }));
     return form;
+  };
+
+  const channelErrorMessage = (err: unknown) =>
+    err instanceof ApiFailure && adminErrorKind(err.status, err.detail) === 'slugTaken' ? S('forums.channelSlugTaken') : errorMessage(err);
+
+  /** "Add channel" toggle + form (slug, title, description, collapsed bibliography override). */
+  const channelCreator = (group: Forum, n: number): HTMLElement => {
+    const slotId = `mm-channel-new-${n}`;
+    const add = h('button', {
+      type: 'button', class: 'mm-button mm-button-small', 'aria-expanded': 'false', 'aria-controls': slotId,
+      'aria-label': S('forums.addChannelLabel', { title: group.title }), text: S('forums.addChannel'), 'data-add-channel': group.id,
+    });
+    const slot = h('div', { id: slotId });
+    const close = () => {
+      slot.replaceChildren();
+      add.setAttribute('aria-expanded', 'false');
+    };
+    add.addEventListener('click', () => {
+      if (add.getAttribute('aria-expanded') === 'true') return close();
+      const form = cloneForm(channelTpl, `-${n}`);
+      form.setAttribute('aria-label', S('forums.addChannelLabel', { title: group.title }));
+      form.querySelector<HTMLElement>('[data-channel-slug-help]')!.textContent = S('forums.channelSlugHelp', { group: group.slug });
+      const picker = attachLibraryPicker(form);
+      form.querySelector<HTMLDetailsElement>('[data-bib-override]')!.addEventListener('toggle', () => void picker.refresh());
+      form.querySelector<HTMLButtonElement>('[data-cancel]')!.addEventListener('click', () => {
+        close();
+        focusLater(add);
+      });
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (form.getAttribute('aria-busy') === 'true') return;
+        const bad = invalidField(form);
+        if (bad) {
+          const override = form.querySelector<HTMLDetailsElement>('[data-bib-override]')!;
+          if (override.contains(bad)) override.open = true;
+          formErr(form, bad.validationMessage);
+          bad.focus();
+          return;
+        }
+        formErr(form, null);
+        const body: Record<string, unknown> = { title: fieldValue(form, 'title') };
+        const slug = fieldValue(form, 'slug');
+        const description = fieldValue(form, 'description');
+        if (slug) body.slug = slug;
+        if (description) body.description = description;
+        const settings: Record<string, string> = {};
+        for (const k of BIB) {
+          const v = fieldValue(form, k);
+          if (v) settings[k] = v;
+        }
+        if (Object.keys(settings).length) body.settings = settings;
+        busy(form, true);
+        try {
+          const r = await mmApi<{ forum: Forum }>(`/api/mm/forums/${encodeURIComponent(group.id)}/channels`, { method: 'POST', body });
+          sec.ok(S('forums.channelCreated', { title: r.forum?.title ?? String(body.title), group: group.title }));
+          await reload();
+          focusLater(sec.list!.querySelector<HTMLElement>(`[data-add-channel="${group.id}"]`) ?? heading);
+        } catch (err) {
+          formErr(form, channelErrorMessage(err));
+          busy(form, false);
+        }
+      });
+      slot.replaceChildren(form);
+      add.setAttribute('aria-expanded', 'true');
+      focusLater(form.elements.namedItem('title') as HTMLInputElement);
+    });
+    return h('div', {}, h('div', { class: 'mm-form-actions' }, add), slot);
   };
 
   const render = (forums: Forum[]) => {
@@ -545,107 +624,134 @@ function initForums(): void {
       sec.list!.replaceChildren(h('p', { class: 'mm-muted', text: S('forums.empty') }));
       return;
     }
+    const groups = forums.filter((f) => !f.parentId);
+    const channelsOf = (g: Forum) => forums.filter((f) => f.parentId === g.id);
+    let counter = 0;
     const ul = h('ul', { class: 'mm-admin-forums' });
-    forums.forEach((forum, n) => {
-      const li = h('li', { 'data-forum-id': forum.id });
-      const title = h('p', { class: 'mm-admin-forum-title' }, h('strong', { text: forum.title }));
-      if (forum.isArchived) title.append(' ', h('span', { class: 'mm-badge mm-badge-quiet', text: S('forums.archived') }));
-      const meta = h('p', { class: 'mm-meta' });
-      meta.append(forum.isArchived
-        ? h('span', { text: S('forums.address', { slug: forum.slug }) })
-        : h('a', { href: `/f/${encodeURIComponent(forum.slug)}`, text: S('forums.address', { slug: forum.slug }) }));
-      const bib = h('dl', { class: 'mm-admin-dl' });
-      const labels: Record<(typeof BIB)[number], string> = {
-        seshatLibraryId: S('forums.seshat'), zoteroCollection: S('forums.zotero'), ownerEmail: S('forums.owner'),
-      };
-      for (const k of BIB) {
-        const v = forum.settings?.[k];
-        if (v) bib.append(h('dt', { text: labels[k] }), h('dd', { text: v }));
+    for (const group of groups) {
+      const li = item(group, counter++, null);
+      const channels = channelsOf(group);
+      const headingId = `mm-channels-of-${counter}`;
+      li.append(h('p', { class: 'mm-admin-channels-title', id: headingId }, h('strong', { text: S('forums.channelsTitle', { title: group.title }) })));
+      if (channels.length) {
+        const sub = h('ul', { class: 'mm-admin-channels', 'aria-labelledby': headingId });
+        for (const ch of channels) sub.append(item(ch, counter++, group));
+        li.append(sub);
+      } else {
+        li.append(h('p', { class: 'mm-muted', text: S('forums.noChannels') }));
       }
-      const linkedId = forum.settings?.seshatLibraryId;
-      const linkedOwner = forum.settings?.ownerEmail?.trim().toLowerCase();
-      if (linkedId && linkedOwner) {
-        ownerLibraries(linkedOwner).then((listing) => {
-          const lib = listing.libraries.find((l) => l.id === linkedId);
-          if (lib) bib.append(h('dt', { text: S('forums.seshatPick') }), h('dd', { text: lib.path || lib.name }));
-        }, () => { /* the id above is enough */ });
+      if (!group.isArchived) li.append(channelCreator(group, counter++));
+      ul.append(li);
+    }
+    sec.list!.replaceChildren(ul);
+  };
+
+  /** One forum (group) or channel entry: title, address, bibliography, edit/archive. */
+  const item = (forum: Forum, n: number, group: Forum | null): HTMLLIElement => {
+    const li = h('li', { 'data-forum-id': forum.id });
+    const title = h('p', { class: 'mm-admin-forum-title' }, h('strong', { text: forum.title }));
+    if (forum.isArchived) title.append(' ', h('span', { class: 'mm-badge mm-badge-quiet', text: S('forums.archived') }));
+    const meta = h('p', { class: 'mm-meta' });
+    const address = group
+      ? S('forums.channelAddress', { group: group.slug, slug: forum.slug })
+      : S('forums.address', { slug: forum.slug });
+    const href = group
+      ? `/f/${encodeURIComponent(group.slug)}/${encodeURIComponent(forum.slug)}`
+      : `/f/${encodeURIComponent(forum.slug)}`;
+    meta.append(forum.isArchived || group?.isArchived
+      ? h('span', { text: address })
+      : h('a', { href, text: address }));
+    const bib = h('dl', { class: 'mm-admin-dl' });
+    const labels: Record<(typeof BIB)[number], string> = {
+      seshatLibraryId: S('forums.seshat'), zoteroCollection: S('forums.zotero'), ownerEmail: S('forums.owner'),
+    };
+    for (const k of BIB) {
+      const v = forum.settings?.[k];
+      if (v) bib.append(h('dt', { text: labels[k] }), h('dd', { text: v }));
+    }
+    const linkedId = forum.settings?.seshatLibraryId;
+    const linkedOwner = forum.settings?.ownerEmail?.trim().toLowerCase();
+    if (linkedId && linkedOwner) {
+      ownerLibraries(linkedOwner).then((listing) => {
+        const lib = listing.libraries.find((l) => l.id === linkedId);
+        if (lib) bib.append(h('dt', { text: S('forums.seshatPick') }), h('dd', { text: lib.path || lib.name }));
+      }, () => { /* the id above is enough */ });
+    }
+    const desc = forum.description ? h('p', { class: 'mm-list-desc mm-pre-line', text: forum.description }) : null;
+    const inherits = group && !BIB.some((k) => forum.settings?.[k]) ? h('p', { class: 'mm-help', text: S('forums.inheritsBib') }) : null;
+
+    const editId = `mm-forum-edit-${n}`;
+    const edit = h('button', {
+      type: 'button', class: 'mm-button mm-button-small', 'aria-expanded': 'false', 'aria-controls': editId,
+      'aria-label': S('forums.editLabel', { title: forum.title }), text: S('forums.edit'), 'data-edit': forum.id,
+    });
+    const archive = h('button', {
+      type: 'button', class: 'mm-button mm-button-small mm-button-quiet', 'data-archive': forum.id,
+      'aria-label': S(forum.isArchived ? 'forums.restoreLabel' : 'forums.archiveLabel', { title: forum.title }),
+      text: S(forum.isArchived ? 'forums.restore' : 'forums.archive'),
+    });
+    const actions = h('div', { class: 'mm-form-actions' }, edit, archive);
+    const slot = h('div', { id: editId });
+
+    edit.addEventListener('click', () => {
+      if (edit.getAttribute('aria-expanded') === 'true') {
+        slot.replaceChildren();
+        edit.setAttribute('aria-expanded', 'false');
+        return;
       }
-      const desc = forum.description ? h('p', { class: 'mm-list-desc mm-pre-line', text: forum.description }) : null;
-
-      const editId = `mm-forum-edit-${n}`;
-      const edit = h('button', {
-        type: 'button', class: 'mm-button mm-button-small', 'aria-expanded': 'false', 'aria-controls': editId,
-        'aria-label': S('forums.editLabel', { title: forum.title }), text: S('forums.edit'), 'data-edit': forum.id,
+      const form = editForm(forum, n);
+      form.querySelector<HTMLButtonElement>('[data-cancel]')!.addEventListener('click', () => {
+        slot.replaceChildren();
+        edit.setAttribute('aria-expanded', 'false');
+        focusLater(edit);
       });
-      const archive = h('button', {
-        type: 'button', class: 'mm-button mm-button-small mm-button-quiet', 'data-archive': forum.id,
-        'aria-label': S(forum.isArchived ? 'forums.restoreLabel' : 'forums.archiveLabel', { title: forum.title }),
-        text: S(forum.isArchived ? 'forums.restore' : 'forums.archive'),
-      });
-      const actions = h('div', { class: 'mm-form-actions' }, edit, archive);
-      const slot = h('div', { id: editId });
-
-      edit.addEventListener('click', () => {
-        if (edit.getAttribute('aria-expanded') === 'true') {
-          slot.replaceChildren();
-          edit.setAttribute('aria-expanded', 'false');
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (form.getAttribute('aria-busy') === 'true') return;
+        const bad = invalidField(form);
+        if (bad) {
+          formErr(form, bad.validationMessage);
+          bad.focus();
           return;
         }
-        const form = editForm(forum, n);
-        form.querySelector<HTMLButtonElement>('[data-cancel]')!.addEventListener('click', () => {
-          slot.replaceChildren();
-          edit.setAttribute('aria-expanded', 'false');
-          focusLater(edit);
-        });
-        form.addEventListener('submit', async (event) => {
-          event.preventDefault();
-          if (form.getAttribute('aria-busy') === 'true') return;
-          const bad = invalidField(form);
-          if (bad) {
-            formErr(form, bad.validationMessage);
-            bad.focus();
-            return;
-          }
-          formErr(form, null);
-          const settings: Record<string, string> = {};
-          for (const k of BIB) settings[k] = fieldValue(form, k); // '' clears the key
-          const newTitle = fieldValue(form, 'title');
-          busy(form, true);
-          try {
-            await mmApi(`/api/mm/forums/${encodeURIComponent(forum.slug)}`, {
-              method: 'PATCH', body: { title: newTitle, description: fieldValue(form, 'description'), settings },
-            });
-            sec.ok(S('forums.saved', { title: newTitle }));
-            await reload();
-            focusLater(sec.list!.querySelector<HTMLElement>(`[data-edit="${forum.id}"]`) ?? heading);
-          } catch (err) {
-            formErr(form, errorMessage(err));
-            busy(form, false);
-          }
-        });
-        slot.replaceChildren(form);
-        void attachLibraryPicker(form).refresh();
-        edit.setAttribute('aria-expanded', 'true');
-        focusLater(form.elements.namedItem('title') as HTMLInputElement);
-      });
-
-      archive.addEventListener('click', async () => {
-        busy(archive, true);
+        formErr(form, null);
+        const settings: Record<string, string> = {};
+        for (const k of BIB) settings[k] = fieldValue(form, k); // '' clears the key
+        const newTitle = fieldValue(form, 'title');
+        busy(form, true);
         try {
-          await mmApi(`/api/mm/forums/${encodeURIComponent(forum.slug)}`, { method: 'PATCH', body: { isArchived: !forum.isArchived } });
-          sec.ok(S(forum.isArchived ? 'forums.restoredDone' : 'forums.archivedDone', { title: forum.title }));
+          await mmApi(`/api/mm/forums/${encodeURIComponent(forum.id)}`, {
+            method: 'PATCH', body: { title: newTitle, description: fieldValue(form, 'description'), settings },
+          });
+          sec.ok(S('forums.saved', { title: newTitle }));
           await reload();
-          focusLater(sec.list!.querySelector<HTMLElement>(`[data-archive="${forum.id}"]`) ?? heading);
+          focusLater(sec.list!.querySelector<HTMLElement>(`[data-edit="${forum.id}"]`) ?? heading);
         } catch (err) {
-          sec.err(errorMessage(err));
-          busy(archive, false);
+          formErr(form, errorMessage(err));
+          busy(form, false);
         }
       });
-
-      li.append(title, meta, desc ?? '', bib.childElementCount ? bib : '', actions, slot);
-      ul.append(li);
+      slot.replaceChildren(form);
+      void attachLibraryPicker(form).refresh();
+      edit.setAttribute('aria-expanded', 'true');
+      focusLater(form.elements.namedItem('title') as HTMLInputElement);
     });
-    sec.list!.replaceChildren(ul);
+
+    archive.addEventListener('click', async () => {
+      busy(archive, true);
+      try {
+        await mmApi(`/api/mm/forums/${encodeURIComponent(forum.id)}`, { method: 'PATCH', body: { isArchived: !forum.isArchived } });
+        sec.ok(S(forum.isArchived ? 'forums.restoredDone' : 'forums.archivedDone', { title: forum.title }));
+        await reload();
+        focusLater(sec.list!.querySelector<HTMLElement>(`[data-archive="${forum.id}"]`) ?? heading);
+      } catch (err) {
+        sec.err(errorMessage(err));
+        busy(archive, false);
+      }
+    });
+
+    li.append(title, meta, desc ?? '', bib.childElementCount ? bib : '', inherits ?? '', actions, slot);
+    return li;
   };
   const reload = () => sec.load('/api/mm/admin/forums', (d) => (d?.forums ?? []) as Forum[], render);
 

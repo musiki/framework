@@ -1,0 +1,19 @@
+---
+// Internal page for mm "/f/<group>/<channel>/t/<thread id>" (middleware
+// rewrite): a thread of a channel. The thread must be in THAT channel of
+// THAT group, else 404.
+// Rendering: components/mm/MmThreadPage.astro.
+import MmThreadPage from '../../../../../../components/mm/MmThreadPage.astro';
+import { applyMmLang } from '../../../../../../lib/mm/ui-lang';
+import { loadThreadPage } from '../../../../../../lib/mm/board-pages';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+const { state, view } = await loadThreadPage(
+  Astro.locals, isMm, lang, String(Astro.params.forum ?? ''), String(Astro.params.channel ?? ''), String(Astro.params.thread ?? ''),
+);
+if (state === 'notFound') Astro.response.status = 404;
+if (state === 'unavailable') Astro.response.status = 503;
+---
+<MmThreadPage lang={lang} isMm={isMm} state={state} view={view} />
