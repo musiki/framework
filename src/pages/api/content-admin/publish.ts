@@ -11,7 +11,7 @@ import {
 } from '../../../lib/content-admin';
 import { normalizeContentSlug } from '../../../lib/content-slug';
 import { json } from '../../../lib/forum-server';
-import { renderRemoteLilypond } from '../../../lib/lilypond-remote.mjs';
+import { resolveRenderedLilypondUrl } from '../../../lib/lilypond-remote.mjs';
 import { annotateMarkdownLilypondBlocks } from '../../../lib/lilypond-rendered-comment.mjs';
 import { renderRuntimeMarkdown } from '../../../lib/runtime-content';
 import {
@@ -93,8 +93,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     console.warn('[Publish] Frontmatter parse error, using raw content:', error);
   }
 
+  // Keeps valid `% rendered:` comments (legacy R2 renders) and drops stale ones.
+  // New renders happen through the sandboxed lilypond-service when the page is
+  // built/rendered (remark-lily), so nothing is rendered here.
   finalContent = await annotateMarkdownLilypondBlocks(finalContent, {
-    resolveUrl: (lilySource) => renderRemoteLilypond(lilySource, { timeoutMs: 10_000 }),
+    resolveUrl: (lilySource) => resolveRenderedLilypondUrl(lilySource),
   }).catch((error) => {
     console.error('[Publish] LilyPond metadata refresh failed:', error);
     return finalContent;

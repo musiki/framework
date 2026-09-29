@@ -205,6 +205,9 @@ function canExecuteLilypond(command) {
 
 let cachedLilypondBinary = null;
 
+// Locating a local binary is only used by src/lib/lilypond/local-render.mjs
+// (LILYPOND_ALLOW_LOCAL=1, never in production). User content is rendered by
+// the sandboxed lilypond-service, not by the engine process.
 export function getLilypondBinary() {
   if (cachedLilypondBinary !== null) return cachedLilypondBinary;
 
@@ -225,6 +228,3 @@ export function getLilypondBinary() {
   return cachedLilypondBinary;
 }
 
-export function hasLilypondBinary() {
-  return Boolean(getLilypondBinary());
-}

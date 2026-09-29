@@ -192,18 +192,23 @@ Así:
 - Astro llama localmente a Fastify/Ollama por loopback
 - no necesitas abrir otro subdominio salvo que quieras debugging externo
 
-## 7. LilyPond local
+## 7. LilyPond (servicio aislado)
 
-Si `lilypond` ya está instalado en el VPS de `framework`, conviene usar render local primero.
-
-Opciones:
-
-- dejar sólo el binario local y no depender de un servicio HTTP aparte
-- o, si mantienes el render service, usar:
+El engine ya no ejecuta `lilypond`. Todo render pasa por `lilypond-service`
+(contenedor Docker sin red, usuario no root, fs de sólo lectura) a través del
+socket unix `/run/lilypond/lily.sock` (`zz` debe estar en el grupo `lilypond`).
 
 ```env
-REMOTE_LILYPOND_RENDER_URL=http://127.0.0.1:4543/render
-LILYPOND_RENDER_STRATEGY=local-first
+# opcional; éste es el valor por defecto
+LILYPOND_SOCKET=/run/lilypond/lily.sock
+# sólo desarrollo/remoto: servicio por HTTP (tiene prioridad sobre el socket)
+# LILYPOND_SERVICE_URL=http://127.0.0.1:4544
+# SÓLO desarrollo local: usar un binario local si el servicio no responde.
+# Se ignora con NODE_ENV=production.
+# LILYPOND_ALLOW_LOCAL=1
 ```
 
-Con eso el server usa el binario local cuando está disponible y sólo cae al servicio remoto si hace falta.
+`REMOTE_LILYPOND_RENDER_URL` y `LILYPOND_RENDER_STRATEGY` ya no se usan. Si el
+servicio no responde, los bloques LilyPond quedan como código (se loguea una
+vez) y los que tienen `% rendered:` siguen mostrando su imagen en R2.
+Los resultados se guardan en `public/lily/<md5>.svg|midi|pdf` (SVG saneado).

@@ -1,6 +1,10 @@
+// Fallback for LilyPond blocks that remark-lily could not render (render
+// service unreachable): if the block was rendered before and carries a valid
+// `% rendered:` comment (or is in the local render cache), show the existing
+// R2 image. No rendering happens here any more — the old HTTP render service
+// is replaced by the sandboxed lilypond-service used by remark-lily.
 import { visit } from 'unist-util-visit';
-import { renderRemoteLilypond } from '../lib/lilypond-remote.mjs';
-import { hasLilypondBinary } from '../lib/lilypond-support.mjs';
+import { isAllowedRemoteLilyUrl, resolveRenderedLilypondUrl } from '../lib/lilypond-remote.mjs';
 
 function escapeHtmlAttribute(value) {
   return String(value ?? '')
@@ -10,9 +14,9 @@ function escapeHtmlAttribute(value) {
     .replace(/>/g, '&gt;');
 }
 
-async function resolveRemoteMidiUrl(svgUrl) {
+async function resolveRemoteMidiUrl(svgUrl, fetchImpl) {
   const normalizedSvgUrl = String(svgUrl || '').trim();
-  if (!normalizedSvgUrl) return '';
+  if (!normalizedSvgUrl || !isAllowedRemoteLilyUrl(normalizedSvgUrl)) return '';
 
   const candidates = [
     normalizedSvgUrl.replace(/\.svg(?=([?#].*)?$)/i, '.midi'),
@@ -20,8 +24,9 @@ async function resolveRemoteMidiUrl(svgUrl) {
   ];
 
   for (const candidate of candidates) {
+    if (candidate === normalizedSvgUrl) continue;
     try {
-      const response = await fetch(candidate, { method: 'HEAD' });
+      const response = await fetchImpl(candidate, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
       if (response.ok) return candidate;
     } catch {
       // Keep trying fallbacks.
@@ -31,42 +36,37 @@ async function resolveRemoteMidiUrl(svgUrl) {
   return '';
 }
 
+/**
+ * @param {{enabled?: boolean, fetch?: typeof fetch}} [options]
+ *   `timeoutMs` / `preferRemote` from the old API are accepted and ignored.
+ */
 export default function remarkRemoteLilypond(options = {}) {
   const enabled = options.enabled === true;
-  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10_000;
-  const preferRemote = options.preferRemote !== false;
+  const fetchImpl = options.fetch ?? globalThis.fetch;
 
   return async (tree) => {
     if (!enabled) return;
-    if (!preferRemote && hasLilypondBinary()) return;
 
-    const memo = new Map();
     const replacements = [];
-
     visit(tree, 'code', (node, index, parent) => {
       if (!parent || typeof index !== 'number') return;
       const lang = String(node.lang || '').trim().toLowerCase();
       if (!['lilypond', 'lily', 'ly'].includes(lang)) return;
-
       const source = typeof node.value === 'string' ? node.value : '';
-      replacements.push({
-        index,
-        parent,
-        source,
-      });
+      replacements.push({ index, parent, source });
     });
 
+    const midiMemo = new Map();
     await Promise.all(
       replacements.map(async (entry) => {
-        let requestPromise = memo.get(entry.source);
-        if (!requestPromise) {
-          requestPromise = renderRemoteLilypond(entry.source, { timeoutMs });
-          memo.set(entry.source, requestPromise);
+        const url = resolveRenderedLilypondUrl(entry.source);
+        if (!url || !/^https?:\/\//i.test(url)) return;
+        let midiPromise = midiMemo.get(url);
+        if (!midiPromise) {
+          midiPromise = resolveRemoteMidiUrl(url, fetchImpl);
+          midiMemo.set(url, midiPromise);
         }
-
-        const url = await requestPromise;
-        if (!url) return;
-        const midiUrl = await resolveRemoteMidiUrl(url);
+        const midiUrl = await midiPromise;
         const midiAttr = midiUrl ? ` data-midi-url="${escapeHtmlAttribute(midiUrl)}"` : '';
 
         entry.parent.children[entry.index] = {

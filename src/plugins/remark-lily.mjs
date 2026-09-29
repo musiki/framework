@@ -1,104 +1,87 @@
+// ```lily / ```lilypond / ```ly code blocks → inline SVG score.
+//
+// Rendering goes through the sandboxed lilypond-service (src/lib/lilypond/service.mjs);
+// the engine never runs LilyPond itself. Output is cached as
+// public/lily/<md5(code)>.svg / .midi (same names and markup as before), and
+// every SVG is security-sanitized before it is written or inlined. When the
+// service is unreachable the code block is left as is (remark-remote-lilypond
+// may still show a previously rendered R2 image).
 import { visit } from 'unist-util-visit';
-import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
+import { sanitizeLilypondSvgMarkup } from '../lib/lilypond-support.mjs';
+import { renderLilypond } from '../lib/lilypond/service.mjs';
 import {
-  buildLocalLilypondSourceAttempts,
-  getLilypondBinary,
-  sanitizeLilypondSvgMarkup,
-} from '../lib/lilypond-support.mjs';
+  getLilyDir,
+  lilyAssetPaths,
+  md5Hex,
+  readSanitizedSvg,
+  resolveMidiPath,
+  writeLilyAssets,
+} from '../lib/lilypond/store.mjs';
+import fs from 'node:fs';
 
-export default function remarkLily() {
-  return (tree, file) => {
-    // Ensure public/lily directory exists
-    const lilyDir = path.join(process.cwd(), 'public', 'lily');
-    if (!fs.existsSync(lilyDir)) {
-      fs.mkdirSync(lilyDir, { recursive: true });
-    }
+const LILY_LANGS = new Set(['lily', 'lilypond', 'ly']);
+
+/**
+ * @param {{render?: typeof renderLilypond, dir?: string, timeoutMs?: number}} [options]
+ */
+export default function remarkLily(options = {}) {
+  const render = options.render ?? renderLilypond;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+
+  return async (tree, file) => {
+    const lilyDir = options.dir ?? getLilyDir();
+    const entries = [];
 
     visit(tree, 'code', (node, index, parent) => {
+      if (!parent || typeof index !== 'number') return;
       const lang = String(node.lang || '').trim().toLowerCase();
-      if (lang !== 'lily' && lang !== 'lilypond' && lang !== 'ly') return;
-
-      const code = node.value;
-      // Create a hash of the code to use as filename
-      const hash = crypto.createHash('md5').update(code).digest('hex');
-      const svgFilename = `${hash}.svg`;
-      const svgPath = path.join(lilyDir, svgFilename);
-      const srcUrl = `/lily/${svgFilename}`;
-      const midiPath = path.join(lilyDir, `${hash}.midi`);
-      const midPath = path.join(lilyDir, `${hash}.mid`);
-
-      // 1. Check if SVG already exists (cache/committed)
-      let svgExists = fs.existsSync(svgPath);
-      let midiExists = fs.existsSync(midiPath);
-      if (!midiExists && fs.existsSync(midPath)) {
-        fs.renameSync(midPath, midiPath);
-        midiExists = true;
-      }
-
-      // 2. If SVG or MIDI is missing, try to generate the full asset set locally.
-      if (!svgExists || !midiExists) {
-        const tmpLy = path.join(lilyDir, `${hash}.ly`);
-        let lastRenderError = null;
-
-        try {
-          // Check if lilypond is installed
-          const lilypondBinary = getLilypondBinary();
-          if (!lilypondBinary) {
-            // LilyPond not found (e.g. build/runtime without the binary installed)
-            // If SVG is missing and we can't generate it, we leave the code block as is.
-            return;
-          }
-
-          for (const candidateSource of buildLocalLilypondSourceAttempts(code)) {
-            try {
-              fs.writeFileSync(tmpLy, candidateSource, 'utf8');
-              execFileSync(
-                lilypondBinary,
-                ['-dbackend=svg', '-o', path.join(lilyDir, hash), tmpLy],
-                { stdio: 'ignore' },
-              );
-            } catch (error) {
-              lastRenderError = error;
-            }
-
-            if (fs.existsSync(midPath) && !fs.existsSync(midiPath)) {
-              fs.renameSync(midPath, midiPath);
-            }
-
-            svgExists = fs.existsSync(svgPath);
-            midiExists = fs.existsSync(midiPath);
-            if (svgExists && midiExists) {
-              break;
-            }
-          }
-        } catch (e) {
-          lastRenderError = e;
-        } finally {
-          if (fs.existsSync(tmpLy)) fs.unlinkSync(tmpLy);
-        }
-
-        if (!svgExists && lastRenderError) {
-          const src = file?.path || file?.history?.[0] || 'unknown';
-          console.error(`[remark-lily] Failed to generate SVG for ${hash} (${src}):`, lastRenderError.message);
-        }
-      }
-
-      // 3. If SVG exists, replace code block with inline HTML
-      if (svgExists) {
-        let svgContent = sanitizeLilypondSvgMarkup(fs.readFileSync(svgPath, 'utf8'));
-        svgContent = svgContent.replace(/<\?xml.*?\?>/, '').replace(/<!DOCTYPE.*?>/, '').trim();
-        
-        const midiUrl = midiExists ? `/lily/${hash}.midi` : '';
-        const midiAttr = midiUrl ? ` data-midi-url="${midiUrl}"` : '';
-        
-        parent.children[index] = { 
-          type: 'html', 
-          value: `<figure class="lilypond-block lily-score" data-lily-url="/lily/${hash}.svg"${midiAttr}>\n${svgContent}\n</figure>` 
-        };
-      }
+      if (!LILY_LANGS.has(lang)) return;
+      entries.push({ node, index, parent });
     });
+    if (entries.length === 0) return;
+
+    const memo = new Map();
+    const renderToFiles = async (code, hash) => {
+      const { svgPath } = lilyAssetPaths(hash, lilyDir);
+      if (fs.existsSync(svgPath)) return true;
+      const outcome = await render(code, { formats: ['svg', 'midi'], timeoutMs });
+      if (!outcome.ok) {
+        if (outcome.reason === 'render_failed') {
+          const src = file?.path || file?.history?.[0] || 'unknown';
+          console.error(`[remark-lily] Failed to generate SVG for ${hash} (${src}): ${outcome.message}`);
+        }
+        return false;
+      }
+      const written = await writeLilyAssets(hash, outcome.result, { dir: lilyDir });
+      return Boolean(written.svg);
+    };
+
+    await Promise.all(entries.map(async ({ node, index, parent }) => {
+      const code = String(node.value ?? '');
+      if (!code.trim()) return;
+      // Same cache key as before the sandbox: md5 of the block as written.
+      const hash = md5Hex(code);
+
+      let pending = memo.get(hash);
+      if (!pending) {
+        pending = renderToFiles(code, hash).catch((error) => {
+          console.error(`[remark-lily] ${hash}:`, error?.message || error);
+          return false;
+        });
+        memo.set(hash, pending);
+      }
+      if (!(await pending)) return;
+
+      const { svgPath } = lilyAssetPaths(hash, lilyDir);
+      const safeSvg = await readSanitizedSvg(svgPath);
+      if (!safeSvg) return;
+      const svgContent = sanitizeLilypondSvgMarkup(safeSvg).trim();
+      const midiAttr = resolveMidiPath(hash, lilyDir) ? ` data-midi-url="/lily/${hash}.midi"` : '';
+
+      parent.children[index] = {
+        type: 'html',
+        value: `<figure class="lilypond-block lily-score" data-lily-url="/lily/${hash}.svg"${midiAttr}>\n${svgContent}\n</figure>`,
+      };
+    }));
   };
 }
