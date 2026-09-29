@@ -1,0 +1,132 @@
+/* MishMash brand tokens and self-hosted fonts for the Concept Machine (tenant mm).
+ *
+ * Copied from the MishMash website repository, MishMash-Norway/mishmash-web
+ * (site/assets/css/brand.css and site/assets/css/fonts.css, identity of
+ * August 2026, purple text rule of 25 September 2026), MIT License,
+ * Copyright (c) 2025-2026 MishMash Centre for AI and Creativity and the
+ * contributors to that repository. See its BRAND.md for the rules.
+ * Changes: font URLs point to /mm/fonts/ (Raleway not copied); nothing else.
+ * Keep in sync by copying again; do not edit tokens here.
+ */
+
+
+:root {
+  /* Pastel surfaces — the four background colours of the identity. */
+  --mm-green: #b3e297;
+  --mm-purple: #9a90cf;
+  --mm-blue: #a5cbed;
+  --mm-pink: #efadb2;
+
+  /* Ink and accents. The wordmark is black on green, green on purple,
+     yellow on blue and red on pink — never any other combination. */
+  --mm-ink: #231f20;
+  --mm-yellow: #d1e422;
+  --mm-red: #ee5648;
+  --mm-white: #ffffff;
+
+  /* Wordmark colour that belongs to each surface. */
+  --mm-on-green: var(--mm-ink);
+  --mm-on-purple: var(--mm-green);
+  --mm-on-blue: var(--mm-yellow);
+  --mm-on-pink: var(--mm-red);
+
+  /* Light tints for large text areas, cards and callouts (≈15 % colour on white).
+     Body text on a tint is always --mm-ink. */
+  --mm-green-tint: #f0f8e9;
+  --mm-purple-tint: #f0eef9;
+  --mm-blue-tint: #edf4fb;
+  --mm-pink-tint: #fdf1f1;
+  --mm-yellow-tint: #fbfce6;
+
+  /* The identity purple is a surface for decoration only: the wordmark, the
+     section band, artwork. As text on white it reaches 2.89:1, and ink on it
+     reaches 5.64:1, short of the 7:1 that AAA asks. Text therefore never sits
+     on it. This darker step of the same hue does the text work: 7.02:1 as
+     text on white, and 7.02:1 as a surface under white text. Decided on
+     25 September 2026; the pastel purple is unchanged. */
+  --mm-purple-text: #594aab;
+  --mm-purple-dark: #594aab;
+
+  /* Greys derived from the ink for secondary text and rules. */
+  --mm-ink-70: #5c5859;
+  --mm-ink-40: #a7a4a5;
+  --mm-ink-15: #dedcdc;
+  --mm-ink-5: #f4f3f3;
+
+  /* Type. Display face in print is Acumin Variable Concept Condensed Bold
+     (Adobe, licensed). On the web we self-host Roboto Condensed 700 (open
+     licence) as the equivalent; body text stays Inter. */
+  --mm-font-display: 'Roboto Condensed', 'Acumin Pro Condensed', 'Arial Narrow', Arial, sans-serif;
+  --mm-font-body: 'Inter', 'Raleway', Arial, sans-serif;
+  --mm-display-weight: 700;
+  --mm-display-leading: 0.9;      /* 44 pt on 33 pt in the identity sheet ≈ 0.75; 0.9 keeps web headings readable */
+  --mm-display-tracking: -0.01em;
+
+  /* Shape. The identity is flat: no gradients, no rounded corners, no shadows. */
+  --mm-radius: 0;
+  --mm-rule: 2px solid var(--mm-ink);
+
+  /* Arrow motif (used before "more" links and as signage). */
+  --mm-arrow: "\2192";
+}
+
+
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/mm/fonts/inter-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/mm/fonts/inter-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/mm/fonts/inter-700-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/mm/fonts/inter-700-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/mm/fonts/roboto-condensed-700-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* latin */
+@font-face {
+  font-family: 'Roboto Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/mm/fonts/roboto-condensed-700-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

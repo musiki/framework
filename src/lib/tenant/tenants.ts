@@ -1,5 +1,6 @@
 export type TenantId = 'musiki' | 'hem' | 'so' | 'mm';
-export type Locale = 'es' | 'fr' | 'en';
+// 'nb' (Norsk bokmål) is a UI language of the mm tenant only (dictionary src/lib/i18n/nb.ts).
+export type Locale = 'es' | 'fr' | 'en' | 'nb';
 export type SpaceKind = 'course' | 'dissertation' | 'commons';
 export type RouteFamily = 'studio' | 'api:studio' | 'api:public' | 'auth' | 'mm' | 'api:mm' | 'api:public-mm';
 export type TenantTheme = 'default' | 'invulne' | 'so' | 'mm';

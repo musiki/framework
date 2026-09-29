@@ -1,3 +1,5 @@
+import { mmEn } from './mm-en.ts';
+
 export const en = {
   studio: {
     tree: {"newNote": "New note", "newFolder": "New folder", "rename": "Rename", "delete": "Delete", "visibility": "Visibility", "inherit": "Inherit", "private": "Private", "supervision": "Supervision", "committee": "Committee", "public": "Public", "confirmDelete": "Delete this item? Folder deletion also removes its subfolders.", "empty": "No notes yet.", "loading": "Loading…", "error": "Could not save or load the workspace. Please try again.", "actionError": "The action could not be completed.", "up": "Move up", "down": "Move down", "actions": "Actions", "select": "Select or create a note", "trace": "Trace", "edit": "Edit / preview", "download": "Download", "structure": "Arrange notes and choose who can access them."},
@@ -239,6 +241,7 @@ export const en = {
       diagProcessWithoutReflection: 'Process note without associated critical reflection',
     },
   },
+  mm: mmEn,
 } as const;
 
 type Shape<T> = { readonly [K in keyof T]: T[K] extends string ? string : Shape<T[K]> };

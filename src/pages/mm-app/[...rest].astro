@@ -3,22 +3,24 @@
 // tenant) and any unknown /mm-app/* path. Without this, musiki's root
 // catch-all (src/pages/[...slug].astro) would render musiki content for
 // unknown mm paths. Specific mm pages win over this rest route.
-// Plain HTML, no musiki branding; renders inline (no Astro.rewrite, which
-// would re-run middleware on /mm-app/* and 404-loop).
+// MishMash shell, no musiki branding; renders inline (no Astro.rewrite, which
+// would re-run middleware on /mm-app/* and 404-loop). On other tenants (only
+// reachable for /mm-app/* on musiki, which middleware already 404s) it stays
+// a plain page.
+import MmLayout from '../../layouts/MmLayout.astro';
+import { t } from '../../lib/i18n';
+import { applyMmLang } from '../../lib/mm/ui-lang';
 export const prerender = false;
 Astro.response.status = 404;
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
 ---
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
-    <title>Not found</title>
-  </head>
-  <body>
-    <h1>Not found</h1>
-    <p>This page does not exist.</p>
-    <p><a href="/">Back to the Concept Machine</a></p>
-  </body>
-</html>
+{isMm ? (
+  <MmLayout lang={lang} title={t(lang, 'mm.notFound.title')} noindex>
+    <h1>{t(lang, 'mm.notFound.title')}</h1>
+    <p class="mm-lead">{t(lang, 'mm.notFound.lead')}</p>
+    <p><a class="mm-more" href="/">{t(lang, 'mm.notFound.home')}</a></p>
+  </MmLayout>
+) : (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1><p>This page does not exist.</p></body></html>
+)}

@@ -1,6 +1,7 @@
 import type { Locale } from '../tenant/tenants.ts';
 import { en, type Dict } from './en.ts';
 import { es } from './es.ts';
+import { nb } from './nb.ts';
 
 type Paths<T, P extends string = ''> = {
   [K in keyof T & string]: T[K] extends string ? `${P}${K}` : Paths<T[K], `${P}${K}.`>;
@@ -10,7 +11,8 @@ export type MessageKey = Paths<Dict>;
 export type { Dict };
 
 // fr is added when hem joins (sub-project 4); until then it falls back to en.
-const DICTS: Partial<Record<Locale, Dict>> = { en, es };
+// nb covers only the mm namespace; every other key falls back to en.
+const DICTS: Partial<Record<Locale, Partial<Dict>>> = { en, es, nb };
 
 function lookup(dict: unknown, key: string): string | undefined {
   const value = key.split('.').reduce<unknown>(

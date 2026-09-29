@@ -1,23 +1,61 @@
 ---
 // Internal page for mm.zztt.org "/" (middleware rewrites public mm paths to
-// /mm-app/*; this mount is never reachable by URL). Placeholder until the
-// MishMash shell lands (Task 9). Plain HTML: no musiki layout or branding.
+// /mm-app/*; this mount is never reachable by URL). Landing: what the
+// Concept Machine is, forums (filled in by Task 10), graph, taking part.
 // Do not Astro.rewrite() to another /mm-app path from here: that re-runs the
 // middleware, which 404s /mm-app/*.
+import MmLayout from '../../layouts/MmLayout.astro';
+import { t } from '../../lib/i18n';
+import { applyMmLang } from '../../lib/mm/ui-lang';
 export const prerender = false;
+
 const isMm = Astro.locals.tenant?.id === 'mm';
 if (!isMm) Astro.response.status = 404;
-const title = isMm ? 'MishMash Concept Machine' : 'Not found';
+const lang = applyMmLang(Astro);
+const signedIn = Boolean(Astro.locals.session?.user);
+const LAB_URL = 'https://zzigo.github.io/mishmash-web/lab/concept-machine/';
 ---
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
-    <title>{title}</title>
-  </head>
-  <body>
-    {isMm ? <h1>MishMash Concept Machine — coming soon</h1> : <h1>Not found</h1>}
-  </body>
-</html>
+{isMm ? (
+  <MmLayout lang={lang}>
+    <h1>{t(lang, 'mm.home.title')}</h1>
+    <p class="mm-lead">{t(lang, 'mm.tagline')}</p>
+    <p class="mm-prose">{t(lang, 'mm.home.intro')}</p>
+
+    <section aria-labelledby="mm-forums" class="mm-forums">
+      <h2 id="mm-forums">{t(lang, 'mm.home.forumsTitle')}</h2>
+      <div data-mm-forums class="mm-card mm-tint-green">
+        <p class="mm-muted">{t(lang, 'mm.home.forumsEmpty')}</p>
+      </div>
+    </section>
+
+    <div class="mm-grid">
+      <section aria-labelledby="mm-graph" class="mm-card mm-tint-blue">
+        <h2 id="mm-graph">{t(lang, 'mm.home.graphTitle')}</h2>
+        <p>{t(lang, 'mm.home.graphLead')}</p>
+        <p><a class="mm-more" href="/graph">{t(lang, 'mm.home.graphLink')}</a></p>
+      </section>
+      <section aria-labelledby="mm-join" class="mm-card mm-tint-pink">
+        <h2 id="mm-join">{t(lang, 'mm.home.joinTitle')}</h2>
+        <p>{t(lang, 'mm.home.joinLead')}</p>
+        {!signedIn && <p><a class="mm-button" href="/join">{t(lang, 'mm.home.joinLink')}</a></p>}
+      </section>
+    </div>
+
+    <section aria-labelledby="mm-how">
+      <h2 id="mm-how">{t(lang, 'mm.home.howTitle')}</h2>
+      <ul class="mm-prose">
+        <li>{t(lang, 'mm.home.howConcepts')}</li>
+        <li>{t(lang, 'mm.home.howForums')}</li>
+        <li>{t(lang, 'mm.home.howCredit')}</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="mm-lab">
+      <h2 id="mm-lab">{t(lang, 'mm.home.labTitle')}</h2>
+      <p class="mm-prose">{t(lang, 'mm.home.labLead')}</p>
+      <p><a class="mm-more" href={LAB_URL}>{t(lang, 'mm.home.labLink')}</a></p>
+    </section>
+  </MmLayout>
+) : (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
+)}

@@ -1,0 +1,232 @@
+---
+// Shell of the MishMash Concept Machine (tenant mm): MishMash identity
+// (tokens in src/styles/mm-brand.css), header nav, en/nb switch, footer
+// with the MishMash wordmark as "built for the MishMash network".
+// No external requests: fonts and images are served from /mm/. Nothing in
+// here mentions musiki. Pages resolve `lang` in their own frontmatter with
+// applyMmLang (cookies cannot be set once the layout streams).
+import '../styles/mm-brand.css';
+import { SignOut } from 'auth-astro/components';
+import { t } from '../lib/i18n';
+import { langSwitchHref, MM_LANGS, type MmLang } from '../lib/mm/ui-lang';
+
+interface Props {
+  lang: MmLang;
+  title?: string;
+  description?: string;
+  noindex?: boolean;
+}
+
+const { lang, title, description, noindex = false } = Astro.props;
+const siteName = t(lang, 'mm.siteName');
+const pageTitle = title ? `${title} · ${siteName}` : siteName;
+const metaDescription = description ?? t(lang, 'mm.tagline');
+const publicPath = Astro.originPathname || '/';
+const user = Astro.locals.session?.user;
+const userName = user?.name?.trim() || user?.email?.split('@')[0] || '';
+const initial = userName.slice(0, 1).toUpperCase();
+const LAB_URL = 'https://zzigo.github.io/mishmash-web/lab/concept-machine/';
+
+const navItems = [
+  { href: '/', label: t(lang, 'mm.nav.forums'), current: publicPath === '/' || publicPath.startsWith('/f/') },
+  { href: '/graph', label: t(lang, 'mm.nav.graph'), current: publicPath.startsWith('/graph') },
+  { href: '/about', label: t(lang, 'mm.nav.about'), current: publicPath.startsWith('/about') },
+];
+---
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={metaDescription} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="icon" href="/mm/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/mm/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/mm/apple-touch-icon.png" />
+    <link rel="preload" href="/mm/fonts/roboto-condensed-700-latin.woff2" as="font" type="font/woff2" crossorigin />
+  </head>
+  <body>
+    <a class="mm-skip" href="#mm-main">{t(lang, 'mm.skip')}</a>
+    <header class="mm-header">
+      <div class="mm-wrap mm-header-inner">
+        <a class="mm-brand" href="/">
+          <span class="mm-brand-name">{t(lang, 'mm.shortName')}</span>
+        </a>
+        <nav class="mm-nav" aria-label={t(lang, 'mm.nav.label')}>
+          <ul>
+            {navItems.map((item) => (
+              <li><a href={item.href} aria-current={item.current ? 'page' : undefined}>{item.label}</a></li>
+            ))}
+            {user ? (
+              <li class="mm-account">
+                <span class="mm-avatar" aria-hidden="true">{initial}</span>
+                <span class="mm-visually-hidden">{t(lang, 'mm.nav.account', { name: userName })}</span>
+                <SignOut class="mm-linkbutton">{t(lang, 'mm.nav.signOut')}</SignOut>
+              </li>
+            ) : (
+              <li><a href="/join" aria-current={publicPath.startsWith('/join') ? 'page' : undefined}>{t(lang, 'mm.nav.signIn')}</a></li>
+            )}
+          </ul>
+        </nav>
+        <ul class="mm-langs" aria-label={t(lang, 'mm.lang.label')}>
+          {MM_LANGS.map((code) => (
+            <li>
+              <a
+                href={langSwitchHref(publicPath, code)}
+                hreflang={code}
+                lang={code}
+                aria-current={code === lang ? 'true' : undefined}
+                title={t(code, `mm.lang.${code}`)}
+              >{code.toUpperCase()}<span class="mm-visually-hidden"> {t(code, `mm.lang.${code}`)}</span></a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </header>
+
+    <main id="mm-main" class="mm-wrap mm-main" tabindex="-1">
+      <slot />
+    </main>
+
+    <footer class="mm-footer">
+      <div class="mm-wrap mm-footer-inner">
+        <a class="mm-built" href={LAB_URL}>
+          <img src="/mm/mishmash-wordmark-black.svg" alt={t(lang, 'mm.footer.wordmarkAlt')} width="69" height="48" />
+          <span>{t(lang, 'mm.footer.builtFor')}</span>
+        </a>
+        <ul class="mm-footer-links">
+          <li><a href={LAB_URL}>{t(lang, 'mm.footer.lab')}</a></li>
+          <li><a href="/about">{t(lang, 'mm.nav.about')}</a></li>
+          <li>{t(lang, 'mm.footer.privacy')}</li>
+        </ul>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { color-scheme: light; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--mm-white);
+    color: var(--mm-ink);
+    font-family: var(--mm-font-body);
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+  img { max-width: 100%; height: auto; }
+
+  .mm-wrap { width: 100%; max-width: 68rem; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 48rem) { .mm-wrap { padding: 0 2rem; } }
+
+  .mm-visually-hidden {
+    position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  .mm-skip {
+    position: absolute; left: 16px; top: -100px; z-index: 10;
+    background: var(--mm-ink); color: var(--mm-white); padding: 0.5rem 1rem;
+    font-weight: 700; text-decoration: none;
+  }
+  .mm-skip:focus { top: 0.5rem; }
+
+  :focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
+  main:focus { outline: none; }
+
+  /* Headings: display face, tight, sentence case. */
+  h1, h2, h3 {
+    font-family: var(--mm-font-display);
+    font-weight: var(--mm-display-weight);
+    letter-spacing: var(--mm-display-tracking);
+    line-height: 1;
+    margin: 0 0 0.75rem;
+  }
+  h1 { font-size: clamp(2.25rem, 7vw, 4rem); line-height: var(--mm-display-leading); }
+  h2 { font-size: clamp(1.5rem, 4vw, 2rem); margin-top: 2.5rem; }
+  h3 { font-size: 1.25rem; }
+  p, ul, ol { margin: 0 0 1rem; }
+
+  /* Links in running text: ink with a purple underline; purple highlight on hover. */
+  a { color: var(--mm-ink); text-decoration: underline; text-decoration-color: var(--mm-purple); text-decoration-thickness: 2px; text-underline-offset: 0.2em; }
+  a:hover { background: var(--mm-purple-tint); text-decoration-color: var(--mm-purple-dark); }
+
+  /* Header: green surface, 2px ink rule. */
+  .mm-header { background: var(--mm-green); border-bottom: var(--mm-rule); }
+  .mm-header-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.5rem; padding-top: 0.75rem; padding-bottom: 0.75rem; }
+  .mm-brand { text-decoration: none; margin-right: auto; }
+  .mm-brand:hover { background: none; }
+  .mm-brand-name {
+    font-family: var(--mm-font-display); font-weight: var(--mm-display-weight);
+    font-size: 1.6rem; line-height: 1; letter-spacing: var(--mm-display-tracking);
+  }
+  .mm-nav ul, .mm-langs, .mm-footer-links { list-style: none; margin: 0; padding: 0; }
+  .mm-nav ul { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1.25rem; }
+  .mm-nav a, .mm-linkbutton {
+    font-family: var(--mm-font-display); font-weight: var(--mm-display-weight);
+    text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.95rem;
+    text-decoration: none; padding: 0.35rem 0; border-bottom: 3px solid transparent;
+  }
+  .mm-nav a:hover { background: none; border-bottom-color: var(--mm-ink); }
+  .mm-nav a[aria-current='page'] { border-bottom-color: var(--mm-ink); }
+  .mm-linkbutton { background: none; border-top: 0; border-left: 0; border-right: 0; color: var(--mm-ink); cursor: pointer; }
+  .mm-linkbutton:hover { border-bottom-color: var(--mm-ink); }
+  .mm-account { display: flex; align-items: center; gap: 0.5rem; }
+  .mm-avatar {
+    display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem;
+    border: var(--mm-rule); background: var(--mm-white);
+    font-family: var(--mm-font-display); font-weight: 700;
+  }
+  .mm-langs { display: flex; gap: 0; }
+  .mm-langs a {
+    display: inline-block; min-width: 2.75rem; padding: 0.3rem 0.5rem; text-align: center;
+    border: var(--mm-rule); text-decoration: none; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.05em;
+  }
+  .mm-langs li + li a { border-left: 0; }
+  .mm-langs a[aria-current='true'] { background: var(--mm-ink); color: var(--mm-green); }
+  .mm-langs a:hover { background: var(--mm-ink); color: var(--mm-green); }
+
+  .mm-main { flex: 1; padding-top: 2.5rem; padding-bottom: 3rem; }
+  .mm-lead { font-size: 1.25rem; max-width: 40rem; }
+  .mm-muted { color: var(--mm-ink-70); }
+  .mm-prose { max-width: 42rem; }
+
+  /* Buttons: ink outline on the surface, inverting on hover. */
+  .mm-button {
+    display: inline-block; font: inherit; font-family: var(--mm-font-display); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; font-size: 1rem;
+    padding: 0.65rem 1.25rem; border: var(--mm-rule); border-radius: var(--mm-radius);
+    background: var(--mm-green); color: var(--mm-ink); text-decoration: none; cursor: pointer;
+  }
+  .mm-button:hover { background: var(--mm-ink); color: var(--mm-green); }
+  .mm-more::before { content: var(--mm-arrow) " "; }
+
+  .mm-card { border: var(--mm-rule); padding: 1.25rem; background: var(--mm-white); }
+  .mm-card > :last-child { margin-bottom: 0; }
+  .mm-card h2 { margin-top: 0; }
+  .mm-tint-green { background: var(--mm-green-tint); }
+  .mm-tint-blue { background: var(--mm-blue-tint); }
+  .mm-tint-pink { background: var(--mm-pink-tint); }
+  .mm-grid { display: grid; gap: 1.25rem; grid-template-columns: 1fr; margin-top: 2rem; }
+  @media (min-width: 48rem) { .mm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .mm-alert { border-left: 6px solid var(--mm-red); background: var(--mm-pink-tint); padding: 0.75rem 1rem; }
+
+  /* Footer: ink rule, wordmark as "built for the MishMash network". */
+  .mm-footer { border-top: var(--mm-rule); background: var(--mm-white); }
+  .mm-footer-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 0.9rem; }
+  .mm-built { display: inline-flex; align-items: center; gap: 0.9rem; text-decoration: none; font-family: var(--mm-font-display); font-weight: 700; font-size: 1.05rem; }
+  .mm-built:hover { background: none; text-decoration: underline; text-decoration-color: var(--mm-purple); }
+  .mm-built img { display: block; height: 48px; width: auto; padding: 6px; }
+  .mm-footer-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; color: var(--mm-ink-70); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>

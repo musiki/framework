@@ -1,0 +1,40 @@
+---
+// Internal page for mm "/join" (tenant loginPath; see index.astro for the
+// routing rules). Sign-in with the tenant's provider (logto-mm), the same
+// way so's /studio/login does it: auth-astro <SignIn> with a callbackUrl on
+// the request's own origin. Auth.js error redirects land here with ?error=.
+import MmLayout from '../../layouts/MmLayout.astro';
+import { SignIn } from 'auth-astro/components';
+import { t } from '../../lib/i18n';
+import { resolveRequestAuthOrigin } from '../../lib/auth-origin';
+import { applyMmLang } from '../../lib/mm/ui-lang';
+export const prerender = false;
+
+const tenant = Astro.locals.tenant;
+const lang = applyMmLang(Astro);
+const user = Astro.locals.session?.user;
+const userName = user?.name?.trim() || user?.email?.split('@')[0] || '';
+const provider = tenant.authProviders[0];
+const callbackUrl = `${resolveRequestAuthOrigin(Astro.request)}${tenant.homePath}`;
+const errorCode = Astro.url.searchParams.get('error');
+const errorKey = !errorCode ? null : errorCode === 'AccessDenied' ? 'mm.join.errors.accessDenied' : 'mm.join.errors.generic';
+---
+<MmLayout lang={lang} title={t(lang, 'mm.join.title')} noindex>
+  <div class="mm-prose">
+    <h1>{t(lang, 'mm.join.title')}</h1>
+    {errorKey && <p class="mm-alert" role="alert">{t(lang, errorKey)}</p>}
+    {user ? (
+      <>
+        <p class="mm-lead">{t(lang, 'mm.join.signedIn', { name: userName })}</p>
+        <p><a class="mm-button" href="/">{t(lang, 'mm.join.toForums')}</a></p>
+      </>
+    ) : (
+      <>
+        <p class="mm-lead">{t(lang, 'mm.join.lead')}</p>
+        <p>{t(lang, 'mm.join.how')}</p>
+        <p><SignIn class="mm-button" provider={provider} options={{ callbackUrl }}>{t(lang, 'mm.join.button')}</SignIn></p>
+        <p class="mm-muted">{t(lang, 'mm.join.privacy')}</p>
+      </>
+    )}
+  </div>
+</MmLayout>
