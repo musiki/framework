@@ -1,12 +1,13 @@
-// Where rendered LilyPond assets live: <cwd>/public/lily/<hash>.{svg,midi,pdf}
-// (override with LILYPOND_PUBLIC_DIR). This is the directory the engine has
-// always used:
-//   - `astro dev` serves it directly as /lily/<hash>.*;
-//   - `astro build` copies it into dist/client (the files are gitignored but
-//     survive `git reset --hard` on the VPS), so the next deploy serves them
-//     statically;
-//   - between deploys the production server serves runtime renders through
-//     GET /api/lily/render?url=/lily/<hash>.<ext> (the player falls back to it).
+// Where rendered LilyPond assets live: a persistent store OUTSIDE the deploy
+// tree, <store>/<hash>.{svg,midi,pdf}. getLilyDir() resolves it:
+//   1. LILYPOND_ASSET_DIR (LILYPOND_PUBLIC_DIR is the legacy name);
+//   2. production (NODE_ENV=production) when /opt/musiki/data/lily exists;
+//   3. <cwd>/public/lily (development; `astro dev` also serves it statically).
+// The deploy syncs the framework with `rsync --delete` and only dist/client is
+// served statically in production, so runtime renders must never live in the
+// repo tree. GET /lily/<hash>.<ext> (src/pages/lily/[file].ts) serves the
+// store, falling back to <cwd>/dist/client/lily and <cwd>/public/lily for
+// legacy files; GET /api/lily/render?url= reads the same dirs.
 // SVG is sanitized (svg-sanitize.mjs) before it is written and again when it
 // is read for inlining or serving, because files rendered before the sandbox
 // existed are untrusted too.
@@ -18,8 +19,30 @@ import { sanitizeSvgSecurity } from './svg-sanitize.mjs';
 
 const HASH_RE = /^[a-f0-9]{32,64}$/i;
 
-export function getLilyDir(env = process.env) {
-  return env?.LILYPOND_PUBLIC_DIR || path.join(process.cwd(), 'public', 'lily');
+/** Production store used when no env override is set and the directory exists. */
+export const PRODUCTION_LILY_DIR = '/opt/musiki/data/lily';
+
+/**
+ * The directory rendered assets are written to (and read from first).
+ * @param {Record<string, string|undefined>} [env]
+ * @param {{cwd?: string, existsSync?: (p: string) => boolean}} [opts]
+ */
+export function getLilyDir(env = process.env, { cwd = process.cwd(), existsSync = fs.existsSync } = {}) {
+  const explicit = String(env?.LILYPOND_ASSET_DIR || env?.LILYPOND_PUBLIC_DIR || '').trim();
+  if (explicit) return path.resolve(cwd, explicit);
+  if (env?.NODE_ENV === 'production' && existsSync(PRODUCTION_LILY_DIR)) return PRODUCTION_LILY_DIR;
+  return path.join(cwd, 'public', 'lily');
+}
+
+/**
+ * Directories a /lily/<hash>.<ext> request is served from, in order: the
+ * store, then legacy files the build copied into dist/client/lily, then
+ * public/lily (duplicates removed).
+ */
+export function getLilyReadDirs(env = process.env, opts = {}) {
+  const cwd = opts.cwd ?? process.cwd();
+  const dirs = [getLilyDir(env, opts), path.join(cwd, 'dist', 'client', 'lily'), path.join(cwd, 'public', 'lily')];
+  return [...new Set(dirs.map((d) => path.resolve(d)))];
 }
 
 export function isSafeLilyHash(hash) {

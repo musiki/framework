@@ -19,6 +19,11 @@ RELOAD_COMMAND="${VPS_RELOAD_COMMAND-pm2 reload ecosystem.config.cjs --update-en
 SAVE_PM2_STATE="${VPS_SAVE_PM2_STATE-1}"
 DEPLOY_LOCK_FILE="${VPS_DEPLOY_LOCK_FILE:-/tmp/musiki-framework-deploy.lock}"
 DEPLOY_LOCK_TIMEOUT="${VPS_DEPLOY_LOCK_TIMEOUT:-900}"
+# Persistent LilyPond asset store, outside the deploy tree (the workflow syncs
+# the framework with rsync --delete, and only dist/client is served
+# statically). Never deleted by the deploy. Must match the runtime value
+# (.env LILYPOND_ASSET_DIR, default /opt/musiki/data/lily in production).
+LILYPOND_ASSET_DIR="${LILYPOND_ASSET_DIR:-/opt/musiki/data/lily}"
 
 printf '\n[framework] Deploying in %s\n' "$FRAMEWORK_DIR"
 printf '[framework] Content source strategy: %s\n' "$CONTENT_SOURCE_STRATEGY"
@@ -73,8 +78,16 @@ if [[ -n "$EVAL_SYNC_COMMAND" ]]; then
 fi
 
 printf '::deploy-phase::build::Building Astro\n'
-# LilyPond SVGs rendered before the sandbox may contain script; astro build
-# copies public/lily into dist/client, so sanitize them first (idempotent).
+# Build-time renders (remark-lily) go to the same store the server reads.
+if mkdir -p "$LILYPOND_ASSET_DIR" 2>/dev/null && [[ -w "$LILYPOND_ASSET_DIR" ]]; then
+  export LILYPOND_ASSET_DIR
+  printf '[framework] LilyPond asset store: %s\n' "$LILYPOND_ASSET_DIR"
+else
+  printf '[framework] WARNING: LilyPond asset store %s is missing or not writable; renders fall back to public/lily and are lost on the next deploy\n' "$LILYPOND_ASSET_DIR" >&2
+  unset LILYPOND_ASSET_DIR
+fi
+# LilyPond SVGs rendered before the sandbox may contain script; sanitize the
+# store and the legacy public/lily (astro build copies it into dist/client).
 node scripts/sanitize-lily-assets.mjs
 rm -rf dist_tmp
 eval "$ASTRO_BUILD_COMMAND"

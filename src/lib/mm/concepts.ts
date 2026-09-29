@@ -6,6 +6,8 @@
 
 import { query, getClient } from '../db/pool';
 import * as core from './concepts-core.ts';
+import { mmDefinitionRenderCache, mmRendererFor } from './render.ts';
+import type { MmLang } from './ui-lang.ts';
 import type { QueryFn } from './concepts-core.ts';
 
 export { ConceptError, CONCEPT_LANGS, CONCEPT_STATUSES, RELATION_TYPES } from './concepts-core.ts';
@@ -46,7 +48,14 @@ export async function onClient<T>(fn: (q: QueryFn) => Promise<T>): Promise<T> {
 }
 
 export const getCommonsRole = (spaceId: string, userId: string | null) => core.getCommonsRole(poolQ, spaceId, userId);
-export const getConcept = (args: Parameters<typeof core.getConcept>[1]) => core.getConcept(poolQ, args);
+/**
+ * Definitions render like forum posts (sanitized mm renderer: KaTeX, LilyPond
+ * as same-origin /lily/<hash>.svg, citations against the concept's forum),
+ * cached per version + lang + forum bibliography. `lang` picks the citation
+ * locale (default en).
+ */
+export const getConcept = ({ lang = 'en', ...args }: Omit<Parameters<typeof core.getConcept>[1], 'render'> & { lang?: MmLang }) =>
+  core.getConcept(poolQ, { ...args, render: mmRendererFor(mmDefinitionRenderCache, lang) });
 export const listConcepts = (args: Parameters<typeof core.listConcepts>[1]) => core.listConcepts(poolQ, args);
 export const graph = (args: Parameters<typeof core.graph>[1]) => core.graph(poolQ, args);
 

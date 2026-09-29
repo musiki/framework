@@ -5,7 +5,11 @@
 // machine translation; nn readers get nb), credit, sources, history with
 // credited authors, relations (+ picker for members, remove own/any), status
 // (curators), new version (author/curators), link to the discussion thread.
-// Definitions are plain text (rendered as text, never as HTML).
+// Definitions are markdown: they are shown ONLY through the core's sanitized
+// `definitionHtml` (same mm renderer as posts: KaTeX, LilyPond as same-origin
+// /lily/<hash>.svg, citations against the concept's forum); the raw
+// `definition` is used only as form text and (stripped) for the meta description.
+import 'katex/dist/katex.min.css';
 import MmLayout from '../../../layouts/MmLayout.astro';
 import MmStatus from '../../../components/mm/MmStatus.astro';
 import { t, type MessageKey } from '../../../lib/i18n';
@@ -17,7 +21,7 @@ import { can } from '../../../lib/mm/policy';
 import { isConceptAuthor, loadMmViewer, logPageError, type MmViewer } from '../../../lib/mm/page-data';
 import { clientStrings } from '../../../lib/mm/page-strings';
 import {
-  conceptLabel, conceptPath, displayName, formatDate, forumPath, pickDefinition, safeHttpUrl, threadPath, pageErrorState } from '../../../lib/mm/view';
+  conceptLabel, conceptPath, definitionExcerpt, displayName, formatDate, forumPath, pickDefinition, safeHttpUrl, threadPath, pageErrorState } from '../../../lib/mm/view';
 export const prerender = false;
 
 const isMm = Astro.locals.tenant?.id === 'mm';
@@ -34,7 +38,7 @@ if (!isMm || !slug || slug.length > 200) state = 'notFound';
 else {
   try {
     viewer = await loadMmViewer(Astro.locals);
-    concept = await getConcept({ spaceId: viewer.space.id, slug, viewerUserId: viewer.userId });
+    concept = await getConcept({ spaceId: viewer.space.id, slug, viewerUserId: viewer.userId, lang });
     if (!concept) state = 'notFound';
     else {
       const role = viewer.role;
@@ -79,7 +83,7 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
 ) : state !== 'ok' || !concept ? (
   <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
 ) : (
-  <MmLayout lang={lang} title={label.text} description={shown?.definition.slice(0, 200)}>
+  <MmLayout lang={lang} title={label.text} description={shown ? definitionExcerpt(shown.definition, 200) : undefined}>
     <div data-mm-i18n={strings} class={`mm-st-${concept.status}`}>
       <p class="mm-meta">
         {concept.forum && <a class="mm-more" href={forumPath(concept.forum.slug)}>{t(lang, 'mm.concept.proposedIn', { forum: concept.forum.title })}</a>}
@@ -100,7 +104,7 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
         {pick?.missingTranslation && <p class="mm-note">{t(lang, 'mm.concept.missingNb')}</p>}
         {shown ? (
           <>
-            <blockquote class="mm-definition" lang={shown.lang}><p class="mm-pre-line">{shown.definition}</p></blockquote>
+            <blockquote class="mm-definition mm-post-body" lang={shown.lang} set:html={shown.definitionHtml} />
             <p class="mm-meta">
               <span>{t(lang, 'mm.concept.credit', { name: displayName(shown.credited, formerMember, memberLabel) })}</span>
               {shown.fromPostId && (postLink(shown.fromPostId)
@@ -263,7 +267,7 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
                     ? <a href={postLink(v.fromPostId)!}>{t(lang, 'mm.concept.fromPost')}</a>
                     : <span>{t(lang, 'mm.concept.fromPost')}</span>)}
                 </p>
-                <blockquote lang={v.lang}><p class="mm-pre-line">{v.definition}</p></blockquote>
+                <blockquote class="mm-post-body" lang={v.lang} set:html={v.definitionHtml} />
               </li>
             );
           })}

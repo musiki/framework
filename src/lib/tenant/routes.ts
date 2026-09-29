@@ -8,6 +8,8 @@ export const ROUTE_FAMILY_PREFIXES: Record<RouteFamily, string[]> = {
   mm: ['/f', '/c', '/graph', '/about', '/join', '/admin'],
   'api:mm': ['/api/mm'],
   'api:public-mm': ['/api/public/mm'],
+  // Rendered LilyPond assets (src/pages/lily/[file].ts: content-hash names only).
+  lily: ['/lily'],
 };
 
 // Paths a family allows only verbatim (never as a prefix): `/` must not

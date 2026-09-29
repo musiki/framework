@@ -50,14 +50,23 @@ test('mm (no api:public family) is refused /api/public/instruments and so data',
 test('mm allows / exactly, its page prefixes, its apis and auth', () => {
   for (const p of ['/', '/f', '/f/stiegler', '/c', '/c/tertiary-retention', '/graph', '/about', '/join',
     '/admin', '/admin/invites', '/api/mm', '/api/mm/concepts', '/api/public/mm', '/api/public/mm/concepts.json',
-    '/api/auth/session', '/api/auth/signin/logto-mm']) {
+    '/api/auth/session', '/api/auth/signin/logto-mm', '/lily/0123456789abcdef0123456789abcdef.svg']) {
     assert.equal(isRouteAllowed(mm, p), true, p);
   }
   for (const p of ['//', '/x', '/cursos', '/foro', '/dashboard', '/login', '/studio', '/studio/login', '/api/studio/me',
     '/api/public', '/api/public/mmx', '/api/mmx', '/fx', '/cx', '/graphs', '/aboutx', '/joinx', '/adminx',
-    '/search.json', '/public-search.json', '/slides/x', '/mm-app', '/mm-app/', '/api/graph-data']) {
+    '/search.json', '/public-search.json', '/slides/x', '/mm-app', '/mm-app/', '/api/graph-data', '/lilyx', '/api/lily/render']) {
     assert.equal(isRouteAllowed(mm, p), false, p);
   }
+});
+
+test('lily family: mm serves /lily/* (rendered scores), so and its other families do not', () => {
+  for (const p of ['/lily', '/lily/0123456789abcdef0123456789abcdef.svg', '/lily/0123456789abcdef0123456789abcdef.midi']) {
+    assert.equal(isRouteAllowed(mm, p), true, p);
+    assert.equal(mapMmPath(p), null, p);
+    assert.equal(isRouteAllowed(so, p), false, p);
+  }
+  assert.equal(isRouteAllowed(TENANTS.musiki, '/lily/0123456789abcdef0123456789abcdef.svg'), true);
 });
 
 test('mapMmPath maps public mm pages to the internal mount', () => {
@@ -129,7 +138,7 @@ test('route sweep: no musiki route is reachable from so', () => {
 // coincides with an mm page path (/, /about, /admin/…) — served only through
 // the rewrite to /mm-app/*, never as the musiki page. Only auth and the mm
 // families are reachable; /mm-app/* itself is internal.
-const MM_OWN_PREFIXES = ['/api/auth', '/api/mm', '/api/public/mm'];
+const MM_OWN_PREFIXES = ['/api/auth', '/api/mm', '/api/public/mm', '/lily'];
 const underMmOwn = (r) => MM_OWN_PREFIXES.some((p) => r === p || r.startsWith(p + '/'));
 
 test('route sweep: no musiki route is reachable from mm', () => {

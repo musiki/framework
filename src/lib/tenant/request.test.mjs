@@ -129,3 +129,11 @@ test('musiki unaffected by the decoded-path check', () => {
   assert.equal(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/api/public/%6Dm/x' }).action, 'next');
   assert.equal(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/f/%E0%A4%A' }).action, 'next');
 });
+
+test('mm host: /lily/<hash>.svg passes without rewrite; so host refuses it', () => {
+  const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: '/lily/0123456789abcdef0123456789abcdef.svg' });
+  assert.equal(d.action, 'next');
+  assert.equal(d.rewrite, undefined);
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/lily//x.svg' }).action, 'not-found');
+  assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/lily/0123456789abcdef0123456789abcdef.svg' }).action, 'not-found');
+});

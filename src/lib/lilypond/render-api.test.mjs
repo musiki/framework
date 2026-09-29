@@ -9,7 +9,7 @@ import { fakeService, makeTmpDir, ok, EVIL_SVG, LILY_SVG } from './test/fake-ser
 const workDir = makeTmpDir('lily-api-');
 process.chdir(workDir); // isolates .cache/lilypond-renders.json
 
-const { handleLilyRenderPost, handleLilyAssetGet, MAX_SOURCE_BYTES } = await import('./render-api.mjs');
+const { handleLilyRenderPost, handleLilyAssetGet, handleLilyFileGet, MAX_SOURCE_BYTES } = await import('./render-api.mjs');
 const { resetLilypondServiceState } = await import('./service.mjs');
 const { withRenderedLilypondComment, cacheRenderedLilypondUrl, getCachedRenderedLilypondUrl } = await import('../lilypond-rendered-comment.mjs');
 const R2_ENV = { R2_PUBLIC_URL: 'https://pub-abc.r2.dev' };
@@ -226,5 +226,89 @@ describe('GET /api/lily/render?url=', () => {
       console.warn = warn;
     }
     assert.equal(fs.readdirSync(dir).length, 0);
+  });
+});
+
+describe('GET /lily/<hash>.<ext> (file route)', () => {
+  const H = 'a'.repeat(32);
+  let store;
+  let dist;
+  let pub;
+  let readDirs;
+  beforeEach(() => {
+    store = makeTmpDir('lily-store-');
+    dist = makeTmpDir('lily-dist-');
+    pub = makeTmpDir('lily-public-');
+    readDirs = [store, dist, pub];
+  });
+
+  test('serves SVG from the store, sanitized, with CSP sandbox + nosniff + immutable cache', async () => {
+    fs.writeFileSync(path.join(store, `${H}.svg`), EVIL_SVG);
+    const res = await handleLilyFileGet(`${H}.svg`, { readDirs });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['Content-Type'], 'image/svg+xml; charset=utf-8');
+    assert.equal(res.headers['Content-Security-Policy'], "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    assert.equal(res.headers['X-Content-Type-Options'], 'nosniff');
+    assert.equal(res.headers['Cache-Control'], 'public, max-age=31536000, immutable');
+    assert.doesNotMatch(String(res.body), /<script|onload=|javascript:/i);
+  });
+
+  test('MIDI and PDF are sandboxed attachments; .mid request finds a .midi file', async () => {
+    fs.writeFileSync(path.join(store, `${H}.midi`), 'MThd');
+    fs.writeFileSync(path.join(store, `${H}.pdf`), '%PDF-1.4');
+    for (const ext of ['midi', 'mid']) {
+      const res = await handleLilyFileGet(`${H}.${ext}`, { readDirs });
+      assert.equal(res.status, 200, ext);
+      assert.equal(res.headers['Content-Type'], 'audio/midi');
+      assert.equal(res.headers['Content-Security-Policy'], 'sandbox');
+      assert.match(res.headers['Content-Disposition'], new RegExp(`^attachment; filename="${H}\\.midi"$`));
+      assert.equal(res.headers['X-Content-Type-Options'], 'nosniff');
+      assert.equal(Buffer.from(res.body).toString(), 'MThd');
+    }
+    const pdf = await handleLilyFileGet(`${H}.pdf`, { readDirs });
+    assert.equal(pdf.headers['Content-Type'], 'application/pdf');
+    assert.equal(pdf.headers['Content-Security-Policy'], 'sandbox');
+    assert.match(pdf.headers['Content-Disposition'], /^attachment; filename="a+\.pdf"$/);
+  });
+
+  test('fallback order: store, then dist/client/lily, then public/lily', async () => {
+    fs.writeFileSync(path.join(pub, `${H}.svg`), LILY_SVG.replace('Allegro', 'public'));
+    let res = await handleLilyFileGet(`${H}.svg`, { readDirs });
+    assert.match(String(res.body), /public &amp; co|public &#x26; co/);
+    fs.writeFileSync(path.join(dist, `${H}.svg`), LILY_SVG.replace('Allegro', 'dist'));
+    res = await handleLilyFileGet(`${H}.svg`, { readDirs });
+    assert.match(String(res.body), /dist &amp; co|dist &#x26; co/);
+    fs.writeFileSync(path.join(store, `${H}.svg`), LILY_SVG.replace('Allegro', 'store'));
+    res = await handleLilyFileGet(`${H}.svg`, { readDirs });
+    assert.match(String(res.body), /store &amp; co|store &#x26; co/);
+    fs.writeFileSync(path.join(pub, `${H}.midi`), 'MThd-public');
+    res = await handleLilyFileGet(`${H}.midi`, { readDirs });
+    assert.equal(Buffer.from(res.body).toString(), 'MThd-public');
+  });
+
+  test('strict names: traversal, other extensions, uppercase, short hashes and missing files are 404', async () => {
+    fs.writeFileSync(path.join(store, `${H}.svg`), LILY_SVG);
+    fs.writeFileSync(path.join(path.dirname(store), 'secret.svg'), LILY_SVG);
+    for (const name of [
+      '../secret.svg', `../${path.basename(store)}/${H}.svg`, '..%2Fsecret.svg', `${H}.svg/..`, `${H}.SVG`, `${'A'.repeat(32)}.svg`,
+      `${'a'.repeat(31)}.svg`, `${'a'.repeat(65)}.svg`, `${H}.ly`, `${H}.svg.tmp`, `${H}`, '', null, undefined,
+      `${H}.svg\0`, `x${H}.svg`, `${'b'.repeat(32)}.svg`,
+    ]) {
+      const res = await handleLilyFileGet(name, { readDirs });
+      assert.equal(res.status, 404, String(name));
+      assert.equal(res.headers['X-Content-Type-Options'], 'nosniff');
+    }
+  });
+});
+
+describe('GET /api/lily/render?url= reads the store and legacy dirs', () => {
+  test('a local /lily/<hash>.svg found only in a legacy read dir is served', async () => {
+    const H = 'c'.repeat(32);
+    const store = makeTmpDir('lily-store-');
+    const legacy = makeTmpDir('lily-legacy-');
+    fs.writeFileSync(path.join(legacy, `${H}.svg`), LILY_SVG);
+    const res = await handleLilyAssetGet(`/lily/${H}.svg`, { dir: store, readDirs: [store, legacy], env: {} });
+    assert.equal(res.status, 200);
+    assert.match(String(res.body), /<svg/);
   });
 });

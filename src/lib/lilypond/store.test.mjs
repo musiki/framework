@@ -43,3 +43,23 @@ test('a failed rewrite is not recorded, so the next run retries it', { skip: pro
   assert.deepEqual([second.checked, second.rewritten, second.failed], [1, 1, 0]);
   assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /<script|onload=/i);
 });
+
+test('getLilyDir: LILYPOND_ASSET_DIR, then legacy LILYPOND_PUBLIC_DIR, then production store, then public/lily', async () => {
+  const { getLilyDir, getLilyReadDirs, PRODUCTION_LILY_DIR } = await import('./store.mjs');
+  const cwd = '/srv/fw';
+  const exists = (p) => p === PRODUCTION_LILY_DIR;
+  const missing = () => false;
+  assert.equal(PRODUCTION_LILY_DIR, '/opt/musiki/data/lily');
+  assert.equal(getLilyDir({ LILYPOND_ASSET_DIR: '/data/lily', LILYPOND_PUBLIC_DIR: '/old' }, { cwd, existsSync: exists }), '/data/lily');
+  assert.equal(getLilyDir({ LILYPOND_ASSET_DIR: 'rel/lily' }, { cwd, existsSync: exists }), '/srv/fw/rel/lily');
+  assert.equal(getLilyDir({ LILYPOND_PUBLIC_DIR: '/old' }, { cwd, existsSync: exists }), '/old');
+  assert.equal(getLilyDir({ NODE_ENV: 'production' }, { cwd, existsSync: exists }), PRODUCTION_LILY_DIR);
+  assert.equal(getLilyDir({ NODE_ENV: 'production' }, { cwd, existsSync: missing }), '/srv/fw/public/lily');
+  assert.equal(getLilyDir({ NODE_ENV: 'development' }, { cwd, existsSync: exists }), '/srv/fw/public/lily');
+  assert.equal(getLilyDir({ LILYPOND_ASSET_DIR: '  ' }, { cwd, existsSync: missing }), '/srv/fw/public/lily');
+
+  assert.deepEqual(getLilyReadDirs({ NODE_ENV: 'production' }, { cwd, existsSync: exists }),
+    [PRODUCTION_LILY_DIR, '/srv/fw/dist/client/lily', '/srv/fw/public/lily']);
+  // dev: the store is public/lily itself (no duplicate)
+  assert.deepEqual(getLilyReadDirs({}, { cwd, existsSync: missing }), ['/srv/fw/public/lily', '/srv/fw/dist/client/lily']);
+});

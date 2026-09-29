@@ -18,6 +18,7 @@ import {
   setLabels,
   getCommonsRole,
   shouldDestroyClient,
+  forumBibliographyKey,
 } from './concepts-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -276,6 +277,67 @@ test('getConcept: origin points at the discussion thread\'s channel (concept bel
     threadBoardTitle: 'Welcome', threadBoardArchived: true,
   }]]]);
   assert.equal((await getConcept(archived.q, { spaceId: SPACE, slug: 'pharmakon' })).originArchived, true);
+});
+
+test('getConcept: definitionHtml defaults to escaped text; raw definition kept', async () => {
+  const fx = fakeQuery([
+    ['WHERE c."spaceId" = $1::uuid AND c.slug = $2', () => [{ ...conceptRow(), forumId: null }]],
+    ['FROM "ConceptVersion" v', () => [
+      { id: 'v1', lang: 'en', definition: 'a <script>x</script>\n$W$', sources: [], editedBy: null, creditedUserId: null,
+        fromPostId: null, createdAt: '2026-01-01T00:00:00Z' },
+    ]],
+  ]);
+  const c = await getConcept(fx.q, { spaceId: SPACE, slug: 'pharmakon' });
+  assert.equal(c.current.en.definition, 'a <script>x</script>\n$W$');
+  assert.equal(c.current.en.definitionHtml, '<p class="mm-pre-line">a &lt;script&gt;x&lt;/script&gt;\n$W$</p>');
+});
+
+test('getConcept: every version is rendered with its version ref and the forum bibliography key; failures fall back to text', async () => {
+  const fx = fakeQuery([
+    ['WHERE c."spaceId" = $1::uuid AND c.slug = $2', () => [{
+      ...conceptRow(), forumId: FORUM, forumSlug: 'stiegler', forumTitle: 'Stiegler',
+      forumSettings: { seshatLibraryId: ' lib1 ', ownerEmail: 'Owner@X.org', zoteroCollection: 'z' },
+    }]],
+    ['FROM "ConceptVersion" v', () => [
+      { id: 'v2', lang: 'nb', definition: 'boom', sources: [], editedBy: null, creditedUserId: null,
+        fromPostId: null, createdAt: new Date('2026-02-01T00:00:00Z') },
+      { id: 'v1', lang: 'en', definition: 'en *v1*', sources: [], editedBy: null, creditedUserId: null,
+        fromPostId: null, createdAt: '2026-01-01T00:00:00Z' },
+    ]],
+  ]);
+  const seen = [];
+  const render = async (md, ref) => {
+    seen.push([md, ref]);
+    if (md === 'boom') throw new Error('render failed');
+    return `<p>R:${md}</p>`;
+  };
+  const errors = [];
+  const origError = console.error;
+  console.error = (...a) => errors.push(a);
+  let c;
+  try {
+    c = await getConcept(fx.q, { spaceId: SPACE, slug: 'pharmakon', render });
+  } finally {
+    console.error = origError;
+  }
+  assert.deepEqual(seen.map(([md, ref]) => [md, ref]).sort((a, b) => a[1].id.localeCompare(b[1].id)), [
+    ['en *v1*', { id: 'concept-version:v1', updatedAt: '2026-01-01T00:00:00Z', forumId: FORUM, forumBibliography: 'lib1|owner@x.org' }],
+    ['boom', { id: 'concept-version:v2', updatedAt: '2026-02-01T00:00:00.000Z', forumId: FORUM, forumBibliography: 'lib1|owner@x.org' }],
+  ]);
+  assert.equal(c.current.en.definitionHtml, '<p>R:en *v1*</p>');
+  assert.equal(c.current.nb.definitionHtml, '<p class="mm-pre-line">boom</p>');
+  assert.equal(c.history[1].definition, 'en *v1*');
+  assert.equal(errors.length, 1);
+  const json = JSON.stringify(c);
+  assert.ok(!/owner@x\.org|lib1|forumSettings/i.test(json), 'forum bibliography settings never leave the core');
+});
+
+test('forumBibliographyKey: library + normalized owner; tolerant of JSON strings and junk', () => {
+  assert.equal(forumBibliographyKey({ seshatLibraryId: ' L ', ownerEmail: ' A@B.C ' }), 'L|a@b.c');
+  assert.equal(forumBibliographyKey('{"seshatLibraryId":"L"}'), 'L|');
+  assert.equal(forumBibliographyKey('not json'), '|');
+  assert.equal(forumBibliographyKey(null), '|');
+  assert.equal(forumBibliographyKey([1]), '|');
 });
 
 test('getConcept: unknown slug or bad space → null', async () => {

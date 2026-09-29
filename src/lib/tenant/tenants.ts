@@ -2,7 +2,7 @@ export type TenantId = 'musiki' | 'hem' | 'so' | 'mm';
 // 'nb' (Norsk bokmål) is a UI language of the mm tenant only (dictionary src/lib/i18n/nb.ts).
 export type Locale = 'es' | 'fr' | 'en' | 'nb';
 export type SpaceKind = 'course' | 'dissertation' | 'commons';
-export type RouteFamily = 'studio' | 'api:studio' | 'api:public' | 'auth' | 'mm' | 'api:mm' | 'api:public-mm';
+export type RouteFamily = 'studio' | 'api:studio' | 'api:public' | 'auth' | 'mm' | 'api:mm' | 'api:public-mm' | 'lily';
 export type TenantTheme = 'default' | 'invulne' | 'so' | 'mm';
 
 export type Tenant = {
@@ -53,14 +53,15 @@ export const TENANTS: Record<TenantId, Tenant> = {
   },
   // MishMash Concept Machine. Public URLs (/, /f, /c, /graph, /about, /join,
   // /admin) are rewritten by middleware to internal /mm-app/* pages
-  // (see mapMmPath in routes.ts). Never shows musiki branding.
+  // (see mapMmPath in routes.ts). Never shows musiki branding. 'lily' serves
+  // rendered LilyPond scores (/lily/<hash>.svg) from the asset store.
   mm: {
     id: 'mm',
     hosts: ['mm.zztt.org'],
     locale: 'en',
     brand: { name: 'MishMash Concept Machine', theme: 'mm' },
     spaceKinds: ['commons'],
-    routes: ['mm', 'api:mm', 'api:public-mm', 'auth'],
+    routes: ['mm', 'api:mm', 'api:public-mm', 'auth', 'lily'],
     authProviders: ['logto-mm'],
     homePath: '/',
     loginPath: '/join',

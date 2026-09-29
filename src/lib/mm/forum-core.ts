@@ -16,7 +16,7 @@
 // (forum.ts binds musiki's renderForumMarkdown: KaTeX, LilyPond, @citekey).
 
 import { can, type MmAction } from './policy.ts';
-import { getCommonsRole, withTransaction, type QueryFn } from './concepts-core.ts';
+import { forumBibliographyKey, getCommonsRole, withTransaction, type QueryFn } from './concepts-core.ts';
 import { isUuid, isValidEmail, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
 import { publicName } from './view.ts';
@@ -307,11 +307,6 @@ export function effectiveSettings(own: unknown, parent: unknown): ForumSettings 
   const zotero = o.zoteroCollection ?? p.zoteroCollection;
   if (zotero) out.zoteroCollection = zotero;
   return out;
-}
-
-/** Cache-key fragment for a forum's bibliography link (library id + owner). */
-export function bibliographyKey(settings: ForumSettings): string {
-  return `${settings.seshatLibraryId ?? ''}|${settings.ownerEmail ? normalizeEmail(settings.ownerEmail) : ''}`;
 }
 
 /** Reserved channel slug: /f/<group>/t/<thread> is a thread of the group itself. */
@@ -911,9 +906,9 @@ export async function listPosts(
 
   const role = await viewerRole(q, spaceId, viewerUserId);
   const canModerate = can(role, 'moderate');
-  // Channels inherit their group's bibliography (key per key); the renderer
-  // resolves citations by the board id, the cache key carries the effective link.
-  const forumBibliography = bibliographyKey(effectiveSettings(t.forumSettings, t.parentId ? t.parentSettings ?? {} : null));
+  // Channels inherit their group's library+owner pair (effectiveSettings); the
+  // renderer resolves citations by the board id, the cache key carries the effective link.
+  const forumBibliography = forumBibliographyKey(effectiveSettings(t.forumSettings, t.parentId ? t.parentSettings ?? {} : null));
 
   const rows = await run(
     q,
