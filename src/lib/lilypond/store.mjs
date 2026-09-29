@@ -143,7 +143,7 @@ export async function readSanitizedSvg(filePath) {
  * The manifest lives outside the served dir (<cwd>/.cache/lily-sanitized.json).
  */
 export async function sanitizeLilyDir(dir = getLilyDir(), { manifestPath = path.join(process.cwd(), '.cache', 'lily-sanitized.json') } = {}) {
-  const stats = { checked: 0, skipped: 0, rewritten: 0, removed: 0 };
+  const stats = { checked: 0, skipped: 0, rewritten: 0, removed: 0, failed: 0 };
   let entries = [];
   try {
     entries = await fsp.readdir(dir);
@@ -173,7 +173,15 @@ export async function sanitizeLilyDir(dir = getLilyDir(), { manifestPath = path.
     const after = await readSanitizedSvg(filePath);
     stats.checked += 1;
     if (!after) {
-      stats.removed += 1;
+      if (!fs.existsSync(filePath)) stats.removed += 1;
+      else stats.failed += 1;
+      continue;
+    }
+    // Record the file only when what is on disk now is the sanitized markup
+    // (already clean, or rewritten successfully); a failed rewrite is retried.
+    const onDisk = await fsp.readFile(filePath, 'utf8');
+    if (onDisk !== after) {
+      stats.failed += 1;
       continue;
     }
     if (after !== before) stats.rewritten += 1;

@@ -7,4 +7,5 @@ import { sanitizeLilyDir, getLilyDir } from '../src/lib/lilypond/store.mjs';
 
 const dir = process.argv[2] || getLilyDir();
 const stats = await sanitizeLilyDir(dir);
-console.log(`[sanitize-lily-assets] ${dir}: checked ${stats.checked}, unchanged since last run ${stats.skipped}, rewritten ${stats.rewritten}, removed ${stats.removed}`);
+console.log(`[sanitize-lily-assets] ${dir}: checked ${stats.checked}, unchanged since last run ${stats.skipped}, rewritten ${stats.rewritten}, removed ${stats.removed}, failed ${stats.failed}`);
+if (stats.failed > 0) process.exitCode = 1;

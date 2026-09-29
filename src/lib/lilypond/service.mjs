@@ -19,6 +19,14 @@ const CIRCUIT_OPEN_MS = 30_000;
 const BUSY_RETRIES = 2;
 const BUSY_DELAY_MS = 750;
 const NEGATIVE_TTL_MS = 10 * 60_000;
+const NEGATIVE_STDERR_MAX = 2048;
+/**
+ * Client deadline for one render: the service's LilyPond timeout (20 s) plus an
+ * allowance for waiting in the service queue (25 s). A deadline that expires
+ * without an HTTP answer counts as an outage, so it must exceed what a healthy
+ * but loaded service can take.
+ */
+export const DEFAULT_RENDER_DEADLINE_MS = 45_000;
 const NEGATIVE_MAX = 1000;
 
 const state = {
@@ -96,6 +104,9 @@ function negativeKey(source, formats) {
 }
 
 function rememberFailure(key, outcome, now) {
+  if (typeof outcome.stderr === 'string' && outcome.stderr.length > NEGATIVE_STDERR_MAX) {
+    outcome = { ...outcome, stderr: outcome.stderr.slice(-NEGATIVE_STDERR_MAX) };
+  }
   state.negative.delete(key);
   state.negative.set(key, { until: now + NEGATIVE_TTL_MS, outcome });
   while (state.negative.size > NEGATIVE_MAX) state.negative.delete(state.negative.keys().next().value);
@@ -158,7 +169,7 @@ async function renderOnce(source, { client, formats, timeoutMs, env, localAllowe
  */
 export async function renderLilypond(source, options = {}) {
   const formats = options.formats ?? ['svg', 'midi'];
-  const timeoutMs = options.timeoutMs ?? 30_000;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_RENDER_DEADLINE_MS;
   const client = options.client ?? defaultClient;
   const env = options.env ?? process.env;
   const now = options.now ?? Date.now;

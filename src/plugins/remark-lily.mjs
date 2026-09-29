@@ -8,7 +8,7 @@
 // may still show a previously rendered R2 image).
 import { visit } from 'unist-util-visit';
 import { sanitizeLilypondSvgMarkup } from '../lib/lilypond-support.mjs';
-import { renderLilypond } from '../lib/lilypond/service.mjs';
+import { DEFAULT_RENDER_DEADLINE_MS, renderLilypond } from '../lib/lilypond/service.mjs';
 import {
   getLilyDir,
   lilyAssetPaths,
@@ -28,7 +28,7 @@ const LILY_LANGS = new Set(['lily', 'lilypond', 'ly']);
  */
 export default function remarkLily(options = {}) {
   const render = options.render ?? renderLilypond;
-  const timeoutMs = options.timeoutMs ?? 30_000;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_RENDER_DEADLINE_MS;
   const maxRenders = options.maxRenders ?? 20;
 
   return async (tree, file) => {

@@ -33,19 +33,26 @@ export async function renderRemoteLilypond(source) {
   return resolveRenderedLilypondUrl(source);
 }
 
+/** Host (hostname[:non-default port]) of a bare host, host:port or URL; '' if unparsable. */
+function hostOf(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 function hostsFromEnv(env) {
   const hosts = new Set();
-  for (const key of ['R2_PUBLIC_URL', 'R2_PUBLIC_DEV_URL']) {
-    const value = String(env?.[key] || '').trim();
-    if (!value) continue;
-    try {
-      hosts.add(new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`).hostname.toLowerCase());
-    } catch {
-      // ignore malformed values
-    }
-  }
-  for (const entry of String(env?.LILYPOND_REMOTE_ASSET_HOSTS || '').split(',')) {
-    const host = entry.trim().toLowerCase();
+  const entries = [
+    env?.R2_PUBLIC_URL,
+    env?.R2_PUBLIC_DEV_URL,
+    ...String(env?.LILYPOND_REMOTE_ASSET_HOSTS || '').split(','),
+  ];
+  for (const entry of entries) {
+    const host = hostOf(entry);
     if (host) hosts.add(host);
   }
   return hosts;
@@ -67,5 +74,5 @@ export function isAllowedRemoteLilyUrl(url, env = process.env) {
   }
   if (parsed.protocol !== 'https:') return false;
   if (parsed.username || parsed.password) return false;
-  return hostsFromEnv(env).has(parsed.hostname.toLowerCase());
+  return hostsFromEnv(env).has(parsed.host.toLowerCase());
 }

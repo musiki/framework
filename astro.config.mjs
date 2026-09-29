@@ -112,9 +112,6 @@ export default defineConfig({
   security: {
     checkOrigin: false,
   },
-  server: {
-    trustProxy: true,
-  },
   integrations: [
     mdx(), 
     react(),

@@ -1,7 +1,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { renderLilypond, resetLilypondServiceState, isTransportFailure } from './service.mjs';
+import { renderLilypond, resetLilypondServiceState, isTransportFailure, DEFAULT_RENDER_DEADLINE_MS } from './service.mjs';
 import { isLocalRenderAllowed } from './local-render.mjs';
 import { fakeService, makeTmpDir, ok, HASH } from './test/fake-service.mjs';
 
@@ -156,6 +156,23 @@ describe('per-score failures vs outages', () => {
     } finally {
       await srv.close();
     }
+  });
+
+  test('negative cache keeps at most 2 KB of stderr', async () => {
+    const srv = await fakeService(() => ({ status: 422, body: { error: 'lilypond failed', stderr: 'e'.repeat(10_000) } }));
+    try {
+      const opts = { env: { LILYPOND_SOCKET: srv.socketPath } };
+      await renderLilypond('{ noisy }', opts);
+      const again = await renderLilypond('{ noisy }', opts);
+      assert.equal(again.negativeCached, true);
+      assert.equal(again.stderr.length, 2048);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  test('client deadline exceeds service timeout (20 s) + queue allowance', () => {
+    assert.ok(DEFAULT_RENDER_DEADLINE_MS >= 45_000);
   });
 
   test('engine-side queue is capped: excess renders fail fast as busy', async () => {
