@@ -48,6 +48,7 @@ export const authorizeOwnerLibraries = (args: Parameters<typeof core.authorizeOw
 export const listForumsAdmin = (args: Parameters<typeof core.listForumsAdmin>[1]) => core.listForumsAdmin(poolQ, args);
 export const createForum = (args: Parameters<typeof core.createForum>[1]) => core.createForum(poolQ, args);
 export const updateForum = (args: Parameters<typeof core.updateForum>[1]) => core.updateForum(poolQ, args);
+export const reorderChannels = (args: Parameters<typeof core.reorderChannels>[1]) => core.reorderChannels(poolQ, args);
 export const listThreads = (args: Parameters<typeof core.listThreads>[1]) => core.listThreads(poolQ, args);
 /** `lang` picks the citation locale / references heading (default en). */
 export const listPosts = ({ lang = 'en', ...args }: Omit<Parameters<typeof core.listPosts>[1], 'render'> & { lang?: MmLang }) =>

@@ -48,7 +48,7 @@ if (isMm) {
               <a class="mm-list-title" href={forumPath(f.slug)}>{f.title}</a>
               {f.description && <p class="mm-list-desc mm-pre-line">{f.description}</p>}
               <p class="mm-meta">
-                <span>{t(lang, 'mm.forumList.counts', { threads: f.threadCount, concepts: f.conceptCount })}</span>
+                <span>{t(lang, f.channels.length ? 'mm.forumList.countsWithChannels' : 'mm.forumList.counts', { threads: f.threadCount, concepts: f.conceptCount })}</span>
                 {f.lastActivityAt && <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(f.lastActivityAt, lang) })}</span>}
               </p>
               {f.channels.length > 0 && (

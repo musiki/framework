@@ -358,7 +358,7 @@ const SUBTREE = (thread: string) =>
   `(${thread}."boardId" = b.id OR ${thread}."boardId" IN (
      SELECT ch.id FROM "ForumBoard" ch WHERE ch."parentId" = b.id AND ch."isArchived" = false))`;
 
-const FORUM_SELECT = `SELECT b.id, b.slug, b.title, b.description, b.settings, b."parentId", b."createdAt", b."updatedAt",
+const FORUM_SELECT = `SELECT b.id, b.slug, b.title, b.description, b.settings, b."parentId", b.position, b."createdAt", b."updatedAt",
        pb.slug AS "parentSlug", pb.title AS "parentTitle", pb.settings AS "parentSettings",
        (SELECT count(*) FROM "ForumThread" t
          WHERE ${SUBTREE('t')} AND t."spaceId" = b."spaceId" AND t."archivedAt" IS NULL)::int AS "threadCount",
@@ -393,12 +393,31 @@ const toForumSummary = (r: any): ForumSummary => {
   };
 };
 
-/** Nests channel rows under their group rows (orphans — group not in the list — are dropped). */
+/**
+ * Channel order within a group: the manual `position` first (ascending), then
+ * channels without a position in order of creation (the default), then id.
+ */
+export function compareChannels(
+  a: { position?: number | null; createdAt?: string | null; id: string },
+  b: { position?: number | null; createdAt?: string | null; id: string },
+): number {
+  const pa = a.position ?? Number.POSITIVE_INFINITY;
+  const pb = b.position ?? Number.POSITIVE_INFINITY;
+  if (pa !== pb) return pa < pb ? -1 : 1;
+  const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  if (ta !== tb) return ta - tb;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/** Nests channel rows under their group rows in channel order (orphans — group not in the list — are dropped). */
 function nestForums(rows: any[]): ForumSummary[] {
   const all = rows.map(toForumSummary);
+  const order = new Map(rows.map((r: any) => [r.id, { id: r.id, position: r.position ?? null, createdAt: r.createdAt ?? null }]));
   const groups = all.filter((f) => !f.parent);
   const byId = new Map(groups.map((g) => [g.id, g]));
   for (const f of all) if (f.parent) byId.get(f.parent.id)?.channels.push(f);
+  for (const g of groups) g.channels.sort((x, y) => compareChannels(order.get(x.id)!, order.get(y.id)!));
   return groups;
 }
 
@@ -479,11 +498,14 @@ export type ForumAdminView = {
   isArchived: boolean;
   /** Group of a channel; null for a top-level forum. */
   parentId: string | null;
-  /** The forum's OWN settings (a channel's empty keys inherit the group's). */
+  /** Manual channel order (null: after the ordered channels, by creation). */
+  position: number | null;
+  createdAt: string | null;
+  /** The forum's OWN settings (a channel inherits the group's library+owner pair when it has neither). */
   settings: ForumSettings;
 };
 
-const ADMIN_COLUMNS = `id, slug, title, description, "isArchived", settings, "parentId"`;
+const ADMIN_COLUMNS = `id, slug, title, description, "isArchived", settings, "parentId", position, "createdAt"`;
 
 const toAdminView = (r: any): ForumAdminView => ({
   id: r.id,
@@ -492,6 +514,8 @@ const toAdminView = (r: any): ForumAdminView => ({
   description: r.description ?? null,
   isArchived: !!r.isArchived,
   parentId: r.parentId ?? null,
+  position: r.position === null || r.position === undefined ? null : Number(r.position),
+  createdAt: r.createdAt ?? null,
   settings: parseSettings(r.settings),
 });
 
@@ -649,6 +673,43 @@ export async function updateForum(
   );
   if (!rows.length) throw new ForumError(404, 'forum not found');
   return toAdminView(rows[0]);
+}
+
+/**
+ * Curators/admins: the manual order of a group's channels. `order` must list
+ * every channel of the group (archived included) exactly once; positions
+ * become 1…n in that order, in one statement pinned to the group and space.
+ */
+export async function reorderChannels(
+  q: QueryFn,
+  input: { spaceId: string; groupId: string; actorUserId: string | null; order: unknown },
+): Promise<ForumAdminView[]> {
+  const spaceId = requireUuid(input.spaceId, 'space');
+  await authorize(q, spaceId, input.actorUserId, 'manageForums');
+  const group = await loadSpaceForum(q, spaceId, input.groupId, { includeArchived: true });
+  if (group.parentId) throw new ForumError(400, 'channels have no channels');
+  const order = input.order;
+  if (!Array.isArray(order) || order.length > 500 || !order.every((v) => typeof v === 'string' && isUuid(v))) {
+    throw new ForumError(400, 'order must be a list of channel ids');
+  }
+  const current = await run(
+    q,
+    `SELECT id FROM "ForumBoard" WHERE "parentId" = $1::uuid AND "spaceId" = $2::uuid`,
+    [group.id, spaceId],
+  );
+  const ids = new Set(current.map((r: any) => String(r.id)));
+  if (new Set(order).size !== order.length || order.length !== ids.size || !order.every((v) => ids.has(v as string))) {
+    throw new ForumError(409, 'the order must list every channel of the forum exactly once');
+  }
+  const rows = await run(
+    q,
+    `UPDATE "ForumBoard" b SET position = o.ord::int, "updatedAt" = now()
+     FROM unnest($1::uuid[]) WITH ORDINALITY AS o(id, ord)
+     WHERE b.id = o.id AND b."parentId" = $2::uuid AND b."spaceId" = $3::uuid
+     RETURNING b.id, b.slug, b.title, b.description, b."isArchived", b.settings, b."parentId", b.position, b."createdAt"`,
+    [order, group.id, spaceId],
+  );
+  return rows.map(toAdminView).sort(compareChannels);
 }
 
 // ---------------------------------------------------------------------------

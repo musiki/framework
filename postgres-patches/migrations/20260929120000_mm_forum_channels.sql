@@ -3,16 +3,28 @@
 -- Only space boards (mm) may be channels; musiki course boards ("spaceId" IS NULL)
 -- are untouched (their unique index ForumBoard_course_slug_unique is not changed).
 -- Slugs: top-level forums unique per space, channels unique per parent group.
+-- Channels keep a manual order ("position", NULL = after the ordered ones, by
+-- creation). A group that still has channels cannot be deleted (the FK is
+-- ON DELETE NO ACTION, not CASCADE; an earlier draft of this file used CASCADE
+-- and is switched in place below).
 -- Idempotent and guarded: safe to apply more than once.
 BEGIN;
 
 ALTER TABLE "ForumBoard" ADD COLUMN IF NOT EXISTS "parentId" uuid NULL;
+ALTER TABLE "ForumBoard" ADD COLUMN IF NOT EXISTS "position" integer NULL;
 
 DO $$
 BEGIN
+  -- No cascade: deleting a group must not silently delete its channels.
+  -- NO ACTION (checked at the end of the statement) rather than RESTRICT, so
+  -- deleting a whole Space, whose ON DELETE CASCADE removes a group and its
+  -- channels in one statement, still works. Replaces the draft's CASCADE FK.
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ForumBoard_parentId_fkey' AND confdeltype <> 'a') THEN
+    ALTER TABLE "ForumBoard" DROP CONSTRAINT "ForumBoard_parentId_fkey";
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ForumBoard_parentId_fkey') THEN
     ALTER TABLE "ForumBoard" ADD CONSTRAINT "ForumBoard_parentId_fkey"
-      FOREIGN KEY ("parentId") REFERENCES "ForumBoard"("id") ON DELETE CASCADE;
+      FOREIGN KEY ("parentId") REFERENCES "ForumBoard"("id") ON DELETE NO ACTION;
   END IF;
   -- Channels are space boards only (never course boards), never their own parent,
   -- and never use the reserved slug "t" (/f/<group>/t/<thread> is a group thread).
@@ -41,14 +53,18 @@ CREATE INDEX IF NOT EXISTS "ForumBoard_parentId_idx"
   ON "ForumBoard" ("parentId") WHERE "parentId" IS NOT NULL;
 
 -- One level only (a CHECK cannot read other rows): the parent must be a
--- top-level board of the same space, and a board that has channels cannot
--- itself become a channel.
+-- top-level board of the same space, a board that has channels cannot itself
+-- become a channel, and a group with channels cannot move to another space.
 CREATE OR REPLACE FUNCTION mm_forum_board_parent_check() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
   parent_parent uuid;
   parent_space uuid;
 BEGIN
+  IF TG_OP = 'UPDATE' AND NEW."spaceId" IS DISTINCT FROM OLD."spaceId"
+     AND EXISTS (SELECT 1 FROM "ForumBoard" c WHERE c."parentId" = NEW."id") THEN
+    RAISE EXCEPTION 'a forum with channels cannot move to another space' USING ERRCODE = 'check_violation';
+  END IF;
   IF NEW."parentId" IS NULL THEN
     RETURN NEW;
   END IF;

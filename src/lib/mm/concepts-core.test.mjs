@@ -263,12 +263,19 @@ test('getConcept: origin points at the discussion thread\'s channel (concept bel
   const c = await getConcept(fx.q, { spaceId: SPACE, slug: 'pharmakon' });
   assert.deepEqual(c.forum, { id: FORUM, slug: 'stiegler', title: 'Stiegler' });
   assert.deepEqual(c.origin, { groupSlug: 'stiegler', channel: { slug: 'technics-and-time', title: 'Technics and Time' } });
+  assert.equal(c.originArchived, false);
+  assert.match(fx.calls[0].text, /\(tb\."isArchived" OR COALESCE\(tpb\."isArchived", false\)\) AS "threadBoardArchived"/);
   assert.match(fx.calls[0].text, /LEFT JOIN "ForumThread" ct ON ct\.id = c\."threadId" AND ct\."spaceId" = c\."spaceId"/);
 
   const group = fakeQuery([['WHERE c."spaceId" = $1::uuid AND c.slug = $2', () => [{
     ...conceptRow(), forumId: FORUM, forumSlug: 'stiegler', forumTitle: 'Stiegler', threadBoardSlug: 'stiegler', threadGroupSlug: null,
   }]]]);
   assert.deepEqual((await getConcept(group.q, { spaceId: SPACE, slug: 'pharmakon' })).origin, { groupSlug: 'stiegler', channel: null });
+  const archived = fakeQuery([['WHERE c."spaceId" = $1::uuid AND c.slug = $2', () => [{
+    ...conceptRow(), forumId: FORUM, forumSlug: 'stiegler', forumTitle: 'Stiegler', threadBoardSlug: 'welcome', threadGroupSlug: 'stiegler',
+    threadBoardTitle: 'Welcome', threadBoardArchived: true,
+  }]]]);
+  assert.equal((await getConcept(archived.q, { spaceId: SPACE, slug: 'pharmakon' })).originArchived, true);
 });
 
 test('getConcept: unknown slug or bad space → null', async () => {

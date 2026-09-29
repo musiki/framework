@@ -406,6 +406,8 @@ export type ConceptView = {
    * Null when there is no thread (or it lost its board).
    */
   origin: { groupSlug: string; channel: { slug: string; title: string } | null } | null;
+  /** The discussion thread's board (or its group) is archived: its pages 404, so pages must not link them. */
+  originArchived: boolean;
   createdBy: UserRef;
   createdAt: string;
   updatedAt: string;
@@ -449,7 +451,8 @@ export async function getConcept(
     `SELECT c.id, c."spaceId", c.slug, c.label, c."labelNb", c.status, c."threadId", c."createdBy",
             c."createdAt", c."updatedAt", u.name AS "createdByName",
             f.id AS "forumId", f.slug AS "forumSlug", f.title AS "forumTitle",
-            tb.slug AS "threadBoardSlug", tb.title AS "threadBoardTitle", tpb.slug AS "threadGroupSlug"
+            tb.slug AS "threadBoardSlug", tb.title AS "threadBoardTitle", tpb.slug AS "threadGroupSlug",
+            (tb."isArchived" OR COALESCE(tpb."isArchived", false)) AS "threadBoardArchived"
      FROM "Concept" c
      LEFT JOIN "User" u ON u.id = c."createdBy"
      LEFT JOIN "ForumBoard" f ON f.id = c."forumId"
@@ -519,6 +522,7 @@ export async function getConcept(
       : c.threadGroupSlug
         ? { groupSlug: c.threadGroupSlug, channel: { slug: c.threadBoardSlug, title: c.threadBoardTitle } }
         : { groupSlug: c.threadBoardSlug, channel: null },
+    originArchived: c.threadBoardArchived === true,
     createdBy: userRef(c.createdBy, c.createdByName),
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,

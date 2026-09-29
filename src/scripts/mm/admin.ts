@@ -23,6 +23,9 @@ type Forum = {
   isArchived: boolean;
   /** Group of a channel; null for a top-level forum. */
   parentId: string | null;
+  /** Manual channel order (null: after the ordered channels, by creation). */
+  position?: number | null;
+  createdAt?: string | null;
   /** The forum's own settings (a channel's empty keys use its group's). */
   settings: { seshatLibraryId?: string; zoteroCollection?: string; ownerEmail?: string };
 };
@@ -625,7 +628,12 @@ function initForums(): void {
       return;
     }
     const groups = forums.filter((f) => !f.parentId);
-    const channelsOf = (g: Forum) => forums.filter((f) => f.parentId === g.id);
+    // Same order as the public pages: manual position, then order of creation.
+    const rank = (f: Forum) => f.position ?? Number.POSITIVE_INFINITY;
+    const time = (f: Forum) => (f.createdAt ? new Date(f.createdAt).getTime() : 0);
+    const channelsOf = (g: Forum) => forums
+      .filter((f) => f.parentId === g.id)
+      .sort((a, b) => rank(a) - rank(b) || time(a) - time(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     let counter = 0;
     const ul = h('ul', { class: 'mm-admin-forums' });
     for (const group of groups) {
@@ -635,7 +643,7 @@ function initForums(): void {
       li.append(h('p', { class: 'mm-admin-channels-title', id: headingId }, h('strong', { text: S('forums.channelsTitle', { title: group.title }) })));
       if (channels.length) {
         const sub = h('ul', { class: 'mm-admin-channels', 'aria-labelledby': headingId });
-        for (const ch of channels) sub.append(item(ch, counter++, group));
+        channels.forEach((ch, i) => sub.append(item(ch, counter++, group, { siblings: channels, index: i })));
         li.append(sub);
       } else {
         li.append(h('p', { class: 'mm-muted', text: S('forums.noChannels') }));
@@ -647,7 +655,27 @@ function initForums(): void {
   };
 
   /** One forum (group) or channel entry: title, address, bibliography, edit/archive. */
-  const item = (forum: Forum, n: number, group: Forum | null): HTMLLIElement => {
+  /** Moves a channel one place up or down: sends the group's full new order. */
+  const move = async (group: Forum, siblings: Forum[], index: number, delta: -1 | 1, button: HTMLButtonElement) => {
+    const ids = siblings.map((c) => c.id);
+    const j = index + delta;
+    if (j < 0 || j >= ids.length) return;
+    [ids[index], ids[j]] = [ids[j], ids[index]];
+    busy(button, true);
+    try {
+      await mmApi(`/api/mm/forums/${encodeURIComponent(group.id)}/channels`, { method: 'PUT', body: { order: ids } });
+      sec.ok(S('forums.orderSaved', { title: siblings[index].title }));
+      await reload();
+      const attr = delta < 0 ? 'data-move-up' : 'data-move-down';
+      const again = sec.list!.querySelector<HTMLButtonElement>(`[${attr}="${siblings[index].id}"]`);
+      focusLater(again && !again.disabled ? again : sec.list!.querySelector<HTMLElement>(`[data-edit="${siblings[index].id}"]`) ?? heading);
+    } catch (err) {
+      sec.err(errorMessage(err));
+      busy(button, false);
+    }
+  };
+
+  const item = (forum: Forum, n: number, group: Forum | null, place?: { siblings: Forum[]; index: number }): HTMLLIElement => {
     const li = h('li', { 'data-forum-id': forum.id });
     const title = h('p', { class: 'mm-admin-forum-title' }, h('strong', { text: forum.title }));
     if (forum.isArchived) title.append(' ', h('span', { class: 'mm-badge mm-badge-quiet', text: S('forums.archived') }));
@@ -691,6 +719,20 @@ function initForums(): void {
       text: S(forum.isArchived ? 'forums.restore' : 'forums.archive'),
     });
     const actions = h('div', { class: 'mm-form-actions' }, edit, archive);
+    if (group && place && place.siblings.length > 1) {
+      const up = h('button', {
+        type: 'button', class: 'mm-button mm-button-small mm-button-quiet', 'data-move-up': forum.id,
+        'aria-label': S('forums.moveUpLabel', { title: forum.title }), text: S('forums.moveUp'), disabled: place.index === 0,
+      });
+      const down = h('button', {
+        type: 'button', class: 'mm-button mm-button-small mm-button-quiet', 'data-move-down': forum.id,
+        'aria-label': S('forums.moveDownLabel', { title: forum.title }), text: S('forums.moveDown'),
+        disabled: place.index === place.siblings.length - 1,
+      });
+      up.addEventListener('click', () => void move(group, place.siblings, place.index, -1, up));
+      down.addEventListener('click', () => void move(group, place.siblings, place.index, 1, down));
+      actions.append(up, down);
+    }
     const slot = h('div', { id: editId });
 
     edit.addEventListener('click', () => {

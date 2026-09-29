@@ -209,3 +209,6 @@ h3 .mm-dot { margin-right: 0.45rem; }
 .mm-admin-channels > li > p { margin: 0; }
 .mm-admin-channels-title { font-size: 1rem; margin: 0.4rem 0 0; }
 .mm-card .mm-meta { overflow-wrap: anywhere; }
+/* Headings inside posts (incl. the citation plugin's "References" h1) stay modest, h3-like. */
+.mm-post-body :is(h1, h2, h3, h4, h5, h6) { font-size: 1.05rem; line-height: 1.3; margin: 1.1rem 0 0.4rem; letter-spacing: 0; }
+.mm-post-body :is(h1, h2) { font-size: 1.15rem; }

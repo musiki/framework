@@ -20,7 +20,12 @@ test('channels migration is one guarded, re-runnable transaction', () => {
 });
 
 test('channels migration: FK cascade, space boards only, sibling uniqueness, one level', () => {
-  assert.match(statements, /FOREIGN KEY \("parentId"\) REFERENCES "ForumBoard"\("id"\) ON DELETE CASCADE/);
+  assert.match(statements, /FOREIGN KEY \("parentId"\) REFERENCES "ForumBoard"\("id"\) ON DELETE NO ACTION/);
+  assert.doesNotMatch(statements, /ON DELETE CASCADE/);
+  // an existing CASCADE FK (staging ran the draft) is switched idempotently
+  assert.match(statements, /conname = 'ForumBoard_parentId_fkey' AND confdeltype <> 'a'\) THEN\s+ALTER TABLE "ForumBoard" DROP CONSTRAINT "ForumBoard_parentId_fkey"/);
+  assert.match(statements, /ADD COLUMN IF NOT EXISTS "position" integer NULL/);
+  assert.match(statements, /TG_OP = 'UPDATE' AND NEW\."spaceId" IS DISTINCT FROM OLD\."spaceId"/);
   assert.match(statements, /CHECK \("parentId" IS NULL OR \("courseId" IS NULL AND "spaceId" IS NOT NULL\)\)/);
   assert.match(statements, /ON "ForumBoard" \("spaceId", "slug"\) WHERE "spaceId" IS NOT NULL AND "parentId" IS NULL/);
   assert.match(statements, /ON "ForumBoard" \("parentId", "slug"\) WHERE "parentId" IS NOT NULL/);

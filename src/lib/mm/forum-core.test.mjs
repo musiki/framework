@@ -23,6 +23,8 @@ import {
   getForumRef,
   effectiveSettings,
   isReservedChannelSlug,
+  reorderChannels,
+  compareChannels,
 } from './forum-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -740,8 +742,9 @@ test('listForums: groups with nested channels; channels inherit the public bibli
   assert.equal(forums.length, 1);
   assert.equal(forums[0].slug, 'stiegler');
   assert.equal(forums[0].parent, null);
-  assert.deepEqual(forums[0].channels.map((c) => c.slug), ['technics-and-time', 'welcome']);
-  const [tt, welcome] = forums[0].channels;
+  // same creation time: ties broken by id (channel order, never alphabetical)
+  assert.deepEqual(forums[0].channels.map((c) => c.slug), ['welcome', 'technics-and-time']);
+  const [welcome, tt] = forums[0].channels;
   assert.deepEqual(tt.parent, { id: GROUP, slug: 'stiegler', title: 'Stiegler' });
   assert.deepEqual(tt.settings, { zoteroCollection: 'https://www.zotero.org/groups/1/c', hasBibliography: true });
   assert.equal(tt.overridesBibliography, false);
@@ -929,4 +932,43 @@ test('listForumsAdmin returns parentId so the admin can group channels', async (
   assert.deepEqual(rows.map((r) => r.parentId), [null, GROUP]);
   assert.deepEqual(rows[1].settings, {}, 'own settings only (the admin shows inheritance)');
   assert.match(calls.at(-1).text, /"parentId"/);
+});
+
+test('channel order: manual position first, then order of creation (not alphabetical)', async () => {
+  const rows = [
+    groupSummary(),
+    channelSummary(CH_WELCOME, 'welcome', 'Welcome', { position: null, createdAt: '2026-09-02' }),
+    channelSummary(CH_TT, 'technics-and-time', 'Technics and Time', { position: null, createdAt: '2026-09-03' }),
+    channelSummary(id(14), 'concepts', 'Concepts', { position: null, createdAt: '2026-09-04' }),
+  ];
+  const [g] = await listForums(fakeQuery([['FROM "ForumBoard" b', () => rows]]).q, { spaceId: SPACE });
+  assert.deepEqual(g.channels.map((c) => c.slug), ['welcome', 'technics-and-time', 'concepts'], 'creation order by default');
+  rows[3].position = 1;
+  rows[1].position = 2;
+  const [g2] = await listForums(fakeQuery([['FROM "ForumBoard" b', () => rows]]).q, { spaceId: SPACE });
+  assert.deepEqual(g2.channels.map((c) => c.slug), ['concepts', 'welcome', 'technics-and-time'], 'positioned first, then unpositioned by creation');
+  assert.equal(compareChannels({ id: 'a', position: 3 }, { id: 'b', position: null }), -1);
+});
+
+test('reorderChannels: curators set positions 1..n for every channel of the group, in one pinned statement', async () => {
+  const channelIds = [CH_WELCOME, CH_TT];
+  const db = () => fakeQuery([
+    memberRoute, boardRoute(BOARDS),
+    [/SELECT id FROM "ForumBoard" WHERE "parentId" = \$1::uuid AND "spaceId" = \$2::uuid/, () => channelIds.map((cid) => ({ id: cid }))],
+    ['UPDATE "ForumBoard" b SET position', ([order]) => order.map((cid, i) => ({ id: cid, slug: cid, title: cid, isArchived: false, settings: {}, parentId: GROUP, position: i + 1, createdAt: 't' }))],
+  ]);
+  const { q, calls } = db();
+  const out = await reorderChannels(q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.curator, order: [CH_TT, CH_WELCOME] });
+  assert.deepEqual(out.map((c) => [c.id, c.position]), [[CH_TT, 1], [CH_WELCOME, 2]]);
+  const up = calls.find((c) => c.text.startsWith('UPDATE "ForumBoard" b SET position'));
+  assert.match(up.text, /unnest\(\$1::uuid\[\]\) WITH ORDINALITY/);
+  assert.match(up.text, /b\."parentId" = \$2::uuid AND b\."spaceId" = \$3::uuid/);
+  assert.deepEqual(up.params, [[CH_TT, CH_WELCOME], GROUP, SPACE]);
+
+  await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.curator, order: [CH_TT] }), 409);
+  await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.curator, order: [CH_TT, CH_TT] }), 409);
+  await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.curator, order: [CH_TT, id(77)] }), 409);
+  await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.curator, order: 'x' }), 400);
+  await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: CH_WELCOME, actorUserId: U.curator, order: [] }), 400);
+  await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.member, order: channelIds }), 403);
 });

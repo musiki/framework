@@ -71,6 +71,7 @@ const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(l
           {hasChannels && (
             <section aria-labelledby="mm-channels" class="mm-channels">
               <h2 id="mm-channels">{t(lang, 'mm.forum.channelsTitle')}</h2>
+              <p class="mm-meta"><span>{t(lang, 'mm.forum.groupTotals', { threads: forum.threadCount, concepts: forum.conceptCount })}</span></p>
               <ul class="mm-list">
                 {channels.map((ch) => (
                   <li>
