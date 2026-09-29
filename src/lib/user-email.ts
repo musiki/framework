@@ -9,6 +9,9 @@
  */
 
 import { query } from './db/pool';
+import { repointMergedUserContent } from './mm/user-content.ts';
+
+export { MERGE_REPOINT_COLUMNS, MERGE_DEDUPE_COLUMNS } from './mm/user-content.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -115,14 +118,6 @@ export async function registerEmailForUser(
 
 // ── Merge ──────────────────────────────────────────────────────────────────────
 
-/** User-reference columns re-pointed wholesale from the merged user to the kept one. */
-export const MERGE_REPOINT_COLUMNS: ReadonlyArray<readonly [table: string, column: string]> = [
-  ['Concept', 'createdBy'],
-  ['ConceptVersion', 'editedBy'],
-  ['ConceptVersion', 'creditedUserId'],
-  ['ConceptRelation', 'createdBy'],
-];
-
 /**
  * Merge two User records into one.
  * - keepId: the user that survives
@@ -132,7 +127,8 @@ export const MERGE_REPOINT_COLUMNS: ReadonlyArray<readonly [table: string, colum
  * 1. Transfer all UserEmail rows from mergeId → keepId
  * 2. Reassign all Enrollment rows from mergeId → keepId (skip duplicates)
  * 3. Reassign all Submission rows from mergeId → keepId (skip duplicates)
- * 3b. Re-point mm concept user columns (MERGE_REPOINT_COLUMNS) mergeId → keepId
+ * 3b. Re-point mm concept + forum user columns (MERGE_REPOINT_COLUMNS; votes
+ *     via MERGE_DEDUPE_COLUMNS, skipping duplicates) mergeId → keepId
  * 4. Delete the mergeId User record
  */
 export async function mergeUsers(
@@ -214,16 +210,11 @@ export async function mergeUsers(
     }
   }
 
-  // 3b. Re-point mm concept authorship/credit (FKs are ON DELETE SET NULL, so without
-  //     this the merged user's credit would be lost when the user row is deleted).
-  for (const [table, column] of MERGE_REPOINT_COLUMNS) {
-    const { error } = await query(
-      `UPDATE "${table}" SET "${column}" = $1 WHERE "${column}" = $2`,
-      [keepId, mergeId]
-    );
-    // 42P01 undefined_table: mm migration not applied on this database — nothing to re-point.
-    if (error && (error as any).code !== '42P01') return { ok: false, error: error.message };
-  }
+  // 3b. Re-point mm concept authorship/credit and forum boards/threads/posts/votes.
+  //     Forum FKs are ON DELETE CASCADE: without this, deleting the merged user
+  //     row below would delete their threads and posts.
+  const repointed = await repointMergedUserContent(query as any, keepId, mergeId);
+  if (!repointed.ok) return { ok: false, error: repointed.error };
 
   // 4. Delete the merged user
   const { error: deleteError } = await query(`DELETE FROM "User" WHERE "id" = $1`, [mergeId]);

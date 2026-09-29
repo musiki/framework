@@ -3,6 +3,7 @@ import { resolveLiveManageAccess } from '../../../../lib/live/access';
 import { isElevatedGlobalRole, normalizeGlobalRole } from '../../../../lib/roles';
 import { resolveUserIdByEmail } from '../../../../lib/user-email';
 import { query } from '../../../../lib/db/pool';
+import { deleteBlockedMessage, findSpaceScopedContent } from '../../../../lib/mm/user-content';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -189,6 +190,13 @@ export const DELETE: APIRoute = async ({ params, locals, request }) => {
     if (!targetUser) return json({ error: 'User not found' }, 404);
 
     const targetRole = normalizeRole(targetUser.role);
+
+    // mm (space-scoped) forum and concept rows would be cascaded away or
+    // orphaned by a delete: refuse and point the admin to merge instead.
+    const spaceContent = await findSpaceScopedContent(query as any, targetUserId);
+    if (spaceContent.length) {
+      return json({ error: deleteBlockedMessage(spaceContent), spaceContent }, 409);
+    }
 
     if (isElevatedGlobalRole(targetRole)) {
       const { data: otherElevatedUsers, error: elevatedUsersError } = await query(
