@@ -157,7 +157,8 @@ export function forumSlug(explicit: unknown, title: string): string {
   if (explicit !== undefined && explicit !== null && explicit !== '') {
     if (typeof explicit !== 'string') throw new ForumError(400, 'invalid slug');
     const s = explicit.trim().toLowerCase();
-    if (!SLUG_RE.test(s) || s.length > FORUM_SLUG_MAX) throw new ForumError(400, 'invalid slug');
+    // A uuid-shaped slug would be read as a forum id by the API (getForumRef).
+    if (!SLUG_RE.test(s) || s.length > FORUM_SLUG_MAX || isUuid(s)) throw new ForumError(400, 'invalid slug');
     return s;
   }
   let s = slugify(title);
@@ -264,6 +265,31 @@ function parseSettings(raw: unknown): ForumSettings {
   return out;
 }
 
+/**
+ * A channel's effective settings: its own value per key when set, else its
+ * parent group's (spec: channels inherit the group's bibliography unless they
+ * override it). For a top-level forum `parent` is null and this is a no-op.
+ */
+export function effectiveSettings(own: unknown, parent: unknown): ForumSettings {
+  const o = parseSettings(own);
+  if (parent === null || parent === undefined) return o;
+  const p = parseSettings(parent);
+  const out: ForumSettings = {};
+  for (const k of SETTINGS_KEYS) {
+    const v = o[k] ?? p[k];
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
+/** Cache-key fragment for a forum's bibliography link (library id + owner). */
+export function bibliographyKey(settings: ForumSettings): string {
+  return `${settings.seshatLibraryId ?? ''}|${settings.ownerEmail ? normalizeEmail(settings.ownerEmail) : ''}`;
+}
+
+/** Reserved channel slug: /f/<group>/t/<thread> is a thread of the group itself. */
+export const RESERVED_CHANNEL_SLUGS = ['t'] as const;
+
 /** What anyone may see about a forum's bibliography: never the owner email or library id. */
 export function publicSettings(raw: unknown): { zoteroCollection: string | null; hasBibliography: boolean } {
   const s = parseSettings(raw);
@@ -277,65 +303,146 @@ export function publicSettings(raw: unknown): { zoteroCollection: string | null;
 // Forums
 // ---------------------------------------------------------------------------
 
+export type ForumRef = { id: string; slug: string; title: string };
+
 export type ForumSummary = {
   id: string;
   slug: string;
   title: string;
   description: string | null;
+  /** Parent group of a channel; null for a top-level forum ("group"). */
+  parent: ForumRef | null;
+  /** Public view of the EFFECTIVE settings (a channel inherits its group's). */
   settings: { zoteroCollection: string | null; hasBibliography: boolean };
+  /** Whether a channel overrides (part of) its group's bibliography. */
+  overridesBibliography: boolean;
+  /** Active threads of the forum and, for a group, of its active channels. */
   threadCount: number;
   conceptCount: number;
   lastActivityAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Active channels (groups only; always [] for a channel). */
+  channels: ForumSummary[];
 };
 
-const FORUM_SELECT = `SELECT b.id, b.slug, b.title, b.description, b.settings, b."createdAt", b."updatedAt",
+/** Board `b` and its active channels (the threads a board "contains"). */
+const SUBTREE = (thread: string) =>
+  `(${thread}."boardId" = b.id OR ${thread}."boardId" IN (
+     SELECT ch.id FROM "ForumBoard" ch WHERE ch."parentId" = b.id AND ch."isArchived" = false))`;
+
+const FORUM_SELECT = `SELECT b.id, b.slug, b.title, b.description, b.settings, b."parentId", b."createdAt", b."updatedAt",
+       pb.slug AS "parentSlug", pb.title AS "parentTitle", pb.settings AS "parentSettings",
        (SELECT count(*) FROM "ForumThread" t
-         WHERE t."boardId" = b.id AND t."spaceId" = b."spaceId" AND t."archivedAt" IS NULL)::int AS "threadCount",
-       (SELECT count(*) FROM "Concept" c WHERE c."forumId" = b.id AND c."spaceId" = b."spaceId")::int AS "conceptCount",
+         WHERE ${SUBTREE('t')} AND t."spaceId" = b."spaceId" AND t."archivedAt" IS NULL)::int AS "threadCount",
+       (SELECT count(*) FROM "Concept" c
+         WHERE c."spaceId" = b."spaceId" AND (c."forumId" = b.id OR EXISTS (
+           SELECT 1 FROM "ForumThread" ct WHERE ct.id = c."threadId" AND ct."boardId" = b.id)))::int AS "conceptCount",
        (SELECT max(p."createdAt") FROM "ForumPost" p JOIN "ForumThread" t ON t.id = p."threadId"
-         WHERE t."boardId" = b.id AND t."spaceId" = b."spaceId" AND p.status = 'published') AS "lastActivityAt"
-  FROM "ForumBoard" b`;
+         WHERE ${SUBTREE('t')} AND t."spaceId" = b."spaceId" AND p.status = 'published') AS "lastActivityAt"
+  FROM "ForumBoard" b
+  LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"`;
 
-const toForumSummary = (r: any): ForumSummary => ({
-  id: r.id,
-  slug: r.slug,
-  title: r.title,
-  description: r.description ?? null,
-  settings: publicSettings(r.settings),
-  threadCount: Number(r.threadCount ?? 0),
-  conceptCount: Number(r.conceptCount ?? 0),
-  lastActivityAt: r.lastActivityAt ?? null,
-  createdAt: r.createdAt,
-  updatedAt: r.updatedAt,
-});
+/** Active board: not archived, and (for a channel) its group not archived either. */
+const ACTIVE_BOARD = `b."isArchived" = false AND (pb.id IS NULL OR pb."isArchived" = false)`;
 
-/** Public: the space's active forums, alphabetical. */
+const toForumSummary = (r: any): ForumSummary => {
+  const parent = r.parentId ? { id: r.parentId, slug: r.parentSlug, title: r.parentTitle } : null;
+  const own = parseSettings(r.settings);
+  return {
+    id: r.id,
+    slug: r.slug,
+    title: r.title,
+    description: r.description ?? null,
+    parent,
+    settings: publicSettings(effectiveSettings(r.settings, parent ? r.parentSettings ?? {} : null)),
+    overridesBibliography: !!parent && !!(own.seshatLibraryId || own.ownerEmail || own.zoteroCollection),
+    threadCount: Number(r.threadCount ?? 0),
+    conceptCount: Number(r.conceptCount ?? 0),
+    lastActivityAt: r.lastActivityAt ?? null,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    channels: [],
+  };
+};
+
+/** Nests channel rows under their group rows (orphans — group not in the list — are dropped). */
+function nestForums(rows: any[]): ForumSummary[] {
+  const all = rows.map(toForumSummary);
+  const groups = all.filter((f) => !f.parent);
+  const byId = new Map(groups.map((g) => [g.id, g]));
+  for (const f of all) if (f.parent) byId.get(f.parent.id)?.channels.push(f);
+  return groups;
+}
+
+/** Public: the space's active groups (top-level forums), alphabetical, each with its active channels. */
 export async function listForums(q: QueryFn, { spaceId }: { spaceId: string }): Promise<ForumSummary[]> {
   if (typeof spaceId !== 'string' || !isUuid(spaceId)) return [];
   const rows = await run(
     q,
     `${FORUM_SELECT}
-     WHERE b."spaceId" = $1::uuid AND b."isArchived" = false
+     WHERE b."spaceId" = $1::uuid AND b."isArchived" = false AND (pb.id IS NULL OR pb."isArchived" = false)
      ORDER BY lower(b.title) ASC, b.id ASC`,
     [spaceId],
   );
-  return rows.map(toForumSummary);
+  return nestForums(rows);
 }
 
-/** Public: one active forum by slug, or null. */
+/** Public: one active group (top-level forum) by slug, with its active channels, or null. */
 export async function getForum(q: QueryFn, { spaceId, slug }: { spaceId: string; slug: string }): Promise<ForumSummary | null> {
-  if (typeof spaceId !== 'string' || !isUuid(spaceId) || typeof slug !== 'string' || !SLUG_RE.test(slug)) return null;
+  return (await getForumByPath(q, { spaceId, group: slug }))?.group ?? null;
+}
+
+/**
+ * Public: a group by slug and optionally one of its channels by slug (the
+ * path /f/<group>[/<channel>]). Null when the group is missing/archived, or
+ * when `channel` is given and is not an active channel OF THAT GROUP.
+ */
+export async function getForumByPath(
+  q: QueryFn,
+  { spaceId, group, channel = null }: { spaceId: string; group: string; channel?: string | null },
+): Promise<{ group: ForumSummary; channel: ForumSummary | null } | null> {
+  if (typeof spaceId !== 'string' || !isUuid(spaceId) || typeof group !== 'string' || !SLUG_RE.test(group)) return null;
+  if (channel !== null && (typeof channel !== 'string' || !SLUG_RE.test(channel) || isReservedChannelSlug(channel))) return null;
   const rows = await run(
     q,
     `${FORUM_SELECT}
-     WHERE b."spaceId" = $1::uuid AND b.slug = $2 AND b."isArchived" = false
-     LIMIT 1`,
-    [spaceId, slug],
+     WHERE b."spaceId" = $1::uuid AND ${ACTIVE_BOARD}
+       AND ((b."parentId" IS NULL AND b.slug = $2) OR (pb."parentId" IS NULL AND pb.slug = $2))
+     ORDER BY lower(b.title) ASC, b.id ASC`,
+    [spaceId, group],
   );
-  return rows[0] ? toForumSummary(rows[0]) : null;
+  const [g] = nestForums(rows);
+  if (!g || g.slug !== group) return null;
+  if (channel === null) return { group: g, channel: null };
+  const c = g.channels.find((ch) => ch.slug === channel);
+  return c ? { group: g, channel: c } : null;
 }
+
+/**
+ * Public: an active forum (group or channel) by API reference — a forum id
+ * (any level) or a group slug. Channels have no space-unique slug, so the
+ * API addresses them by id. Groups come with their channels.
+ */
+export async function getForumRef(q: QueryFn, { spaceId, ref }: { spaceId: string; ref: unknown }): Promise<ForumSummary | null> {
+  if (typeof ref !== 'string' || !ref) return null;
+  if (!isUuid(ref)) return getForum(q, { spaceId, slug: ref });
+  if (typeof spaceId !== 'string' || !isUuid(spaceId)) return null;
+  const rows = await run(
+    q,
+    `${FORUM_SELECT}
+     WHERE b."spaceId" = $1::uuid AND ${ACTIVE_BOARD}
+       AND (b.id = $2::uuid OR b."parentId" = $2::uuid)
+     ORDER BY lower(b.title) ASC, b.id ASC`,
+    [spaceId, ref],
+  );
+  const own = rows.find((r: any) => r.id === ref);
+  if (!own) return null;
+  if (own.parentId) return toForumSummary(own);
+  return nestForums(rows)[0] ?? null;
+}
+
+export const isReservedChannelSlug = (slug: string) => (RESERVED_CHANNEL_SLUGS as readonly string[]).includes(slug);
 
 export type ForumAdminView = {
   id: string;
@@ -343,8 +450,13 @@ export type ForumAdminView = {
   title: string;
   description: string | null;
   isArchived: boolean;
+  /** Group of a channel; null for a top-level forum. */
+  parentId: string | null;
+  /** The forum's OWN settings (a channel's empty keys inherit the group's). */
   settings: ForumSettings;
 };
+
+const ADMIN_COLUMNS = `id, slug, title, description, "isArchived", settings, "parentId"`;
 
 const toAdminView = (r: any): ForumAdminView => ({
   id: r.id,
@@ -352,19 +464,26 @@ const toAdminView = (r: any): ForumAdminView => ({
   title: r.title,
   description: r.description ?? null,
   isArchived: !!r.isArchived,
+  parentId: r.parentId ?? null,
   settings: parseSettings(r.settings),
 });
 
+/**
+ * A forum of the space by id, with its group's archive flag and settings.
+ * A channel of an archived group counts as archived.
+ */
 async function loadSpaceForum(q: QueryFn, spaceId: string, forumId: unknown, opts: { includeArchived?: boolean } = {}) {
   const id = requireUuid(forumId, 'forum');
   const rows = await run(
     q,
-    `SELECT id, slug, title, description, "isArchived", settings FROM "ForumBoard"
-     WHERE id = $1::uuid AND "spaceId" = $2::uuid LIMIT 1`,
+    `SELECT b.id, b.slug, b.title, b.description, b."isArchived", b.settings, b."parentId",
+            pb."isArchived" AS "parentArchived", pb.settings AS "parentSettings"
+     FROM "ForumBoard" b LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"
+     WHERE b.id = $1::uuid AND b."spaceId" = $2::uuid LIMIT 1`,
     [id, spaceId],
   );
   const f = rows[0];
-  if (!f || (!opts.includeArchived && f.isArchived)) throw new ForumError(404, 'forum not found');
+  if (!f || (!opts.includeArchived && (f.isArchived || f.parentArchived))) throw new ForumError(404, 'forum not found');
   return f;
 }
 
@@ -377,16 +496,33 @@ export async function listForumsAdmin(
   await authorize(q, sid, actorUserId, 'manageForums');
   const rows = await run(
     q,
-    `SELECT id, slug, title, description, "isArchived", settings FROM "ForumBoard"
+    `SELECT ${ADMIN_COLUMNS} FROM "ForumBoard"
      WHERE "spaceId" = $1::uuid ORDER BY "isArchived" ASC, lower(title) ASC, id ASC`,
     [sid],
   );
   return rows.map(toAdminView);
 }
 
+/**
+ * Curators/admins: a top-level forum ("group"), or — with `parentId` — a
+ * channel of a group. One level only: the parent must be an active top-level
+ * forum of the space. Slugs are unique among siblings (groups per space,
+ * channels per group); the channel slug "t" is reserved. A channel's
+ * bibliography override is checked against the settings it would otherwise
+ * inherit (a curator cannot pair a library id with a group owner that is not
+ * theirs).
+ */
 export async function createForum(
   q: QueryFn,
-  input: { spaceId: string; actorUserId: string | null; title: unknown; slug?: unknown; description?: unknown; settings?: unknown },
+  input: {
+    spaceId: string;
+    actorUserId: string | null;
+    title: unknown;
+    slug?: unknown;
+    description?: unknown;
+    settings?: unknown;
+    parentId?: unknown;
+  },
 ): Promise<ForumAdminView> {
   const spaceId = requireUuid(input.spaceId, 'space');
   const role = await authorize(q, spaceId, input.actorUserId, 'manageForums');
@@ -394,28 +530,37 @@ export async function createForum(
   const slug = forumSlug(input.slug, title);
   const description = cleanDescription(input.description);
   const patch = cleanSettingsPatch(input.settings);
-  await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, {});
+
+  let parent: any = null;
+  if (input.parentId !== undefined && input.parentId !== null && input.parentId !== '') {
+    if (typeof input.parentId !== 'string' || !isUuid(input.parentId)) throw new ForumError(400, 'invalid parent forum');
+    parent = await loadSpaceForum(q, spaceId, input.parentId);
+    if (parent.parentId) throw new ForumError(400, 'channels cannot have channels');
+    if (isReservedChannelSlug(slug)) throw new ForumError(400, `the channel slug "${slug}" is reserved`);
+  }
+  await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, parent ? parseSettings(parent.settings) : {});
   const settings: ForumSettings = {};
   for (const [k, v] of Object.entries(patch)) if (v) settings[k as ForumSettingsKey] = v;
 
   const taken = await run(
     q,
-    `SELECT id FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND slug = $2 LIMIT 1`,
-    [spaceId, slug],
+    `SELECT id FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND slug = $2 AND "parentId" IS NOT DISTINCT FROM $3::uuid LIMIT 1`,
+    [spaceId, slug, parent?.id ?? null],
   );
-  if (taken.length) throw new ForumError(409, 'a forum with this slug already exists');
+  if (taken.length) throw new ForumError(409, parent ? 'a channel with this slug already exists in this forum' : 'a forum with this slug already exists');
   try {
     const rows = await run(
       q,
-      `INSERT INTO "ForumBoard" ("spaceId", slug, title, description, "createdByUserId", settings)
-       VALUES ($1::uuid, $2, $3, $4, $5::uuid, $6::jsonb)
-       RETURNING id, slug, title, description, "isArchived", settings`,
-      [spaceId, slug, title, description, input.actorUserId, JSON.stringify(settings)],
+      `INSERT INTO "ForumBoard" ("spaceId", slug, title, description, "createdByUserId", settings, "parentId")
+       VALUES ($1::uuid, $2, $3, $4, $5::uuid, $6::jsonb, $7::uuid)
+       RETURNING ${ADMIN_COLUMNS}`,
+      [spaceId, slug, title, description, input.actorUserId, JSON.stringify(settings), parent?.id ?? null],
     );
     if (!rows.length) throw new ForumError(500, 'forum insert returned nothing');
     return toAdminView(rows[0]);
   } catch (err) {
     if (isUniqueViolation(err)) throw new ForumError(409, 'a forum with this slug already exists');
+    if ((err as { code?: unknown })?.code === '23514') throw new ForumError(400, 'invalid channel');
     throw err;
   }
 }
@@ -454,7 +599,9 @@ export async function updateForum(
   }
   if (input.settings !== undefined) {
     const patch = cleanSettingsPatch(input.settings);
-    await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, parseSettings(forum.settings));
+    // A channel is checked against its effective settings (own over the group's).
+    const current = effectiveSettings(forum.settings, forum.parentId ? forum.parentSettings ?? {} : null);
+    await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, current);
     if (Object.keys(patch).length) {
       // Merge: set keys overwrite, null keys are removed (settings values are flat strings).
       push((n) => `settings = jsonb_strip_nulls(COALESCE(settings, '{}'::jsonb) || ${n}::jsonb)`, JSON.stringify(patch));
@@ -467,7 +614,7 @@ export async function updateForum(
     q,
     `UPDATE "ForumBoard" SET ${sets.join(', ')}, "updatedAt" = now()
      WHERE id = $${params.length - 1}::uuid AND "spaceId" = $${params.length}::uuid
-     RETURNING id, slug, title, description, "isArchived", settings`,
+     RETURNING ${ADMIN_COLUMNS}`,
     params,
   );
   if (!rows.length) throw new ForumError(404, 'forum not found');
@@ -604,7 +751,8 @@ export type ThreadView = {
     isPinned: boolean;
     isLocked: boolean;
     createdBy: UserRef;
-    forum: { id: string; slug: string; title: string } | null;
+    /** The thread's board (a group or a channel) and, for a channel, its group. */
+    forum: (ForumRef & { parent: ForumRef | null }) | null;
     concept: { slug: string; label: string } | null;
     createdAt: string;
     updatedAt: string;
@@ -649,12 +797,15 @@ export async function listPosts(
     q,
     `SELECT t.id, t.title, t."isPinned", t."isLocked", t."createdAt", t."updatedAt", t."archivedAt",
             t."createdByUserId", u.name AS "createdByName",
-            b.id AS "forumId", b.slug AS "forumSlug", b.title AS "forumTitle", b."isArchived" AS "forumArchived",
+            b.id AS "forumId", b.slug AS "forumSlug", b.title AS "forumTitle",
+            (b."isArchived" OR COALESCE(pb."isArchived", false)) AS "forumArchived",
             b.settings AS "forumSettings",
+            pb.id AS "parentId", pb.slug AS "parentSlug", pb.title AS "parentTitle", pb.settings AS "parentSettings",
             c.slug AS "conceptSlug", c.label AS "conceptLabel"
      FROM "ForumThread" t
      LEFT JOIN "User" u ON u.id = t."createdByUserId"
      LEFT JOIN "ForumBoard" b ON b.id = t."boardId" AND b."spaceId" = t."spaceId"
+     LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"
      LEFT JOIN LATERAL (
        SELECT c.slug, c.label FROM "Concept" c
        WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId"
@@ -669,8 +820,9 @@ export async function listPosts(
 
   const role = await viewerRole(q, spaceId, viewerUserId);
   const canModerate = can(role, 'moderate');
-  const bib = parseSettings(t.forumSettings);
-  const forumBibliography = `${bib.seshatLibraryId ?? ''}|${bib.ownerEmail ? normalizeEmail(bib.ownerEmail) : ''}`;
+  // Channels inherit their group's bibliography (key per key); the renderer
+  // resolves citations by the board id, the cache key carries the effective link.
+  const forumBibliography = bibliographyKey(effectiveSettings(t.forumSettings, t.parentId ? t.parentSettings ?? {} : null));
 
   const rows = await run(
     q,
@@ -738,7 +890,12 @@ export async function listPosts(
       isPinned: !!t.isPinned,
       isLocked: !!t.isLocked,
       createdBy: userRef(t.createdByUserId, t.createdByName),
-      forum: t.forumId ? { id: t.forumId, slug: t.forumSlug, title: t.forumTitle } : null,
+      forum: t.forumId
+        ? {
+            id: t.forumId, slug: t.forumSlug, title: t.forumTitle,
+            parent: t.parentId ? { id: t.parentId, slug: t.parentSlug, title: t.parentTitle } : null,
+          }
+        : null,
       concept: t.conceptSlug ? { slug: t.conceptSlug, label: t.conceptLabel } : null,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
@@ -759,8 +916,8 @@ async function loadSpaceThread(q: QueryFn, spaceId: string, threadId: unknown) {
   const id = requireUuid(threadId, 'thread');
   const rows = await run(
     q,
-    `SELECT t.id, t."isLocked", t."archivedAt", b."isArchived" AS "forumArchived"
-     FROM "ForumThread" t LEFT JOIN "ForumBoard" b ON b.id = t."boardId"
+    `SELECT t.id, t."isLocked", t."archivedAt", (b."isArchived" OR COALESCE(pb."isArchived", false)) AS "forumArchived"
+     FROM "ForumThread" t LEFT JOIN "ForumBoard" b ON b.id = t."boardId" LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"
      WHERE t.id = $1::uuid AND t."spaceId" = $2::uuid LIMIT 1`,
     [id, spaceId],
   );
@@ -774,9 +931,10 @@ async function loadSpacePost(q: QueryFn, spaceId: string, postId: unknown) {
   const id = requireUuid(postId, 'post');
   const rows = await run(
     q,
-    `SELECT p.id, p."threadId", p.status, t."archivedAt" AS "threadArchived", b."isArchived" AS "forumArchived"
+    `SELECT p.id, p."threadId", p.status, t."archivedAt" AS "threadArchived",
+            (b."isArchived" OR COALESCE(pb."isArchived", false)) AS "forumArchived"
      FROM "ForumPost" p JOIN "ForumThread" t ON t.id = p."threadId"
-     LEFT JOIN "ForumBoard" b ON b.id = t."boardId"
+     LEFT JOIN "ForumBoard" b ON b.id = t."boardId" LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"
      WHERE p.id = $1::uuid AND t."spaceId" = $2::uuid
      LIMIT 1`,
     [id, spaceId],
@@ -789,8 +947,9 @@ async function loadSpacePost(q: QueryFn, spaceId: string, postId: unknown) {
 const OPEN_PUBLISHED_POST = (postParam: string, spaceParam: string) =>
   `EXISTS (SELECT 1 FROM "ForumPost" op JOIN "ForumThread" ot ON ot.id = op."threadId"
             LEFT JOIN "ForumBoard" ob ON ob.id = ot."boardId"
+            LEFT JOIN "ForumBoard" opb ON opb.id = ob."parentId"
             WHERE op.id = ${postParam}::uuid AND op.status = 'published' AND ot."spaceId" = ${spaceParam}::uuid
-              AND ot."archivedAt" IS NULL AND ob."isArchived" IS NOT TRUE)`;
+              AND ot."archivedAt" IS NULL AND ob."isArchived" IS NOT TRUE AND opb."isArchived" IS NOT TRUE)`;
 
 /**
  * Members+: a post (optionally a reply, optionally with a move) in a thread of

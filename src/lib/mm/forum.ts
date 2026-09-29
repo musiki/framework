@@ -14,10 +14,10 @@ import type { MmLang } from './ui-lang.ts';
 import * as core from './forum-core.ts';
 import type { QueryFn } from './forum-core.ts';
 
-export { ForumError, POST_MOVES, MODERATION_ACTIONS, VOTE_VALUES, publicSettings } from './forum-core.ts';
+export { ForumError, POST_MOVES, MODERATION_ACTIONS, VOTE_VALUES, publicSettings, isReservedChannelSlug } from './forum-core.ts';
 export type {
   ForumSummary, ForumAdminView, ForumSettings, ThreadSummary, ThreadView, PostView, PostMove, VoteCounts,
-  ModerationAction,
+  ModerationAction, ForumRef,
 } from './forum-core.ts';
 
 const poolQ: QueryFn = (text, params) => query(text, params as any[]);
@@ -40,6 +40,9 @@ export const renderMmPost: core.Render = mmRenderCache.render;
 
 export const listForums = (args: Parameters<typeof core.listForums>[1]) => core.listForums(poolQ, args);
 export const getForum = (args: Parameters<typeof core.getForum>[1]) => core.getForum(poolQ, args);
+export const getForumByPath = (args: Parameters<typeof core.getForumByPath>[1]) => core.getForumByPath(poolQ, args);
+/** A forum by API reference: group slug or forum id (channels are addressed by id). */
+export const getForumRef = (args: Parameters<typeof core.getForumRef>[1]) => core.getForumRef(poolQ, args);
 export const authorizeOwnerLibraries = (args: Parameters<typeof core.authorizeOwnerLibraries>[1]) =>
   core.authorizeOwnerLibraries(poolQ, args);
 export const listForumsAdmin = (args: Parameters<typeof core.listForumsAdmin>[1]) => core.listForumsAdmin(poolQ, args);

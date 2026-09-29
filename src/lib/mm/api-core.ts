@@ -219,10 +219,33 @@ export async function loadMmSpace(q: QueryFn): Promise<MmSpace | null> {
   return { id: r.id, settings };
 }
 
-/** Forum id by slug in the space, archived included (for curator updates). */
-export async function findForumId(q: QueryFn, spaceId: string, slug: unknown): Promise<string> {
-  if (typeof slug !== 'string' || !slug) throw new MmApiError(404, 'forum not found');
-  const r = (await rows(q, `SELECT id FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND slug = $2 LIMIT 1`, [spaceId, slug]))[0];
+/**
+ * Forum id by API reference in the space, archived included (for curator
+ * updates): a forum id (any level — channels are addressed by id), a group
+ * slug (top-level forums only), or `<group>/<channel>` slugs.
+ */
+export async function findForumId(q: QueryFn, spaceId: string, ref: unknown): Promise<string> {
+  if (typeof ref !== 'string' || !ref || ref.length > 200) throw new MmApiError(404, 'forum not found');
+  let r: any;
+  if (isUuid(ref)) {
+    r = (await rows(q, `SELECT id FROM "ForumBoard" WHERE id = $1::uuid AND "spaceId" = $2::uuid LIMIT 1`, [ref, spaceId]))[0];
+  } else if (ref.includes('/')) {
+    const [group, channel, ...rest] = ref.split('/');
+    if (!group || !channel || rest.length) throw new MmApiError(404, 'forum not found');
+    r = (await rows(
+      q,
+      `SELECT b.id FROM "ForumBoard" b JOIN "ForumBoard" pb ON pb.id = b."parentId"
+       WHERE b."spaceId" = $1::uuid AND pb."spaceId" = $1::uuid AND pb."parentId" IS NULL AND pb.slug = $2 AND b.slug = $3
+       LIMIT 1`,
+      [spaceId, group, channel],
+    ))[0];
+  } else {
+    r = (await rows(
+      q,
+      `SELECT id FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND slug = $2 AND "parentId" IS NULL LIMIT 1`,
+      [spaceId, ref],
+    ))[0];
+  }
   if (!r) throw new MmApiError(404, 'forum not found');
   return r.id;
 }

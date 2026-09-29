@@ -24,6 +24,7 @@ const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const SPACE = id(1);
 const OTHER_SPACE = id(2);
 const FORUM = id(10);
+const CHANNEL = id(11);
 const C1 = id(20);
 const C2 = id(21);
 const C3 = id(22);
@@ -117,7 +118,8 @@ test('cleanSources keeps known string fields only', () => {
 function createFixture({ taken = [], failOn = null } = {}) {
   return fakeQuery([
     memberRoute,
-    ['FROM "ForumBoard" WHERE id', ([fid, sid]) => (fid === FORUM && sid === SPACE ? [{ id: FORUM }] : [])],
+    [/FROM "ForumBoard" b LEFT JOIN "ForumBoard" pb[\s\S]*WHERE b\.id = \$1::uuid AND b\."spaceId" = \$2::uuid/, ([fid, sid]) =>
+      sid !== SPACE ? [] : fid === FORUM ? [{ id: FORUM, parentId: null }] : fid === CHANNEL ? [{ id: CHANNEL, parentId: FORUM }] : []],
     ['SELECT slug FROM "Concept"', () => taken.map((slug) => ({ slug }))],
     ['INSERT INTO "ForumThread"', () => (failOn === 'thread' ? { error: new Error('boom') } : [{ id: THREAD }])],
     [/INSERT INTO "Concept" \(/, () => (failOn === 'concept' ? { error: { message: 'dup', code: '23505' } } : [{ id: C1 }])],
@@ -150,6 +152,17 @@ test('createConcept: member proposes → thread in forum (space+board), concept,
   assert.ok(texts.indexOf('BEGIN') < texts.findIndex((t) => t.includes('INSERT INTO "ForumThread"')));
   assert.equal(texts.at(-1), 'COMMIT');
   assert.ok(texts.some((t) => t.includes('pg_advisory_xact_lock')));
+});
+
+test('createConcept from a channel: thread in the channel, concept belongs to the group', async () => {
+  const fx = createFixture();
+  await createConcept(fx.q, { spaceId: SPACE, forumId: CHANNEL, actorUserId: U.member, label: 'Epiphylogenesis', definition: 'D' });
+  const lookup = fx.calls.find((c) => c.text.includes('FROM "ForumBoard" b'));
+  assert.match(lookup.text, /pb\."isArchived" IS NOT TRUE/, 'a channel of an archived group is closed');
+  const thread = fx.calls.find((c) => c.text.includes('INSERT INTO "ForumThread"'));
+  assert.equal(thread.params[1], CHANNEL);
+  const concept = fx.calls.find((c) => c.text.includes('INSERT INTO "Concept"'));
+  assert.equal(concept.params[1], FORUM);
 });
 
 test('createConcept: optional hand-written nb definition becomes nb v1', async () => {
@@ -238,6 +251,24 @@ test('getConcept: current per lang, history, both relation directions, forum, th
   assert.deepEqual(c.relations[1].createdBy, { name: null, deleted: true });
   const json = JSON.stringify(c);
   assert.ok(!json.includes(U.poster) && !json.includes(U.curator), 'no user ids in the view');
+});
+
+test('getConcept: origin points at the discussion thread\'s channel (concept belongs to the group)', async () => {
+  const fx = fakeQuery([
+    ['WHERE c."spaceId" = $1::uuid AND c.slug = $2', () => [{
+      ...conceptRow(), createdAt: 't0', updatedAt: 't3', forumId: FORUM, forumSlug: 'stiegler', forumTitle: 'Stiegler',
+      threadBoardSlug: 'technics-and-time', threadBoardTitle: 'Technics and Time', threadGroupSlug: 'stiegler',
+    }]],
+  ]);
+  const c = await getConcept(fx.q, { spaceId: SPACE, slug: 'pharmakon' });
+  assert.deepEqual(c.forum, { id: FORUM, slug: 'stiegler', title: 'Stiegler' });
+  assert.deepEqual(c.origin, { groupSlug: 'stiegler', channel: { slug: 'technics-and-time', title: 'Technics and Time' } });
+  assert.match(fx.calls[0].text, /LEFT JOIN "ForumThread" ct ON ct\.id = c\."threadId" AND ct\."spaceId" = c\."spaceId"/);
+
+  const group = fakeQuery([['WHERE c."spaceId" = $1::uuid AND c.slug = $2', () => [{
+    ...conceptRow(), forumId: FORUM, forumSlug: 'stiegler', forumTitle: 'Stiegler', threadBoardSlug: 'stiegler', threadGroupSlug: null,
+  }]]]);
+  assert.deepEqual((await getConcept(group.q, { spaceId: SPACE, slug: 'pharmakon' })).origin, { groupSlug: 'stiegler', channel: null });
 });
 
 test('getConcept: unknown slug or bad space → null', async () => {
@@ -452,6 +483,9 @@ test('listConcepts: passes filters and maps rows', async () => {
   assert.deepEqual(out[0].langs, ['en', 'nb']);
   assert.deepEqual(out[0].forum, { id: FORUM, slug: 'stiegler', title: 'Stiegler' });
   assert.equal(out[1].forum, null);
+  // A group filter includes its channels' concepts (they are stored with the group id);
+  // a channel filter matches concepts whose discussion thread is in the channel.
+  assert.match(fx.calls[0].text, /c\."forumId" = \$2::uuid OR EXISTS \(\s+SELECT 1 FROM "ForumThread" ct WHERE ct\.id = c\."threadId" AND ct\."boardId" = \$2::uuid\)/);
   await rejectsStatus(listConcepts(fx.q, { spaceId: SPACE, status: 'bogus' }), 400);
   assert.deepEqual(await listConcepts(fx.q, { spaceId: 'nope' }), []);
 });

@@ -278,6 +278,8 @@ async function insertVersion(
 /**
  * Proposes a concept in `forumId` (a forum of `spaceId`): unique slug, the
  * concept's discussion thread (ForumThread with spaceId + boardId, no course),
+ * Concepts belong to the GROUP: when `forumId` is a channel, the discussion
+ * thread lives in the channel but Concept.forumId is the channel's group.
  * and v1 in English credited to the author. An optional hand-written Bokmål
  * definition becomes the nb v1. One transaction; `q` must be one client.
  */
@@ -309,10 +311,12 @@ export async function createConcept(
 
   const forum = await run(
     q,
-    `SELECT id FROM "ForumBoard" WHERE id = $1::uuid AND "spaceId" = $2::uuid AND "isArchived" = false LIMIT 1`,
+    `SELECT b.id, b."parentId" FROM "ForumBoard" b LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"
+     WHERE b.id = $1::uuid AND b."spaceId" = $2::uuid AND b."isArchived" = false AND pb."isArchived" IS NOT TRUE LIMIT 1`,
     [forumId, spaceId],
   );
   if (!forum.length) throw new ConceptError(404, 'forum not found');
+  const groupId: string = forum[0].parentId ?? forumId;
 
   const base = conceptBaseSlug(label);
 
@@ -340,7 +344,7 @@ export async function createConcept(
         q,
         `INSERT INTO "Concept" ("spaceId", "forumId", slug, label, "labelNb", "threadId", "createdBy")
          VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, $7::uuid) RETURNING id`,
-        [spaceId, forumId, slug, label, labelNb, threadId, actor],
+        [spaceId, groupId, slug, label, labelNb, threadId, actor],
       );
       const id = concept[0]?.id;
       if (!id) throw new ConceptError(500, 'concept insert returned nothing');
@@ -394,7 +398,14 @@ export type ConceptView = {
   labelNb: string | null;
   status: ConceptStatus;
   threadId: string | null;
+  /** The group the concept belongs to. */
   forum: { id: string; slug: string; title: string } | null;
+  /**
+   * Where its discussion thread lives: the thread's group slug and, when the
+   * thread is in a channel, the channel (for /f/<group>/<channel>/t/<id>).
+   * Null when there is no thread (or it lost its board).
+   */
+  origin: { groupSlug: string; channel: { slug: string; title: string } | null } | null;
   createdBy: UserRef;
   createdAt: string;
   updatedAt: string;
@@ -437,10 +448,14 @@ export async function getConcept(
     q,
     `SELECT c.id, c."spaceId", c.slug, c.label, c."labelNb", c.status, c."threadId", c."createdBy",
             c."createdAt", c."updatedAt", u.name AS "createdByName",
-            f.id AS "forumId", f.slug AS "forumSlug", f.title AS "forumTitle"
+            f.id AS "forumId", f.slug AS "forumSlug", f.title AS "forumTitle",
+            tb.slug AS "threadBoardSlug", tb.title AS "threadBoardTitle", tpb.slug AS "threadGroupSlug"
      FROM "Concept" c
      LEFT JOIN "User" u ON u.id = c."createdBy"
      LEFT JOIN "ForumBoard" f ON f.id = c."forumId"
+     LEFT JOIN "ForumThread" ct ON ct.id = c."threadId" AND ct."spaceId" = c."spaceId"
+     LEFT JOIN "ForumBoard" tb ON tb.id = ct."boardId"
+     LEFT JOIN "ForumBoard" tpb ON tpb.id = tb."parentId"
      WHERE c."spaceId" = $1::uuid AND c.slug = $2
      LIMIT 1`,
     [spaceId, slug],
@@ -499,6 +514,11 @@ export async function getConcept(
     status: c.status,
     threadId: c.threadId ?? null,
     forum: c.forumId ? { id: c.forumId, slug: c.forumSlug, title: c.forumTitle } : null,
+    origin: !c.threadId || !c.threadBoardSlug
+      ? null
+      : c.threadGroupSlug
+        ? { groupSlug: c.threadGroupSlug, channel: { slug: c.threadBoardSlug, title: c.threadBoardTitle } }
+        : { groupSlug: c.threadBoardSlug, channel: null },
     createdBy: userRef(c.createdBy, c.createdByName),
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
@@ -727,7 +747,8 @@ export async function listConcepts(
      FROM "Concept" c
      LEFT JOIN "ForumBoard" f ON f.id = c."forumId"
      WHERE c."spaceId" = $1::uuid
-       AND ($2::uuid IS NULL OR c."forumId" = $2::uuid)
+       AND ($2::uuid IS NULL OR c."forumId" = $2::uuid OR EXISTS (
+         SELECT 1 FROM "ForumThread" ct WHERE ct.id = c."threadId" AND ct."boardId" = $2::uuid))
        AND ($3::text IS NULL OR c.status = $3)
      ORDER BY lower(c.label) ASC, c.id ASC`,
     [spaceId, forumId || null, status || null],

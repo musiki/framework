@@ -144,3 +144,33 @@ test('listOwnerLibraries: missing route/token -> unavailable, failures -> 502, b
   await assert.rejects(listOwnerLibraries('o@x.org', '', { env, fetch: never }), { status: 502 });
   await assert.rejects(listOwnerLibraries('nope', '', { env, fetch: never }), { status: 400 });
 });
+
+test('channels inherit the group bibliography key by key (by id and by ref)', async () => {
+  const { loadForumBibliographyById } = await import('./bibliography.ts');
+  const ch = '22222222-2222-4222-8222-222222222222';
+  const sql = [];
+  const q = async (text, params) => {
+    sql.push(text);
+    return {
+      data: [{
+        id: ch,
+        settings: { seshatLibraryId: 'CH-LIB' },
+        parentSettings: { seshatLibraryId: 'G-LIB', ownerEmail: 'G@X.org', zoteroCollection: 'Z' },
+      }],
+      error: null,
+    };
+  };
+  const byId = await loadForumBibliographyById(q, ch);
+  assert.deepEqual(byId, { forumId: ch, seshatLibraryId: 'CH-LIB', zoteroCollection: 'Z', ownerEmail: 'g@x.org' });
+  assert.match(sql[0], /LEFT JOIN "ForumBoard" pb ON pb\."id" = b\."parentId"/);
+  const byRef = await loadForumBibliography(q, ch);
+  assert.deepEqual(byRef, byId);
+  assert.match(sql[1], /b\."id" = \$1::uuid/);
+  assert.match(sql[1], /pb\."isArchived" IS NOT TRUE/);
+  // a slug reference only ever names a top-level forum (group)
+  await loadForumBibliography(q, 'stiegler');
+  assert.match(sql[2], /b\."slug" = \$1 AND b\."parentId" IS NULL/);
+  // a group with no parent: own settings only
+  const g = await loadForumBibliographyById(async () => ({ data: [{ id: ch, settings: { zoteroCollection: 'Z2' }, parentSettings: null }], error: null }), ch);
+  assert.deepEqual(g, { forumId: ch, seshatLibraryId: null, zoteroCollection: 'Z2', ownerEmail: null });
+});

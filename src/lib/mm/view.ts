@@ -78,9 +78,47 @@ export function formatDate(iso: string | null | undefined, readerLang: ViewLang)
   }).format(d);
 }
 
-export const forumPath = (slug: string) => `/f/${encodeURIComponent(slug)}`;
-export const threadPath = (forumSlug: string, threadId: string) =>
-  `${forumPath(forumSlug)}/t/${encodeURIComponent(threadId)}`;
+/** /f/<group> or, with a channel, /f/<group>/<channel>. */
+export const forumPath = (slug: string, channel?: string | null) =>
+  `/f/${encodeURIComponent(slug)}${channel ? `/${encodeURIComponent(channel)}` : ''}`;
+/** /f/<group>/t/<id> (group-level thread) or /f/<group>/<channel>/t/<id>. */
+export const threadPath = (forumSlug: string, threadId: string, channel?: string | null) =>
+  `${forumPath(forumSlug, channel)}/t/${encodeURIComponent(threadId)}`;
+
+/** A board as the cores return it: a group (parent null) or a channel (parent = its group). */
+export type BoardRef = { slug: string; title?: string; parent?: { slug: string; title?: string } | null };
+
+/** Public path of a board (group or channel). */
+export const boardPath = (b: BoardRef) => (b.parent ? forumPath(b.parent.slug, b.slug) : forumPath(b.slug));
+/** Public path of a thread in board `b`. */
+export const boardThreadPath = (b: BoardRef, threadId: string) =>
+  b.parent ? threadPath(b.parent.slug, threadId, b.slug) : threadPath(b.slug, threadId);
+
+/**
+ * Whether the URL segments (/f/<group>[/<channel>]) name board `b`. A
+ * group-level URL only matches a group, a channel URL only that channel of
+ * that group; anything else is a 404 on the page.
+ */
+export function boardMatchesPath(b: BoardRef | null | undefined, group: string, channel: string | null = null): boolean {
+  if (!b) return false;
+  if (channel === null) return !b.parent && b.slug === group;
+  return !!b.parent && b.parent.slug === group && b.slug === channel;
+}
+
+export type Crumb = { label: string; href: string | null };
+
+/**
+ * Breadcrumbs group › channel › (current page): every ancestor is a link;
+ * the last crumb is the current page (href null, rendered with
+ * aria-current="page").
+ */
+export function forumCrumbs(b: BoardRef & { title: string }, current: string | null = null): Crumb[] {
+  const crumbs: Crumb[] = [];
+  if (b.parent) crumbs.push({ label: b.parent.title ?? b.parent.slug, href: forumPath(b.parent.slug) });
+  crumbs.push({ label: b.title, href: current === null ? null : boardPath(b) });
+  if (current !== null) crumbs.push({ label: current, href: null });
+  return crumbs;
+}
 export const conceptPath = (slug: string) => `/c/${encodeURIComponent(slug)}`;
 
 /**

@@ -50,41 +50,70 @@ const str = (v: unknown): string | null => {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const settingsObject = (raw: unknown): Record<string, unknown> => {
+  let v: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      v = null;
+    }
+  }
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+};
+
+/**
+ * Effective settings of a board: its own value per key, else (for a channel)
+ * its group's (`row.parentSettings`, null for a top-level forum). Same rule as
+ * forum-core effectiveSettings.
+ */
 function toSettings(row: any): ForumBibliographySettings {
-  const settings = row.settings && typeof row.settings === 'object' ? row.settings : {};
-  const email = str(settings.ownerEmail)?.toLowerCase() ?? null;
+  const own = settingsObject(row.settings);
+  const parent = settingsObject(row.parentSettings);
+  const pick = (k: string) => str(own[k]) ?? str(parent[k]);
+  const email = pick('ownerEmail')?.toLowerCase() ?? null;
   return {
     forumId: String(row.id),
-    seshatLibraryId: str(settings.seshatLibraryId),
-    zoteroCollection: str(settings.zoteroCollection),
+    seshatLibraryId: pick('seshatLibraryId'),
+    zoteroCollection: pick('zoteroCollection'),
     ownerEmail: email && email.length <= 320 && EMAIL_RE.test(email) ? email : null,
   };
 }
 
-/** Loads a forum's bibliography settings. Assumes mm has a single commons space; ORDER BY keeps the pick deterministic if that ever changes. */
-export async function loadForumBibliography(q: QueryFn, slug: string): Promise<ForumBibliographySettings | null> {
-  if (!SLUG_RE.test(slug)) return null;
+/**
+ * Loads a forum's EFFECTIVE bibliography settings by API reference: a group
+ * slug (top-level forums only; channel slugs are not unique in the space) or a
+ * forum id (any level). Active forums only (a channel of an archived group is
+ * archived). Assumes mm has a single commons space; ORDER BY keeps the pick
+ * deterministic if that ever changes.
+ */
+export async function loadForumBibliography(q: QueryFn, ref: string): Promise<ForumBibliographySettings | null> {
+  const byId = typeof ref === 'string' && UUID_RE.test(ref);
+  if (!byId && !SLUG_RE.test(ref)) return null;
   const { data, error } = await q(
-    `SELECT b."id", b."settings"
+    `SELECT b."id", b."settings", pb."settings" AS "parentSettings"
        FROM "ForumBoard" b
        JOIN "Space" s ON s."id" = b."spaceId" AND s."tenantId" = 'mm' AND s."kind" = 'commons'
-      WHERE b."slug" = $1 AND b."isArchived" IS NOT TRUE
+       LEFT JOIN "ForumBoard" pb ON pb."id" = b."parentId"
+      WHERE ${byId ? 'b."id" = $1::uuid' : 'b."slug" = $1 AND b."parentId" IS NULL'}
+        AND b."isArchived" IS NOT TRUE AND pb."isArchived" IS NOT TRUE
       ORDER BY s."createdAt" ASC, b."id" ASC
       LIMIT 1`,
-    [slug],
+    [ref],
   );
   if (error) throw new BibliographyError(500, 'database error');
   const row = data?.[0];
   return row ? toSettings(row) : null;
 }
 
-/** Same as loadForumBibliography, by forum id (post rendering knows the thread's forum id). */
+/** Effective settings by forum id (post rendering knows the thread's board id; archived boards included). */
 export async function loadForumBibliographyById(q: QueryFn, forumId: string): Promise<ForumBibliographySettings | null> {
   if (typeof forumId !== 'string' || !UUID_RE.test(forumId)) return null;
   const { data, error } = await q(
-    `SELECT b."id", b."settings"
+    `SELECT b."id", b."settings", pb."settings" AS "parentSettings"
        FROM "ForumBoard" b
        JOIN "Space" s ON s."id" = b."spaceId" AND s."tenantId" = 'mm' AND s."kind" = 'commons'
+       LEFT JOIN "ForumBoard" pb ON pb."id" = b."parentId"
       WHERE b."id" = $1::uuid
       LIMIT 1`,
     [forumId],

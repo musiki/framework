@@ -223,3 +223,26 @@ test('loadMmSpace pins tenant mm, kind commons, slug mishmash', async () => {
   assert.match(SPACE_SQL, /kind = 'commons'/);
   assert.equal(await loadMmSpace(async () => ({ data: [], error: null })), null);
 });
+
+test('findForumId: forum id (any level), group slug (top-level only) or group/channel', async () => {
+  const { findForumId } = await import('./api-core.ts');
+  const SP = '00000000-0000-4000-8000-000000000001';
+  const CH = '00000000-0000-4000-8000-000000000013';
+  const seen = [];
+  const q = async (text, params) => {
+    seen.push({ text, params });
+    if (params[0] === CH) return { data: [{ id: CH }], error: null };
+    if (params[1] === 'stiegler' && params.length === 2) return { data: [{ id: 'G' }], error: null };
+    if (params[1] === 'stiegler' && params[2] === 'welcome') return { data: [{ id: CH }], error: null };
+    return { data: [], error: null };
+  };
+  assert.equal(await findForumId(q, SP, CH), CH);
+  assert.match(seen[0].text, /id = \$1::uuid AND "spaceId" = \$2::uuid/);
+  assert.equal(await findForumId(q, SP, 'stiegler'), 'G');
+  assert.match(seen[1].text, /"parentId" IS NULL/);
+  assert.equal(await findForumId(q, SP, 'stiegler/welcome'), CH);
+  assert.match(seen[2].text, /pb\."parentId" IS NULL AND pb\.slug = \$2 AND b\.slug = \$3/);
+  for (const bad of ['welcome', 'stiegler/nope', 'a/b/c', '/x', '', null]) {
+    await assert.rejects(findForumId(q, SP, bad), (e) => e instanceof MmApiError && e.status === 404, String(bad));
+  }
+});

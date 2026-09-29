@@ -143,3 +143,15 @@ test('route sweep: no musiki route is reachable from mm', () => {
     assert.ok(target && target.startsWith('/mm-app/'), `leak: ${r} reachable from mm without rewrite`);
   }
 });
+
+test('mapMmPath maps channel paths (group, group/channel, both thread forms) verbatim', () => {
+  const T = '00000000-0000-4000-8000-000000000030';
+  assert.equal(mapMmPath('/f/stiegler/welcome'), '/mm-app/f/stiegler/welcome');
+  assert.equal(mapMmPath(`/f/stiegler/technics-and-time/t/${T}`), `/mm-app/f/stiegler/technics-and-time/t/${T}`);
+  assert.equal(mapMmPath(`/f/stiegler/t/${T}`), `/mm-app/f/stiegler/t/${T}`);
+  // '/f/<group>/t' reaches the channel page with the reserved slug "t", which the page 404s
+  assert.equal(mapMmPath('/f/stiegler/t'), '/mm-app/f/stiegler/t');
+  // dot segments cannot climb out of the mount
+  assert.equal(mapMmPath('/f/stiegler/%2e%2e/%2e%2e/%2e%2e/x'), null);
+  assert.equal(isMmPagePath('/f/stiegler/welcome/t/x'), true);
+});

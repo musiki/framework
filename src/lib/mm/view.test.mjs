@@ -96,3 +96,36 @@ test('page error state: domain 404 → notFound, anything else → unavailable',
   assert.equal(pageErrorState(new Error('ECONNREFUSED')), 'unavailable');
   assert.equal(pageErrorState(null), 'unavailable');
 });
+
+test('channel paths: group, channel, group-level and channel threads; encoded', async () => {
+  const { boardPath, boardThreadPath, boardMatchesPath, forumCrumbs } = await import('./view.ts');
+  assert.equal(forumPath('stiegler'), '/f/stiegler');
+  assert.equal(forumPath('stiegler', 'welcome'), '/f/stiegler/welcome');
+  assert.equal(threadPath('stiegler', 'abc'), '/f/stiegler/t/abc');
+  assert.equal(threadPath('stiegler', 'abc', 'technics-and-time'), '/f/stiegler/technics-and-time/t/abc');
+  assert.equal(forumPath('a b', 'c/d'), '/f/a%20b/c%2Fd');
+  const group = { slug: 'stiegler', title: 'Stiegler', parent: null };
+  const channel = { slug: 'welcome', title: 'Welcome', parent: { slug: 'stiegler', title: 'Stiegler' } };
+  assert.equal(boardPath(group), '/f/stiegler');
+  assert.equal(boardPath(channel), '/f/stiegler/welcome');
+  assert.equal(boardThreadPath(group, 't1'), '/f/stiegler/t/t1');
+  assert.equal(boardThreadPath(channel, 't1'), '/f/stiegler/welcome/t/t1');
+
+  assert.equal(boardMatchesPath(group, 'stiegler'), true);
+  assert.equal(boardMatchesPath(channel, 'stiegler', 'welcome'), true);
+  // mismatches: group URL for a channel thread, channel URL for a group thread, wrong group/channel
+  assert.equal(boardMatchesPath(channel, 'stiegler'), false);
+  assert.equal(boardMatchesPath(channel, 'welcome'), false);
+  assert.equal(boardMatchesPath(group, 'stiegler', 'welcome'), false);
+  assert.equal(boardMatchesPath(channel, 'other', 'welcome'), false);
+  assert.equal(boardMatchesPath(channel, 'stiegler', 'technics'), false);
+  assert.equal(boardMatchesPath(null, 'stiegler'), false);
+
+  assert.deepEqual(forumCrumbs(channel, 'Session 1'), [
+    { label: 'Stiegler', href: '/f/stiegler' },
+    { label: 'Welcome', href: '/f/stiegler/welcome' },
+    { label: 'Session 1', href: null },
+  ]);
+  assert.deepEqual(forumCrumbs(channel), [{ label: 'Stiegler', href: '/f/stiegler' }, { label: 'Welcome', href: null }]);
+  assert.deepEqual(forumCrumbs(group, 'T'), [{ label: 'Stiegler', href: '/f/stiegler' }, { label: 'T', href: null }]);
+});

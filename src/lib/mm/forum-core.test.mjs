@@ -19,6 +19,10 @@ import {
   vote,
   moderatePost,
   authorizeOwnerLibraries,
+  getForumByPath,
+  getForumRef,
+  effectiveSettings,
+  isReservedChannelSlug,
 } from './forum-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -55,11 +59,11 @@ const forumRow = (over = {}) => ({
   ...over,
 });
 const forumByIdRoute = (row = forumRow()) => [
-  /FROM "ForumBoard"\s+WHERE id = \$1::uuid AND "spaceId" = \$2::uuid/,
+  /FROM "ForumBoard" b LEFT JOIN "ForumBoard" pb ON pb\.id = b\."parentId"\s+WHERE b\.id = \$1::uuid AND b\."spaceId" = \$2::uuid/,
   ([fid, sid]) => (row && fid === row.id && sid === SPACE ? [row] : []),
 ];
 const threadByIdRoute = (row = { id: THREAD, isLocked: false, archivedAt: null, forumArchived: false }) => [
-  /FROM "ForumThread" t LEFT JOIN "ForumBoard" b ON b\.id = t\."boardId"\s+WHERE t\.id = \$1::uuid AND t\."spaceId" = \$2::uuid/,
+  /FROM "ForumThread" t LEFT JOIN "ForumBoard" b ON b\.id = t\."boardId" LEFT JOIN "ForumBoard" pb ON pb\.id = b\."parentId"\s+WHERE t\.id = \$1::uuid AND t\."spaceId" = \$2::uuid/,
   ([tid, sid]) => (row && tid === row.id && sid === SPACE ? [row] : []),
 ];
 const postByIdRoute = (rows = { [POST]: { id: POST, threadId: THREAD, status: 'published' } }) => [
@@ -148,7 +152,8 @@ test('getForum: by slug in the space, null when missing or slug invalid', async 
   const f = await getForum(q, { spaceId: SPACE, slug: 'technics' });
   assert.equal(f.id, FORUM);
   noEmail(f);
-  assert.match(calls[0].text, /b\."spaceId" = \$1::uuid AND b\.slug = \$2 AND b\."isArchived" = false/);
+  assert.match(calls[0].text, /b\."spaceId" = \$1::uuid AND b\."isArchived" = false/);
+  assert.match(calls[0].text, /\(b\."parentId" IS NULL AND b\.slug = \$2\)/);
   assert.equal(await getForum(q, { spaceId: SPACE, slug: 'other' }), null);
   assert.equal(await getForum(q, { spaceId: SPACE, slug: "x' OR 1=1" }), null);
 });
@@ -375,7 +380,7 @@ test('listPosts: rendered bodies, moves, votes, adopted marker, display names on
   };
   const view = await listPosts(q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.member, render });
   assert.equal(view.thread.title, 'Pharmakon');
-  assert.deepEqual(view.thread.forum, { id: FORUM, slug: 'technics', title: 'Technics' });
+  assert.deepEqual(view.thread.forum, { id: FORUM, slug: 'technics', title: 'Technics', parent: null });
   assert.deepEqual(view.thread.concept, { slug: 'pharmakon', label: 'Pharmakon' });
   assert.deepEqual(view.viewer, { role: 'member', canPost: true, canVote: true, canModerate: false, canAdopt: false });
 
@@ -602,7 +607,7 @@ test('all thread/post/forum reads and writes filter by the space (never course r
   await collect(fakeQuery([memberRoute, postByIdRoute()]), (q) => vote(q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 1 }));
   await collect(fakeQuery([forumByIdRoute()]), (q) => listThreads(q, { spaceId: SPACE, forumId: FORUM }));
   // Entry points into a thread/post/forum by id must carry the space predicate.
-  const entry = all.filter((c) => /WHERE (p\.|t\.)?id = \$1::uuid/.test(c.text) && /"(ForumThread|ForumBoard)"/.test(c.text) && !c.text.startsWith('UPDATE "ForumPost"'));
+  const entry = all.filter((c) => /WHERE (p\.|t\.|b\.)?id = \$1::uuid/.test(c.text) && /"(ForumThread|ForumBoard)"/.test(c.text) && !c.text.startsWith('UPDATE "ForumPost"'));
   assert.ok(entry.length >= 4);
   for (const c of entry) assert.ok(/"spaceId" = \$2::uuid/.test(c.text), c.text);
 });
@@ -692,4 +697,203 @@ test('authorizeOwnerLibraries: curators only for their own emails, admins any ow
   await rejectsStatus(authorizeOwnerLibraries(q, args(null, 'owner@uni.no')), 401);
   await rejectsStatus(authorizeOwnerLibraries(q, args(U.admin, 'not-an-email')), 400);
   await rejectsStatus(authorizeOwnerLibraries(q, args(U.admin, undefined)), 400);
+});
+
+// ---------------------------------------------------------------------------
+// Channels (one level under a group; spec 2026-09-29)
+// ---------------------------------------------------------------------------
+
+const GROUP = FORUM;
+const CH_WELCOME = id(12);
+const CH_TT = id(13);
+const groupSummary = (over = {}) => summaryRow({ slug: 'stiegler', title: 'Stiegler', parentId: null, ...over });
+const channelSummary = (cid, slug, title, over = {}) => summaryRow({
+  id: cid, slug, title, parentId: GROUP, parentSlug: 'stiegler', parentTitle: 'Stiegler',
+  settings: {}, parentSettings: forumRow().settings, threadCount: 1, conceptCount: 0, ...over,
+});
+
+test('effectiveSettings: own value per key, else the group\'s', () => {
+  assert.deepEqual(effectiveSettings({ seshatLibraryId: 'ch' }, { seshatLibraryId: 'g', ownerEmail: 'o@x.org' }),
+    { seshatLibraryId: 'ch', ownerEmail: 'o@x.org' });
+  assert.deepEqual(effectiveSettings({ zoteroCollection: 'Z' }, null), { zoteroCollection: 'Z' });
+  assert.deepEqual(effectiveSettings('{}', '{"zoteroCollection":"G"}'), { zoteroCollection: 'G' });
+});
+
+test('listForums: groups with nested channels; channels inherit the public bibliography view', async () => {
+  const { q, calls } = fakeQuery([['FROM "ForumBoard" b', () => [
+    groupSummary(), channelSummary(CH_TT, 'technics-and-time', 'Technics and Time'),
+    channelSummary(CH_WELCOME, 'welcome', 'Welcome', { settings: { zoteroCollection: 'OWN' } }),
+    // orphan (its group is archived or elsewhere): dropped
+    channelSummary(id(14), 'orphan', 'Orphan', { parentId: id(99) }),
+  ]]]);
+  const forums = await listForums(q, { spaceId: SPACE });
+  assert.equal(forums.length, 1);
+  assert.equal(forums[0].slug, 'stiegler');
+  assert.equal(forums[0].parent, null);
+  assert.deepEqual(forums[0].channels.map((c) => c.slug), ['technics-and-time', 'welcome']);
+  const [tt, welcome] = forums[0].channels;
+  assert.deepEqual(tt.parent, { id: GROUP, slug: 'stiegler', title: 'Stiegler' });
+  assert.deepEqual(tt.settings, { zoteroCollection: 'https://www.zotero.org/groups/1/c', hasBibliography: true });
+  assert.equal(tt.overridesBibliography, false);
+  assert.deepEqual(welcome.settings, { zoteroCollection: 'OWN', hasBibliography: true });
+  assert.equal(welcome.overridesBibliography, true);
+  noEmail(forums);
+  // archived groups hide their channels; group counts include active channels
+  assert.match(calls[0].text, /\(pb\.id IS NULL OR pb\."isArchived" = false\)/);
+  assert.match(calls[0].text, /ch\."parentId" = b\.id AND ch\."isArchived" = false/);
+});
+
+test('getForumByPath: group, group/channel, and mismatches (channel of another group, reserved t) are null', async () => {
+  const rows = [groupSummary(), channelSummary(CH_WELCOME, 'welcome', 'Welcome')];
+  const { q, calls } = fakeQuery([['FROM "ForumBoard" b', ([, g]) => (g === 'stiegler' ? rows : [])]]);
+  const g = await getForumByPath(q, { spaceId: SPACE, group: 'stiegler' });
+  assert.equal(g.group.id, GROUP);
+  assert.equal(g.channel, null);
+  assert.equal(g.group.channels.length, 1);
+  const c = await getForumByPath(q, { spaceId: SPACE, group: 'stiegler', channel: 'welcome' });
+  assert.equal(c.channel.id, CH_WELCOME);
+  assert.equal(c.group.slug, 'stiegler');
+  assert.equal(await getForumByPath(q, { spaceId: SPACE, group: 'stiegler', channel: 'nope' }), null);
+  assert.equal(await getForumByPath(q, { spaceId: SPACE, group: 'other', channel: 'welcome' }), null);
+  const before = calls.length;
+  assert.equal(await getForumByPath(q, { spaceId: SPACE, group: 'stiegler', channel: 't' }), null);
+  assert.equal(await getForumByPath(q, { spaceId: SPACE, group: '../x' }), null);
+  assert.equal(calls.length, before, 'invalid/reserved paths never reach the database');
+  // a channel slug alone never resolves as a group
+  const onlyChannel = fakeQuery([['FROM "ForumBoard" b', () => [channelSummary(CH_WELCOME, 'welcome', 'Welcome')]]]);
+  assert.equal(await getForumByPath(onlyChannel.q, { spaceId: SPACE, group: 'welcome' }), null);
+  assert.match(calls[0].text, /\(b\."parentId" IS NULL AND b\.slug = \$2\) OR \(pb\."parentId" IS NULL AND pb\.slug = \$2\)/);
+  assert.equal(isReservedChannelSlug('t'), true);
+});
+
+test('getForumRef: a group slug or any forum id', async () => {
+  const rows = [groupSummary(), channelSummary(CH_WELCOME, 'welcome', 'Welcome')];
+  const { q, calls } = fakeQuery([['FROM "ForumBoard" b', ([, ref]) =>
+    ref === 'stiegler' || ref === GROUP ? rows : ref === CH_WELCOME ? [rows[1]] : []]]);
+  assert.equal((await getForumRef(q, { spaceId: SPACE, ref: 'stiegler' })).channels.length, 1);
+  const ch = await getForumRef(q, { spaceId: SPACE, ref: CH_WELCOME });
+  assert.equal(ch.slug, 'welcome');
+  assert.equal(ch.parent.slug, 'stiegler');
+  assert.equal((await getForumRef(q, { spaceId: SPACE, ref: GROUP })).channels[0].id, CH_WELCOME);
+  assert.equal(await getForumRef(q, { spaceId: SPACE, ref: id(98) }), null);
+  assert.equal(await getForumRef(q, { spaceId: SPACE, ref: '' }), null);
+  assert.match(calls.find((c) => c.params[1] === CH_WELCOME).text, /b\.id = \$2::uuid OR b\."parentId" = \$2::uuid/);
+});
+
+const boardRoute = (rows) => [
+  /FROM "ForumBoard" b LEFT JOIN "ForumBoard" pb ON pb\.id = b\."parentId"\s+WHERE b\.id = \$1::uuid AND b\."spaceId" = \$2::uuid/,
+  ([fid, sid]) => (sid === SPACE && rows[fid] ? [rows[fid]] : []),
+];
+const BOARDS = {
+  [GROUP]: forumRow({ slug: 'stiegler', parentId: null }),
+  [CH_WELCOME]: forumRow({ id: CH_WELCOME, slug: 'welcome', parentId: GROUP, settings: {}, parentSettings: forumRow().settings, parentArchived: false }),
+};
+const insertBoard = ['INSERT INTO "ForumBoard"', (p) => [{
+  id: id(20), slug: p[1], title: p[2], description: p[3], isArchived: false, settings: JSON.parse(p[5]), parentId: p[6],
+}]];
+
+test('createForum with parentId: a channel of an active group; sibling slug check; reserved t; one level only', async () => {
+  const { q, calls } = fakeQuery([memberRoute, boardRoute(BOARDS), ['SELECT id FROM "ForumBoard"', () => []], insertBoard]);
+  const ch = await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Technics and Time', parentId: GROUP });
+  assert.equal(ch.parentId, GROUP);
+  assert.equal(ch.slug, 'technics-and-time');
+  const taken = calls.find((c) => c.text.startsWith('SELECT id FROM "ForumBoard"'));
+  assert.match(taken.text, /"parentId" IS NOT DISTINCT FROM \$3::uuid/);
+  assert.deepEqual(taken.params, [SPACE, 'technics-and-time', GROUP]);
+  const ins = calls.find((c) => c.text.includes('INSERT INTO "ForumBoard"'));
+  assert.match(ins.text, /"parentId"\)\s+VALUES \(.*\$7::uuid\)/s);
+  assert.equal(ins.params[6], GROUP);
+
+  // top-level: parent null, sibling check among groups
+  const top = fakeQuery([memberRoute, ['SELECT id FROM "ForumBoard"', () => []], insertBoard]);
+  const g = await createForum(top.q, { spaceId: SPACE, actorUserId: U.curator, title: 'Simondon' });
+  assert.equal(g.parentId, null);
+  assert.deepEqual(top.calls.find((c) => c.text.startsWith('SELECT id FROM "ForumBoard"')).params, [SPACE, 'simondon', null]);
+
+  // same slug under the same group: 409 (other groups may reuse it)
+  const dup = fakeQuery([memberRoute, boardRoute(BOARDS), ['SELECT id FROM "ForumBoard"', () => [{ id: CH_WELCOME }]]]);
+  await rejectsStatus(createForum(dup.q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP }), 409);
+
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Threads', slug: 't', parentId: GROUP }), 400);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Nested', parentId: CH_WELCOME }), 400);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Lost', parentId: id(97) }), 404);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Bad', parentId: 'x' }), 400);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.member, title: 'Welcome', parentId: GROUP }), 403);
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Uuid', slug: id(5) }), 400);
+
+  // archived group: no new channels
+  const archived = fakeQuery([memberRoute, boardRoute({ [GROUP]: forumRow({ isArchived: true }) })]);
+  await rejectsStatus(createForum(archived.q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP }), 404);
+  // the database trigger's check_violation surfaces as 400
+  const trig = fakeQuery([memberRoute, boardRoute(BOARDS), ['SELECT id FROM "ForumBoard"', () => []],
+    ['INSERT INTO "ForumBoard"', () => ({ error: { message: 'forum channels cannot have channels', code: '23514' } })]]);
+  await rejectsStatus(createForum(trig.q, { spaceId: SPACE, actorUserId: U.admin, title: 'Race', parentId: GROUP }), 400);
+});
+
+test('channel bibliography override: curators are checked against the inherited owner', async () => {
+  const base = [memberRoute, ownEmailsRoute({ [U.curator]: ['me@uni.no'] }), boardRoute(BOARDS), ['SELECT id FROM "ForumBoard"', () => []], insertBoard];
+  const { q } = fakeQuery(base);
+  // library id alone would pair with the group owner (owner@uni.no, not the curator's)
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9' } }), 403);
+  await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9', ownerEmail: 'me@uni.no' } });
+  await createForum(q, { spaceId: SPACE, actorUserId: U.admin, title: 'Welcome', parentId: GROUP, settings: { seshatLibraryId: 'lib-9' } });
+
+  const upd = fakeQuery([...base, ['UPDATE "ForumBoard"', () => [BOARDS[CH_WELCOME]]]]);
+  await rejectsStatus(updateForum(upd.q, { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-9' } }), 403);
+  await updateForum(upd.q, { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.curator, title: 'Welcome!', isArchived: true });
+});
+
+test('a channel of an archived group is closed (threads, posts, votes)', async () => {
+  const closed = { [CH_WELCOME]: { ...BOARDS[CH_WELCOME], parentArchived: true } };
+  await rejectsStatus(listThreads(fakeQuery([boardRoute(closed)]).q, { spaceId: SPACE, forumId: CH_WELCOME }), 404);
+  await rejectsStatus(createThread(fakeQuery([memberRoute, boardRoute(closed)]).q, {
+    spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.member, title: 'Session 1', body: 'x',
+  }), 404);
+  // curators can still reach it for un-archiving
+  const upd = fakeQuery([memberRoute, boardRoute(closed), ['UPDATE "ForumBoard"', () => [closed[CH_WELCOME]]]]);
+  await updateForum(upd.q, { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.admin, isArchived: false });
+  // thread/post entry points compute the effective archive flag in SQL
+  const texts = [];
+  const spy = fakeQuery([memberRoute]);
+  await createPost(spy.q, { spaceId: SPACE, threadId: THREAD, actorUserId: U.member, body: 'x' }).catch(() => {});
+  await vote(spy.q, { spaceId: SPACE, postId: POST, actorUserId: U.member, value: 1 }).catch(() => {});
+  texts.push(...spy.calls.map((c) => c.text));
+  const archiveExprs = texts.filter((t) => t.includes('COALESCE(pb."isArchived", false)'));
+  assert.equal(archiveExprs.length, 2);
+});
+
+test('createThread in a channel: boardId is the channel', async () => {
+  const { q, calls } = fakeQuery([memberRoute, boardRoute(BOARDS),
+    ['INSERT INTO "ForumThread"', () => [{ id: THREAD }]], ['INSERT INTO "ForumPost"', () => [{ id: POST }]]]);
+  await createThread(q, { spaceId: SPACE, forumId: CH_WELCOME, actorUserId: U.member, title: 'Session 1', body: 'Hello' });
+  assert.equal(calls.find((c) => c.text.includes('INSERT INTO "ForumThread"')).params[1], CH_WELCOME);
+});
+
+test('listPosts in a channel: forum carries its group; citations use the inherited bibliography', async () => {
+  const { q, calls } = fakeQuery([
+    memberRoute,
+    [/FROM "ForumThread" t\s+LEFT JOIN "User" u/, () => [{
+      id: THREAD, title: 'Session 1', isPinned: false, isLocked: false, createdAt: 't', updatedAt: 't', archivedAt: null,
+      createdByUserId: U.member, createdByName: 'A', forumId: CH_TT, forumSlug: 'technics-and-time', forumTitle: 'Technics and Time',
+      forumArchived: false, forumSettings: {}, parentId: GROUP, parentSlug: 'stiegler', parentTitle: 'Stiegler',
+      parentSettings: { seshatLibraryId: 'lib-1', ownerEmail: 'Owner@Uni.no' },
+    }]],
+    [/FROM "ForumPost" p\s+LEFT JOIN "User" u/, () => [{ id: POST, authorUserId: U.member, authorName: 'A', body: 'see k', status: 'published', createdAt: 't', updatedAt: 't' }]],
+  ]);
+  const seen = [];
+  const view = await listPosts(q, { spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; } });
+  assert.deepEqual(view.thread.forum, {
+    id: CH_TT, slug: 'technics-and-time', title: 'Technics and Time', parent: { id: GROUP, slug: 'stiegler', title: 'Stiegler' },
+  });
+  assert.deepEqual(seen[0], { id: POST, updatedAt: 't', forumId: CH_TT, forumBibliography: 'lib-1|owner@uni.no' });
+  assert.match(calls.find((c) => /FROM "ForumThread" t\s+LEFT JOIN "User"/.test(c.text)).text, /LEFT JOIN "ForumBoard" pb ON pb\.id = b\."parentId"/);
+  noEmail(view);
+});
+
+test('listForumsAdmin returns parentId so the admin can group channels', async () => {
+  const { q, calls } = fakeQuery([memberRoute, ['FROM "ForumBoard"', () => [BOARDS[GROUP], BOARDS[CH_WELCOME]]]]);
+  const rows = await listForumsAdmin(q, { spaceId: SPACE, actorUserId: U.curator });
+  assert.deepEqual(rows.map((r) => r.parentId), [null, GROUP]);
+  assert.deepEqual(rows[1].settings, {}, 'own settings only (the admin shows inheritance)');
+  assert.match(calls.at(-1).text, /"parentId"/);
 });
