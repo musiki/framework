@@ -18,6 +18,7 @@ import {
   createPost,
   vote,
   moderatePost,
+  authorizeOwnerLibraries,
 } from './forum-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -679,4 +680,16 @@ test('listPosts passes the forum bibliography link to the renderer (cache invali
   const seen = [];
   await listPosts(q, { spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; } });
   assert.equal(seen[0].forumBibliography, 'lib-1|owner@uni.no');
+});
+
+test('authorizeOwnerLibraries: curators only for their own emails, admins any owner', async () => {
+  const { q } = fakeQuery([memberRoute, ownEmailsRoute()]);
+  const args = (actorUserId, ownerEmail) => ({ spaceId: SPACE, actorUserId, ownerEmail });
+  assert.equal(await authorizeOwnerLibraries(q, args(U.curator, ' Owner@Uni.no ')), 'owner@uni.no');
+  await rejectsStatus(authorizeOwnerLibraries(q, args(U.curator, 'someone@else.org')), 403);
+  assert.equal(await authorizeOwnerLibraries(q, args(U.admin, 'someone@else.org')), 'someone@else.org');
+  await rejectsStatus(authorizeOwnerLibraries(q, args(U.member, 'owner@uni.no')), 403);
+  await rejectsStatus(authorizeOwnerLibraries(q, args(null, 'owner@uni.no')), 401);
+  await rejectsStatus(authorizeOwnerLibraries(q, args(U.admin, 'not-an-email')), 400);
+  await rejectsStatus(authorizeOwnerLibraries(q, args(U.admin, undefined)), 400);
 });

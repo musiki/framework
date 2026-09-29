@@ -64,7 +64,7 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
   </MmLayout>
 ) : (
   <MmLayout lang={lang} title={A('title')} noindex>
-    <div data-mm-i18n={strings} data-mm-admin data-mm-lang={lang} data-mm-self={viewer?.userId ?? ''}>
+    <div data-mm-i18n={strings} data-mm-admin data-mm-lang={lang} data-mm-self={viewer?.userId ?? ''} data-mm-self-email={String(Astro.locals.session?.user?.email ?? '').trim().toLowerCase()}>
       <h1>{A('title')}</h1>
       <p class="mm-lead">{A('lead')}</p>
       <nav aria-label={A('sectionsLabel')}>
@@ -183,19 +183,27 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
             <legend>{A('forums.bibTitle')}</legend>
             <p id="mm-fc-bib-lead" class="mm-help">{A('forums.bibLead')}</p>
             <div class="mm-form-row">
+              <label for="mm-fc-owner">{A('forums.owner')}</label>
+              <input id="mm-fc-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-fc-owner-help" />
+              <p id="mm-fc-owner-help" class="mm-help">{A('forums.ownerHelp')}</p>
+            </div>
+            <div class="mm-form-row" data-lib-picker hidden>
+              <label for="mm-fc-lib">{A('forums.seshatPick')}</label>
+              <select id="mm-fc-lib" data-lib-select aria-describedby="mm-fc-lib-status"></select>
+            </div>
+            <p id="mm-fc-lib-status" class="mm-help" data-lib-status role="status" aria-live="polite">{A('forums.seshatNeedOwner')}</p>
+            <details class="mm-admin-lib-manual" data-lib-manual>
+              <summary>{A('forums.seshatManual')}</summary>
+            <div class="mm-form-row">
               <label for="mm-fc-seshat">{A('forums.seshat')}</label>
               <input id="mm-fc-seshat" type="text" name="seshatLibraryId" maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="mm-fc-seshat-help" />
               <p id="mm-fc-seshat-help" class="mm-help">{A('forums.seshatHelp')}</p>
             </div>
+            </details>
             <div class="mm-form-row">
               <label for="mm-fc-zotero">{A('forums.zotero')}</label>
               <input id="mm-fc-zotero" type="text" name="zoteroCollection" maxlength="500" autocomplete="off" aria-describedby="mm-fc-zotero-help" />
               <p id="mm-fc-zotero-help" class="mm-help">{A('forums.zoteroHelp')}</p>
-            </div>
-            <div class="mm-form-row">
-              <label for="mm-fc-owner">{A('forums.owner')}</label>
-              <input id="mm-fc-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-fc-owner-help" />
-              <p id="mm-fc-owner-help" class="mm-help">{A('forums.ownerHelp')}</p>
             </div>
           </fieldset>
           <p class="mm-alert" data-form-err role="alert" hidden></p>
@@ -217,19 +225,27 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
             <legend>{A('forums.bibTitle')}</legend>
             <p id="mm-fe-bib-lead" class="mm-help">{A('forums.bibLead')}</p>
             <div class="mm-form-row">
+              <label for="mm-fe-owner">{A('forums.owner')}</label>
+              <input id="mm-fe-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-fe-owner-help" />
+              <p id="mm-fe-owner-help" class="mm-help">{A('forums.ownerHelp')}</p>
+            </div>
+            <div class="mm-form-row" data-lib-picker hidden>
+              <label for="mm-fe-lib">{A('forums.seshatPick')}</label>
+              <select id="mm-fe-lib" data-lib-select aria-describedby="mm-fe-lib-status"></select>
+            </div>
+            <p id="mm-fe-lib-status" class="mm-help" data-lib-status role="status" aria-live="polite">{A('forums.seshatNeedOwner')}</p>
+            <details class="mm-admin-lib-manual" data-lib-manual>
+              <summary>{A('forums.seshatManual')}</summary>
+            <div class="mm-form-row">
               <label for="mm-fe-seshat">{A('forums.seshat')}</label>
               <input id="mm-fe-seshat" type="text" name="seshatLibraryId" maxlength="200" autocomplete="off" spellcheck="false" aria-describedby="mm-fe-seshat-help" />
               <p id="mm-fe-seshat-help" class="mm-help">{A('forums.seshatHelp')}</p>
             </div>
+            </details>
             <div class="mm-form-row">
               <label for="mm-fe-zotero">{A('forums.zotero')}</label>
               <input id="mm-fe-zotero" type="text" name="zoteroCollection" maxlength="500" autocomplete="off" aria-describedby="mm-fe-zotero-help" />
               <p id="mm-fe-zotero-help" class="mm-help">{A('forums.zoteroHelp')}</p>
-            </div>
-            <div class="mm-form-row">
-              <label for="mm-fe-owner">{A('forums.owner')}</label>
-              <input id="mm-fe-owner" type="email" name="ownerEmail" maxlength="320" autocomplete="off" spellcheck="false" aria-describedby="mm-fe-owner-help" />
-              <p id="mm-fe-owner-help" class="mm-help">{A('forums.ownerHelp')}</p>
             </div>
           </fieldset>
           <p class="mm-alert" data-form-err role="alert" hidden></p>

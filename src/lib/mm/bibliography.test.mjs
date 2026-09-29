@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadForumBibliography, searchForumCitations, toCitation, createRateLimiter, BibliographyError } from './bibliography.ts';
+import { loadForumBibliography, searchForumCitations, toCitation, createRateLimiter, BibliographyError, listOwnerLibraries } from './bibliography.ts';
 
 const env = { SESHAT_API_URL: 'https://seshat.test/', SESHAT_INTEGRATION_TOKEN: 'tok' };
 const settings = { forumId: 'f', seshatLibraryId: 'lib1', zoteroCollection: null, ownerEmail: 'o@x.org' };
@@ -111,4 +111,36 @@ test('resolveForumCitations: no library/owner -> no request; upstream failure th
   assert.equal((await resolveForumCitations(null, ['k'], { env, fetch: never })).size, 0);
   await assert.rejects(resolveForumCitations(settings, ['k'], { env, fetch: async () => new Response('x', { status: 500 }) }), BibliographyError);
   await assert.rejects(resolveForumCitations(settings, ['k'], { env: {}, fetch: never }), BibliographyError);
+});
+
+test('listOwnerLibraries sends owner + token, whitelists fields', async () => {
+  let call;
+  const fetch = async (u, init) => {
+    call = { u: new URL(u), init };
+    return Response.json({ libraries: [
+      { id: 'lib-1', name: '4.1 Stiegler', path: 'dissertation / 4.1 Stiegler', parentId: 'p', items: 12, ownerKey: 'secret', notes: 'x' },
+      { id: 'bad id<script>', name: 'x', path: 'x', items: 1 },
+      { name: 'no id' },
+    ] });
+  };
+  const out = await listOwnerLibraries(' Own@X.org ', ' stie ', { env, fetch });
+  assert.equal(call.u.origin, 'https://seshat.test');
+  assert.equal(call.u.pathname, '/api/integrations/libraries');
+  assert.equal(call.u.searchParams.get('q'), 'stie');
+  assert.equal(call.init.headers['X-Seshat-Owner'], 'own@x.org');
+  assert.equal(call.init.headers.Authorization, 'Bearer tok');
+  assert.deepEqual(out, { available: true, libraries: [{ id: 'lib-1', name: '4.1 Stiegler', path: 'dissertation / 4.1 Stiegler', items: 12 }] });
+  assert.equal(JSON.stringify(out).includes('secret'), false);
+});
+
+test('listOwnerLibraries: missing route/token -> unavailable, failures -> 502, bad email -> 400', async () => {
+  for (const status of [404, 405, 501]) {
+    assert.deepEqual(await listOwnerLibraries('o@x.org', '', { env, fetch: async () => new Response('Not found', { status }) }), { available: false, libraries: [] });
+  }
+  assert.deepEqual(await listOwnerLibraries('o@x.org', '', { env, fetch: async () => new Response('<html>', { status: 200 }) }), { available: false, libraries: [] });
+  const never = async () => { throw new Error('should not fetch'); };
+  assert.deepEqual(await listOwnerLibraries('o@x.org', '', { env: {}, fetch: never }), { available: false, libraries: [] });
+  await assert.rejects(listOwnerLibraries('o@x.org', '', { env, fetch: async () => new Response('x', { status: 500 }) }), { status: 502 });
+  await assert.rejects(listOwnerLibraries('o@x.org', '', { env, fetch: never }), { status: 502 });
+  await assert.rejects(listOwnerLibraries('nope', '', { env, fetch: never }), { status: 400 });
 });

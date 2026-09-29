@@ -217,3 +217,87 @@ export function createRateLimiter(max: number, windowMs: number, now: () => numb
     return cur.count <= max;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Owner library listing (admin picker)
+// ---------------------------------------------------------------------------
+
+/** One of the owner's Seshat libraries, as the admin picker shows it. */
+export interface OwnerLibrary {
+  id: string;
+  name: string;
+  /** Ancestor names joined with " / ". */
+  path: string;
+  /** Number of references filed in the library. */
+  items: number;
+}
+
+export type OwnerLibraries = { available: true; libraries: OwnerLibrary[] } | { available: false; libraries: [] };
+
+export const MAX_LIBRARIES = 500;
+/** Upstream statuses meaning "this Seshat has no library listing" (older deploy): the UI falls back to a pasted id. */
+const LISTING_MISSING = new Set([404, 405, 501]);
+
+/** Same character set forum settings accept for seshatLibraryId (forum-core LIBRARY_ID_RE). */
+const LIBRARY_ID_CHARS = /^[A-Za-z0-9._:-]+$/;
+
+/** Whitelist mapping of one Seshat library row: only id, name, path, items. */
+export function toOwnerLibrary(item: any): OwnerLibrary | null {
+  const id = str(item?.id);
+  if (!id || id.length > 200 || !LIBRARY_ID_CHARS.test(id)) return null;
+  const name = str(item?.name) ?? '';
+  const path = str(item?.path) ?? name;
+  const items = Number(item?.items);
+  return {
+    id,
+    name: name.slice(0, 300),
+    path: path.slice(0, 1000),
+    items: Number.isFinite(items) && items > 0 ? Math.trunc(items) : 0,
+  };
+}
+
+/**
+ * Lists the Seshat libraries owned by `ownerEmail` (GET
+ * /api/integrations/libraries, same token/owner-header contract as the
+ * citation search). `{ available: false }` when Seshat has no such route
+ * (404/405/501, or a non-JSON answer) or no integration token is configured,
+ * so the admin UI can fall back to a pasted id. Throws BibliographyError 400
+ * for a bad email and 502 when Seshat is unreachable or fails.
+ */
+export async function listOwnerLibraries(
+  ownerEmail: string,
+  term: string | null | undefined = '',
+  opts: Omit<SearchOptions, 'limit'> = {},
+): Promise<OwnerLibraries> {
+  const email = String(ownerEmail ?? '').trim().toLowerCase();
+  if (!email || email.length > 320 || !EMAIL_RE.test(email)) throw new BibliographyError(400, 'invalid owner email');
+  const env = opts.env ?? (process.env as Record<string, string | undefined>);
+  const token = String(env.SESHAT_INTEGRATION_TOKEN || '').trim();
+  if (!token) return { available: false, libraries: [] };
+  const base = String(env.SESHAT_API_URL || 'https://seshat.zztt.org').trim().replace(/\/$/, '');
+
+  const upstream = new URL('/api/integrations/libraries', base);
+  const needle = String(term ?? '').trim().slice(0, MAX_QUERY);
+  if (needle) upstream.searchParams.set('q', needle);
+  upstream.searchParams.set('limit', String(MAX_LIBRARIES));
+
+  const doFetch = opts.fetch ?? fetch;
+  let response: Response;
+  try {
+    response = await doFetch(upstream, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'X-Seshat-Owner': email },
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    throw new BibliographyError(502, 'bibliography unavailable');
+  }
+  if (LISTING_MISSING.has(response.status)) return { available: false, libraries: [] };
+  if (!response.ok) throw new BibliographyError(502, 'bibliography unavailable');
+  const payload: any = await response.json().catch(() => null);
+  if (!payload || !Array.isArray(payload.libraries)) return { available: false, libraries: [] };
+  const libraries = payload.libraries
+    .map(toOwnerLibrary)
+    .filter((l: OwnerLibrary | null): l is OwnerLibrary => !!l)
+    .slice(0, MAX_LIBRARIES);
+  return { available: true, libraries };
+}

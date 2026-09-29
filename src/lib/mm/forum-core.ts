@@ -217,10 +217,33 @@ async function assertBibliographyAllowed(
   if (!patch.ownerEmail && !patch.seshatLibraryId) return;
   const owner = 'ownerEmail' in patch ? patch.ownerEmail : current.ownerEmail ? normalizeEmail(current.ownerEmail) : null;
   if (!owner) return;
+  await assertOwnEmail(q, actorUserId, owner);
+}
+
+/** The I4 rule's core: `owner` must be one of the actor's own UserEmail addresses. */
+async function assertOwnEmail(q: QueryFn, actorUserId: string, owner: string): Promise<void> {
   const rows = await run(q, `SELECT lower("email") AS email FROM "UserEmail" WHERE "userId" = $1::uuid`, [actorUserId]);
   if (!rows.some((r) => String(r.email ?? '') === owner)) {
     throw new ForumError(403, 'only an admin can link a bibliography owned by someone else; use your own email');
   }
+}
+
+/**
+ * Who may list an owner's Seshat libraries (admin library picker): the same
+ * people and the same rule as linking one (assertBibliographyAllowed) —
+ * curators/admins (manageForums); curators only for their OWN emails, admins
+ * for any owner. Returns the normalized owner email.
+ */
+export async function authorizeOwnerLibraries(
+  q: QueryFn,
+  { spaceId, actorUserId, ownerEmail }: { spaceId: string; actorUserId: string | null; ownerEmail: unknown },
+): Promise<string> {
+  const sid = requireUuid(spaceId, 'space');
+  const role = await authorize(q, sid, actorUserId, 'manageForums');
+  const owner = typeof ownerEmail === 'string' ? normalizeEmail(ownerEmail) : '';
+  if (!owner || owner.length > 320 || !isValidEmail(owner)) throw new ForumError(400, 'invalid owner email');
+  if (role !== 'admin') await assertOwnEmail(q, actorUserId as string, owner);
+  return owner;
 }
 
 function parseSettings(raw: unknown): ForumSettings {

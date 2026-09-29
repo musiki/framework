@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findCitekeyQuery, insertCitekey, apiErrorKind, apiErrorMessage, adminErrorKind } from './client-core.ts';
+import { findCitekeyQuery, insertCitekey, apiErrorKind, apiErrorMessage, adminErrorKind, libraryPickerOptions } from './client-core.ts';
 
 test('citekey query right after @', () => {
   assert.deepEqual(findCitekeyQuery('see @stie', 9), { start: 4, query: 'stie' });
@@ -53,4 +53,21 @@ test('admin 409 reasons map to their own messages', () => {
   assert.equal(adminErrorKind(409, 'something else'), null);
   assert.equal(adminErrorKind(400, 'the space must keep at least one admin'), null);
   assert.equal(adminErrorKind(409, undefined), null);
+});
+
+test('libraryPickerOptions: none entry, labelled libraries, selection', () => {
+  const strings = { none: '(none)', option: '{path} ({count} references)', unknown: 'Current: {id}' };
+  const libs = [{ id: 'a', name: 'A', path: 'diss / A', items: 3 }, { id: 'b', name: 'B', path: '', items: 0 }];
+  assert.deepEqual(libraryPickerOptions(libs, 'a', strings), [
+    { value: '', label: '(none)', selected: false },
+    { value: 'a', label: 'diss / A (3 references)', selected: true },
+    { value: 'b', label: 'B (0 references)', selected: false },
+  ]);
+  assert.equal(libraryPickerOptions(libs, '', strings)[0].selected, true);
+});
+
+test('libraryPickerOptions keeps a linked id missing from the list', () => {
+  const out = libraryPickerOptions([], 'gone-1', { none: '-', option: '{path}', unknown: 'Current: {id}' });
+  assert.deepEqual(out.at(-1), { value: 'gone-1', label: 'Current: gone-1', selected: true });
+  assert.equal(out.filter((o) => o.selected).length, 1);
 });

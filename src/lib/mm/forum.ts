@@ -40,6 +40,8 @@ export const renderMmPost: core.Render = mmRenderCache.render;
 
 export const listForums = (args: Parameters<typeof core.listForums>[1]) => core.listForums(poolQ, args);
 export const getForum = (args: Parameters<typeof core.getForum>[1]) => core.getForum(poolQ, args);
+export const authorizeOwnerLibraries = (args: Parameters<typeof core.authorizeOwnerLibraries>[1]) =>
+  core.authorizeOwnerLibraries(poolQ, args);
 export const listForumsAdmin = (args: Parameters<typeof core.listForumsAdmin>[1]) => core.listForumsAdmin(poolQ, args);
 export const createForum = (args: Parameters<typeof core.createForum>[1]) => core.createForum(poolQ, args);
 export const updateForum = (args: Parameters<typeof core.updateForum>[1]) => core.updateForum(poolQ, args);

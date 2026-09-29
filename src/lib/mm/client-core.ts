@@ -85,3 +85,32 @@ export function adminErrorKind(status: number, apiMessage: unknown): AdminErrorK
   if (/slug already exists/i.test(apiMessage)) return 'slugTaken';
   return null;
 }
+
+export type PickerLibrary = { id: string; name: string; path: string; items: number };
+export type PickerOption = { value: string; label: string; selected: boolean };
+
+/**
+ * Options for the admin's Seshat library <select>: a "no library" entry, one
+ * entry per library labelled from `strings.option` ({path}, {count}), and —
+ * when the forum is linked to an id that is not in the list — that id kept
+ * as a selected entry so saving never silently unlinks it.
+ */
+export function libraryPickerOptions(
+  libraries: PickerLibrary[],
+  currentId: string | null | undefined,
+  strings: { none: string; option: string; unknown: string },
+): PickerOption[] {
+  const current = typeof currentId === 'string' ? currentId.trim() : '';
+  const fill = (template: string, vars: Record<string, string | number>) =>
+    template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+  const out: PickerOption[] = [{ value: '', label: strings.none, selected: !current }];
+  let found = false;
+  for (const lib of Array.isArray(libraries) ? libraries : []) {
+    if (!lib || typeof lib.id !== 'string' || !lib.id) continue;
+    const selected = lib.id === current;
+    if (selected) found = true;
+    out.push({ value: lib.id, label: fill(strings.option, { path: lib.path || lib.name || lib.id, count: Number(lib.items) || 0 }), selected });
+  }
+  if (current && !found) out.push({ value: current, label: fill(strings.unknown, { id: current }), selected: true });
+  return out;
+}

@@ -6,7 +6,7 @@
 // place after every change so keyboard and screen-reader users keep context.
 
 import { mmApi, errorText, pageStrings, ApiFailure } from './api.ts';
-import { adminErrorKind } from '../../lib/mm/client-core.ts';
+import { adminErrorKind, libraryPickerOptions, type PickerLibrary } from '../../lib/mm/client-core.ts';
 import { formatDate } from '../../lib/mm/view.ts';
 
 type Role = 'admin' | 'curator' | 'member' | 'guest';
@@ -410,6 +410,101 @@ function initOpenJoin(): void {
   });
 }
 
+// ——— Seshat library picker ———
+type LibraryListing = { available: boolean; libraries: PickerLibrary[] };
+const LIBRARY_TTL_MS = 60_000;
+const libraryCache = new Map<string, { at: number; listing: Promise<LibraryListing> }>();
+
+/** The owner's Seshat libraries (admin API), cached per owner for a minute. */
+function ownerLibraries(owner: string): Promise<LibraryListing> {
+  const hit = libraryCache.get(owner);
+  if (hit && Date.now() - hit.at < LIBRARY_TTL_MS) return hit.listing;
+  const listing = mmApi<LibraryListing>(`/api/mm/admin/seshat-libraries?owner=${encodeURIComponent(owner)}`).then((r) => ({
+    available: r?.available === true,
+    libraries: Array.isArray(r?.libraries) ? r.libraries : [],
+  }));
+  libraryCache.set(owner, { at: Date.now(), listing });
+  listing.catch(() => libraryCache.delete(owner));
+  return listing;
+}
+
+/**
+ * Wires a forum form's bibliography fieldset: once the owner email is valid,
+ * the owner's libraries fill an accessible <select> whose choice is written
+ * into the seshatLibraryId field; that field stays available under
+ * "Enter id manually" (opened when the list is unavailable or empty).
+ */
+function attachLibraryPicker(form: HTMLFormElement): { refresh: () => Promise<void> } {
+  const ownerInput = form.elements.namedItem('ownerEmail') as HTMLInputElement;
+  const idInput = form.elements.namedItem('seshatLibraryId') as HTMLInputElement;
+  const row = form.querySelector<HTMLElement>('[data-lib-picker]')!;
+  const select = form.querySelector<HTMLSelectElement>('[data-lib-select]')!;
+  const status = form.querySelector<HTMLElement>('[data-lib-status]')!;
+  const manual = form.querySelector<HTMLDetailsElement>('[data-lib-manual]')!;
+  let libraries: PickerLibrary[] | null = null;
+  let seq = 0;
+
+  const fillOptions = () => {
+    if (!libraries) return;
+    const options = libraryPickerOptions(libraries, idInput.value, {
+      none: S('forums.seshatNone'), option: S('forums.seshatOption'), unknown: S('forums.seshatUnknown'),
+    });
+    select.replaceChildren(...options.map((o) => {
+      const el = h('option', { value: o.value, text: o.label });
+      el.selected = o.selected;
+      return el;
+    }));
+  };
+  const fallBack = (message: string) => {
+    libraries = null;
+    row.hidden = true;
+    status.textContent = message;
+    manual.open = true;
+  };
+
+  const refresh = async () => {
+    const n = ++seq;
+    const owner = ownerInput.value.trim().toLowerCase();
+    if (!owner || !ownerInput.checkValidity()) {
+      libraries = null;
+      row.hidden = true;
+      status.textContent = S('forums.seshatNeedOwner');
+      if (idInput.value.trim()) manual.open = true;
+      return;
+    }
+    status.textContent = S('forums.seshatLoading');
+    select.disabled = true;
+    try {
+      const listing = await ownerLibraries(owner);
+      if (n !== seq) return;
+      if (!listing.available) return fallBack(S('forums.seshatUnavailable'));
+      libraries = listing.libraries;
+      fillOptions();
+      row.hidden = false;
+      select.disabled = false;
+      status.textContent = libraries.length ? S('forums.seshatLoaded', { count: libraries.length }) : S('forums.seshatEmpty');
+      if (!libraries.length) manual.open = true;
+    } catch (err) {
+      if (n === seq) fallBack(`${S('forums.seshatUnavailable')} (${errorMessage(err)})`);
+    }
+  };
+
+  select.addEventListener('change', () => {
+    idInput.value = select.value;
+  });
+  idInput.addEventListener('change', fillOptions);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  ownerInput.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => void refresh(), 600);
+  });
+  ownerInput.addEventListener('change', () => {
+    clearTimeout(timer);
+    void refresh();
+  });
+  return { refresh };
+}
+
 // ——— Forums ———
 function initForums(): void {
   const sec = new Section('forums');
@@ -467,6 +562,14 @@ function initForums(): void {
         const v = forum.settings?.[k];
         if (v) bib.append(h('dt', { text: labels[k] }), h('dd', { text: v }));
       }
+      const linkedId = forum.settings?.seshatLibraryId;
+      const linkedOwner = forum.settings?.ownerEmail?.trim().toLowerCase();
+      if (linkedId && linkedOwner) {
+        ownerLibraries(linkedOwner).then((listing) => {
+          const lib = listing.libraries.find((l) => l.id === linkedId);
+          if (lib) bib.append(h('dt', { text: S('forums.seshatPick') }), h('dd', { text: lib.path || lib.name }));
+        }, () => { /* the id above is enough */ });
+      }
       const desc = forum.description ? h('p', { class: 'mm-list-desc mm-pre-line', text: forum.description }) : null;
 
       const editId = `mm-forum-edit-${n}`;
@@ -521,6 +624,7 @@ function initForums(): void {
           }
         });
         slot.replaceChildren(form);
+        void attachLibraryPicker(form).refresh();
         edit.setAttribute('aria-expanded', 'true');
         focusLater(form.elements.namedItem('title') as HTMLInputElement);
       });
@@ -544,6 +648,16 @@ function initForums(): void {
     sec.list!.replaceChildren(ul);
   };
   const reload = () => sec.load('/api/mm/admin/forums', (d) => (d?.forums ?? []) as Forum[], render);
+
+  // New forums default to the signed-in admin as the bibliography owner.
+  const selfEmail = root!.dataset.mmSelfEmail ?? '';
+  const createOwner = createForm.elements.namedItem('ownerEmail') as HTMLInputElement;
+  const createPicker = attachLibraryPicker(createForm);
+  const resetCreateOwner = () => {
+    if (selfEmail && !createOwner.value) createOwner.value = selfEmail;
+    void createPicker.refresh();
+  };
+  resetCreateOwner();
 
   createForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -571,6 +685,7 @@ function initForums(): void {
       const r = await mmApi<{ forum: Forum }>('/api/mm/forums', { method: 'POST', body });
       sec.ok(S('forums.created', { title: r.forum?.title ?? String(body.title) }));
       createForm.reset();
+      resetCreateOwner();
       await reload();
       focusLater(heading);
     } catch (err) {

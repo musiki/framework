@@ -175,6 +175,10 @@ h3 .mm-dot { margin-right: 0.45rem; }
 .mm-check label { font-weight: 700; }
 .mm-form .mm-admin-bib { border: 1px solid var(--mm-ink-15); padding: 0.9rem 1rem 1rem; display: grid; gap: 0.9rem; }
 .mm-admin-bib legend { padding: 0 0.35rem; }
+.mm-admin-bib .mm-form-row[hidden] { display: none; }
+.mm-admin-bib [data-lib-select] { width: 100%; }
+.mm-admin-lib-manual > summary { cursor: pointer; }
+.mm-admin-lib-manual > .mm-form-row { margin-top: 0.6rem; }
 .mm-admin-forums { list-style: none; margin: 0 0 1.5rem; padding: 0; border-top: var(--mm-rule); }
 .mm-admin-forums > li { padding: 0.85rem 0; border-bottom: 1px solid var(--mm-ink-15); display: grid; gap: 0.45rem; }
 .mm-admin-forums > li > p { margin: 0; }
