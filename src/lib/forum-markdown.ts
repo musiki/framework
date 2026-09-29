@@ -118,7 +118,8 @@ export function remarkStripLilyRenderedComments() {
     if (!node) return;
     if (node.type === 'code' && LILY_LANGS.has(String(node.lang ?? '').trim().toLowerCase())) {
       node.value = String(node.value ?? '')
-        .split('\n')
+        // Same line terminators as the consumer's /m regexes (CR, LF, CRLF, U+2028/9).
+        .split(/\r\n|[\n\r\u2028\u2029]/)
         .filter((line: string) => !RENDERED_COMMENT_RE.test(line))
         .join('\n');
     }
@@ -232,8 +233,14 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     processor = processor.use(remarkStripLilyRenderedComments);
   }
 
+  // Sanitized (mm) posts never render Mermaid server-side: the SVG would be
+  // stripped anyway, and author-controlled diagrams can stall the JSDOM
+  // renderer. The source stays a plain code block.
+  if (options.sanitize !== true) {
+    processor = processor.use(remarkMermaid);
+  }
+
   processor = processor
-    .use(remarkMermaid)
     .use(remarkWikiLink)
     .use(remarkMediaEmbed)
     .use(remarkLily)

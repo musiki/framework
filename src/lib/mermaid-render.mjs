@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom';
+import { createRenderQueue } from './mermaid-queue.mjs';
 
-let renderQueue = Promise.resolve();
 let renderSequence = 0;
 let mermaidDom = null;
 
@@ -217,10 +217,22 @@ function installSvgMeasurements(window) {
   installBoxAccessors(window.HTMLElement?.prototype);
 }
 
+/**
+ * Server-side renders never load images. Mermaid waits for every <img> in a
+ * node label to fire load/error or report `complete`; JSDOM does neither, so
+ * such a diagram used to hang forever. Report images as complete (broken).
+ */
+function installImageCompletion(window) {
+  const proto = window.HTMLImageElement?.prototype;
+  if (!proto) return;
+  Object.defineProperty(proto, 'complete', { configurable: true, get: () => true });
+}
+
 function getMermaidDom() {
   if (!mermaidDom) {
     mermaidDom = new JSDOM('<!doctype html><html><body></body></html>');
     installSvgMeasurements(mermaidDom.window);
+    installImageCompletion(mermaidDom.window);
   }
   return mermaidDom;
 }
@@ -263,9 +275,24 @@ try {
   restoreInitializationGlobals();
 }
 
-async function renderMermaidSource(source) {
+async function renderMermaidSource(source, job) {
   const dom = getMermaidDom();
   const restoreGlobals = installMermaidGlobals(dom);
+  let cleaned = false;
+  // Runs once: on completion, or from the queue's timeout (a render that
+  // never settles). A late-settling timed-out render must not touch the
+  // globals/DOM of the render that runs after it.
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    dom.window.document.body.replaceChildren();
+    restoreGlobals();
+  };
+  job.cleanup = () => {
+    cleanup();
+    // The stuck render may keep mutating this DOM: give later renders a fresh one.
+    if (mermaidDom === dom) mermaidDom = null;
+  };
 
   try {
     mermaid.initialize({
@@ -278,17 +305,31 @@ async function renderMermaidSource(source) {
     const result = await mermaid.render(id, source);
     return String(result.svg || '').trim();
   } finally {
-    dom.window.document.body.replaceChildren();
-    restoreGlobals();
+    if (!job.timedOut) cleanup();
   }
 }
 
+// Mermaid serializes renders internally too: a render that never settles
+// wedges mermaid itself, so after a timeout server-side rendering is switched
+// off for this process (remark-mermaid falls back to client rendering) rather
+// than making every later diagram wait for the timeout.
+let wedged = false;
+const enqueueRender = createRenderQueue({
+  onTimeout: (job) => {
+    job.cleanup?.();
+    if (!wedged) console.error('[mermaid-render] render timed out; server-side Mermaid disabled until restart');
+    wedged = true;
+  },
+});
+
+/**
+ * Renders Mermaid source to SVG, one diagram at a time. Rejects after
+ * MERMAID_RENDER_TIMEOUT_MS (remark-mermaid then falls back to the source
+ * block) and releases the queue, so one stuck diagram cannot stall the rest.
+ */
 export function renderMermaidSvg(source) {
   const normalized = String(source || '').trim();
   if (!normalized) return Promise.resolve('');
-
-  const render = () => renderMermaidSource(normalized);
-  const result = renderQueue.then(render, render);
-  renderQueue = result.catch(() => undefined);
-  return result;
+  if (wedged) return Promise.reject(new Error('server-side Mermaid disabled after a timed-out render'));
+  return enqueueRender((job) => renderMermaidSource(normalized, job));
 }

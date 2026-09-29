@@ -648,7 +648,7 @@ test('listPosts passes the post identity to the renderer (render cache key)', as
   await listPosts(postsDb().q, {
     spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; },
   });
-  assert.deepEqual(seen, [{ id: POST, updatedAt: 't2', forumId: FORUM }]);
+  assert.deepEqual(seen, [{ id: POST, updatedAt: 't2', forumId: FORUM, forumBibliography: '|' }]);
 });
 
 test('user names that look like e-mails never leave the core', async () => {
@@ -664,4 +664,19 @@ test('user names that look like e-mails never leave the core', async () => {
   assert.deepEqual(view.thread.createdBy, { name: null, deleted: false });
   assert.deepEqual(view.posts[0].author, { name: null, deleted: false });
   noEmail({ t: view.thread.createdBy, p: view.posts[0].author });
+});
+
+test('listPosts passes the forum bibliography link to the renderer (cache invalidation)', async () => {
+  const { q } = fakeQuery([
+    memberRoute,
+    [/FROM "ForumThread" t\s+LEFT JOIN "User" u/, () => [{
+      id: THREAD, title: 'T', isPinned: false, isLocked: false, createdAt: 't', updatedAt: 't', archivedAt: null,
+      createdByUserId: U.member, createdByName: 'A', forumId: FORUM, forumSlug: 'technics', forumTitle: 'Technics', forumArchived: false,
+      forumSettings: { seshatLibraryId: 'lib-1', ownerEmail: 'Owner@Uni.no' },
+    }]],
+    [/FROM "ForumPost" p\s+LEFT JOIN "User" u/, () => [{ id: POST, authorUserId: U.member, authorName: 'A', body: 'x', status: 'published', createdAt: 't', updatedAt: 't' }]],
+  ]);
+  const seen = [];
+  await listPosts(q, { spaceId: SPACE, threadId: THREAD, render: async (md, post) => { seen.push(post); return md; } });
+  assert.equal(seen[0].forumBibliography, 'lib-1|owner@uni.no');
 });

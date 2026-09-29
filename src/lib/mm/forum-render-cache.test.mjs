@@ -101,3 +101,15 @@ test('a lilypond fence without a rendered figure is not cached', async () => {
   await cache.render(md, post);
   assert.equal(n, 3);
 });
+
+test('re-linking the forum bibliography invalidates cached renders (and the owner is not in the key)', async () => {
+  const { render, calls } = counting();
+  const cache = createRenderCache(render);
+  const post = (bib) => ({ id: 'p', updatedAt: 't', forumId: 'f', lang: 'en', forumBibliography: bib });
+  await cache.render('x', post('lib1|a@x.org'));
+  await cache.render('x', post('lib1|a@x.org'));
+  await cache.render('x', post('lib2|a@x.org'));
+  await cache.render('x', post('lib2|b@x.org'));
+  assert.equal(calls.length, 3);
+  assert.ok(!renderCacheKey('x', post('lib1|a@x.org')).includes('@'));
+});

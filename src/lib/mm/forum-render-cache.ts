@@ -1,7 +1,8 @@
 // Bounded LRU cache for rendered mm post HTML. Rendering can be slow
 // (LilyPond render, Seshat citation lookups), and mm threads are read
 // anonymously, so each post is rendered once per version: the key is forum id
-// + UI lang + post id + updatedAt + a hash of the body, so an edit, a
+// + UI lang + post id + updatedAt + a hash of the body and the forum's
+// bibliography link (library id + owner), so an edit, a
 // moderation change, a body change or a different forum bibliography scope
 // yields a new key and the old entry just ages out. Failed renders are not
 // cached, and neither are renders the renderer marks as not cacheable nor
@@ -10,7 +11,14 @@
 
 import { createHash } from 'node:crypto';
 
-export type PostRef = { id: string; updatedAt: string | null; forumId?: string | null; lang?: string | null };
+export type PostRef = {
+  id: string;
+  updatedAt: string | null;
+  forumId?: string | null;
+  /** Forum bibliography link (library id + owner): part of the key (hashed), so re-linking invalidates. */
+  forumBibliography?: string | null;
+  lang?: string | null;
+};
 export type RenderFn = (markdown: string, post?: PostRef) => Promise<string>;
 /** A renderer may return `{ html, cacheable: false }` (e.g. citation lookup failed). */
 export type DetailedRenderFn = (
@@ -21,7 +29,12 @@ export type DetailedRenderFn = (
 export const RENDER_CACHE_MAX = 500;
 
 export function renderCacheKey(markdown: string, post?: PostRef): string {
-  const hash = createHash('sha256').update(markdown).digest('base64url').slice(0, 22);
+  const hash = createHash('sha256')
+    .update(markdown)
+    .update('\0')
+    .update(post?.forumBibliography ?? '')
+    .digest('base64url')
+    .slice(0, 22);
   const scope = `${post?.forumId ?? ''}|${post?.lang ?? ''}`;
   return post ? `${scope}|${post.id}|${post.updatedAt ?? ''}|${hash}` : `${scope}|body|${hash}`;
 }

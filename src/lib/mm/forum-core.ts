@@ -53,7 +53,13 @@ export type UserRef = { name: string | null; deleted: boolean };
  * `post` identifies the rendered post (id + updatedAt) and its forum (whose
  * bibliography scopes citations) so callers can cache renders.
  */
-export type RenderPostRef = { id: string; updatedAt: string | null; forumId?: string | null };
+export type RenderPostRef = {
+  id: string;
+  updatedAt: string | null;
+  forumId?: string | null;
+  /** Forum bibliography link (library id + owner) so re-linking invalidates cached renders. Never serialized. */
+  forumBibliography?: string | null;
+};
 export type Render = (markdown: string, post?: RenderPostRef) => Promise<string>;
 
 const TITLE_MIN = 3;
@@ -621,6 +627,7 @@ export async function listPosts(
     `SELECT t.id, t.title, t."isPinned", t."isLocked", t."createdAt", t."updatedAt", t."archivedAt",
             t."createdByUserId", u.name AS "createdByName",
             b.id AS "forumId", b.slug AS "forumSlug", b.title AS "forumTitle", b."isArchived" AS "forumArchived",
+            b.settings AS "forumSettings",
             c.slug AS "conceptSlug", c.label AS "conceptLabel"
      FROM "ForumThread" t
      LEFT JOIN "User" u ON u.id = t."createdByUserId"
@@ -639,6 +646,8 @@ export async function listPosts(
 
   const role = await viewerRole(q, spaceId, viewerUserId);
   const canModerate = can(role, 'moderate');
+  const bib = parseSettings(t.forumSettings);
+  const forumBibliography = `${bib.seshatLibraryId ?? ''}|${bib.ownerEmail ? normalizeEmail(bib.ownerEmail) : ''}`;
 
   const rows = await run(
     q,
@@ -686,7 +695,7 @@ export async function listPosts(
       move: isPostMove(p.move) ? p.move : null,
       status,
       body,
-      bodyHtml: body ? await safeRender(render, body, { id: p.id, updatedAt: p.updatedAt ?? null, forumId: t.forumId ?? null }) : '',
+      bodyHtml: body ? await safeRender(render, body, { id: p.id, updatedAt: p.updatedAt ?? null, forumId: t.forumId ?? null, forumBibliography }) : '',
       author: userRef(p.authorUserId, p.authorName),
       own: !!viewerUserId && p.authorUserId === viewerUserId,
       votes: v?.votes ?? emptyVotes(),

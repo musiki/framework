@@ -160,3 +160,23 @@ test('citations option: a failing resolver leaves the text as written', async ()
   });
   assert.match(html, /\[@k1\]/);
 });
+
+test('sanitize mode never renders Mermaid (the source stays a code block)', async () => {
+  // Would hang the JSDOM renderer (waits for the <img> to load) if rendered.
+  const md = '```mermaid\ngraph TD; A["<img src=/mm/a.png>"]-->B\n```\n';
+  let timer;
+  const html = await Promise.race([
+    safe(md),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('mermaid render not skipped')), 5000); }),
+  ]).finally(() => clearTimeout(timer));
+  assert.match(html, /<pre[^>]*><code class="[^"]*language-mermaid/);
+  assert.ok(!/<svg|class="mermaid/.test(html), html);
+  assert.ok(!/<img/.test(html), html);
+});
+
+test('sanitize: `% rendered:` stripping splits on every line terminator', async () => {
+  const { remarkStripLilyRenderedComments } = await import('./forum-markdown.ts');
+  const tree = { type: 'root', children: [{ type: 'code', lang: 'ly', value: '{ c4 }\r% rendered: a https://e.test/x.svg\u2028% rendered: b\r\n{ d4 }\u2029%rendered: c' }] };
+  remarkStripLilyRenderedComments()(tree);
+  assert.equal(tree.children[0].value, '{ c4 }\n{ d4 }');
+});
