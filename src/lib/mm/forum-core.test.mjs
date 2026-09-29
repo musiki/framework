@@ -161,9 +161,15 @@ test('listForumsAdmin: curator sees full settings incl. ownerEmail; member denie
   await rejectsStatus(listForumsAdmin(q, { spaceId: SPACE, actorUserId: null }), 401);
 });
 
+const ownEmailsRoute = (emails = { [U.curator]: ['owner@uni.no'] }) => [
+  'FROM "UserEmail"',
+  ([userId]) => (emails[userId] ?? []).map((email) => ({ email })),
+];
+
 test('createForum: curator creates a space forum (no course), settings stored', async () => {
   const { q, calls } = fakeQuery([
     memberRoute,
+    ownEmailsRoute(),
     ['SELECT id FROM "ForumBoard"', () => []],
     ['INSERT INTO "ForumBoard"', (p) => [{ id: FORUM, slug: p[1], title: p[2], description: p[3], isArchived: false, settings: JSON.parse(p[5]) }]],
   ]);
@@ -226,6 +232,38 @@ test('updateForum: archive flag, nothing to update, other space forum 404, membe
   await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: id(99), actorUserId: U.admin, title: 'New' }), 404);
   await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: 'not-a-uuid', actorUserId: U.admin, title: 'New' }), 404);
   await rejectsStatus(updateForum(q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, title: 'New' }), 403);
+});
+
+test('forum bibliography owner: admins set any; curators only their own email', async () => {
+  const insert = ['INSERT INTO "ForumBoard"', (p) => [{ id: FORUM, slug: p[1], title: p[2], description: p[3], isArchived: false, settings: JSON.parse(p[5]) }]];
+  const base = [memberRoute, ownEmailsRoute({ [U.curator]: ['me@uni.no'] }), ['SELECT id FROM "ForumBoard"', () => []], insert];
+  const { q } = fakeQuery(base);
+  const other = { seshatLibraryId: 'lib-1', ownerEmail: 'someone@else.org' };
+  // admin: anyone's email
+  const a = await createForum(q, { spaceId: SPACE, actorUserId: U.admin, title: 'Admin forum', settings: other });
+  assert.equal(a.settings.ownerEmail, 'someone@else.org');
+  // curator: someone else's email refused, own (any case) accepted
+  await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Curator forum', settings: other }), 403);
+  const c = await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Curator forum', settings: { seshatLibraryId: 'lib-1', ownerEmail: 'Me@Uni.no' } });
+  assert.equal(c.settings.ownerEmail, 'me@uni.no');
+  // curator without owner fields: no email lookup needed
+  await createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Plain forum', settings: { zoteroCollection: 'ABCD' } });
+
+  // update: curator cannot point an admin-owned forum at another library, nor take it over with a foreign owner
+  const upd = (row) => fakeQuery([
+    memberRoute, ownEmailsRoute({ [U.curator]: ['me@uni.no'] }), forumByIdRoute(row),
+    ['UPDATE "ForumBoard"', () => [row]],
+  ]).q;
+  const adminOwned = forumRow(); // ownerEmail owner@uni.no (not the curator's)
+  await rejectsStatus(updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-9' } }), 403);
+  await rejectsStatus(updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { ownerEmail: 'x@y.org' } }), 403);
+  // ...but may switch it to their own email, clear the link, or edit other fields
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { ownerEmail: 'me@uni.no', seshatLibraryId: 'lib-9' } });
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { ownerEmail: null } });
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { zoteroCollection: 'ABCD' } });
+  const mine = forumRow({ settings: { seshatLibraryId: 'lib-1', ownerEmail: 'me@uni.no' } });
+  await updateForum(upd(mine), { spaceId: SPACE, forumId: FORUM, actorUserId: U.curator, settings: { seshatLibraryId: 'lib-2' } });
+  await updateForum(upd(adminOwned), { spaceId: SPACE, forumId: FORUM, actorUserId: U.admin, settings: { seshatLibraryId: 'lib-2', ownerEmail: 'any@one.org' } });
 });
 
 // ---------------------------------------------------------------------------

@@ -365,7 +365,7 @@ export const mmEn = {
       slugHelp: 'Lowercase letters, digits and hyphens; the forum is found at /f/ and this address. Left empty, it is made from the title. It cannot be changed later.',
       description: 'Description',
       bibTitle: 'Bibliography',
-      bibLead: 'Link a Seshat library so that posts can cite references as [@key] (typing @ searches the library). Readers see only the Zotero collection, never the library id or the owner email.',
+      bibLead: 'Link a Seshat library so that posts can cite references as [@key] (typing @ searches the library). Readers see only the Zotero collection, never the library id or the owner email. Curators can link only a library owned by their own email; admins can link any.',
       seshat: 'Seshat library id',
       seshatHelp: 'Import your .bib in Seshat, then paste the library id here.',
       zotero: 'Zotero collection',

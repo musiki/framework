@@ -368,7 +368,7 @@ export const nb: Pick<Dict, 'mm'> = {
         slugHelp: 'Små bokstaver, sifre og bindestreker; forumet finnes under /f/ og denne adressen. Står feltet tomt, lages adressen av tittelen. Den kan ikke endres senere.',
         description: 'Beskrivelse',
         bibTitle: 'Litteratur',
-        bibLead: 'Koble til et Seshat-bibliotek, så kan innlegg sitere referanser som [@nøkkel] (@ søker i biblioteket). Leserne ser bare Zotero-samlingen, aldri bibliotek-ID-en eller eierens e-post.',
+        bibLead: 'Koble til et Seshat-bibliotek, så kan innlegg sitere referanser som [@nøkkel] (@ søker i biblioteket). Leserne ser bare Zotero-samlingen, aldri bibliotek-ID-en eller eierens e-post. Kuratorer kan bare koble et bibliotek som eies av sin egen e-post; administratorer kan koble hvilket som helst.',
         seshat: 'Seshat-bibliotek-ID',
         seshatHelp: 'Importer .bib-filen din i Seshat, og lim deretter inn bibliotek-ID-en her.',
         zotero: 'Zotero-samling',

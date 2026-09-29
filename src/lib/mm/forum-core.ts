@@ -191,6 +191,30 @@ export function cleanSettingsPatch(raw: unknown): Partial<Record<ForumSettingsKe
   return out;
 }
 
+/**
+ * Who may link a forum bibliography (spec: the library is read on behalf of
+ * `ownerEmail`): space admins may set any owner/library; a curator may set
+ * `ownerEmail`/`seshatLibraryId` only when the resulting owner is one of the
+ * curator's OWN emails (UserEmail rows, i.e. addresses they signed in with).
+ * Clearing is always allowed.
+ */
+async function assertBibliographyAllowed(
+  q: QueryFn,
+  role: CommonsRole,
+  actorUserId: string,
+  patch: Partial<Record<ForumSettingsKey, string | null>>,
+  current: ForumSettings,
+): Promise<void> {
+  if (role === 'admin') return;
+  if (!patch.ownerEmail && !patch.seshatLibraryId) return;
+  const owner = 'ownerEmail' in patch ? patch.ownerEmail : current.ownerEmail ? normalizeEmail(current.ownerEmail) : null;
+  if (!owner) return;
+  const rows = await run(q, `SELECT lower("email") AS email FROM "UserEmail" WHERE "userId" = $1::uuid`, [actorUserId]);
+  if (!rows.some((r) => String(r.email ?? '') === owner)) {
+    throw new ForumError(403, 'only an admin can link a bibliography owned by someone else; use your own email');
+  }
+}
+
 function parseSettings(raw: unknown): ForumSettings {
   let obj: unknown = raw;
   if (typeof raw === 'string') {
@@ -334,11 +358,12 @@ export async function createForum(
   input: { spaceId: string; actorUserId: string | null; title: unknown; slug?: unknown; description?: unknown; settings?: unknown },
 ): Promise<ForumAdminView> {
   const spaceId = requireUuid(input.spaceId, 'space');
-  await authorize(q, spaceId, input.actorUserId, 'manageForums');
+  const role = await authorize(q, spaceId, input.actorUserId, 'manageForums');
   const title = cleanTitle(input.title, FORUM_TITLE_MAX);
   const slug = forumSlug(input.slug, title);
   const description = cleanDescription(input.description);
   const patch = cleanSettingsPatch(input.settings);
+  await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, {});
   const settings: ForumSettings = {};
   for (const [k, v] of Object.entries(patch)) if (v) settings[k as ForumSettingsKey] = v;
 
@@ -381,7 +406,7 @@ export async function updateForum(
   },
 ): Promise<ForumAdminView> {
   const spaceId = requireUuid(input.spaceId, 'space');
-  await authorize(q, spaceId, input.actorUserId, 'manageForums');
+  const role = await authorize(q, spaceId, input.actorUserId, 'manageForums');
   const forum = await loadSpaceForum(q, spaceId, input.forumId, { includeArchived: true });
 
   const sets: string[] = [];
@@ -398,6 +423,7 @@ export async function updateForum(
   }
   if (input.settings !== undefined) {
     const patch = cleanSettingsPatch(input.settings);
+    await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, parseSettings(forum.settings));
     if (Object.keys(patch).length) {
       // Merge: set keys overwrite, null keys are removed (settings values are flat strings).
       push((n) => `settings = jsonb_strip_nulls(COALESCE(settings, '{}'::jsonb) || ${n}::jsonb)`, JSON.stringify(patch));
