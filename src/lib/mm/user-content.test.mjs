@@ -10,7 +10,7 @@ const MERGE = 'merge-id';
 test('merge re-points concept AND forum user columns', () => {
   const cols = MERGE_REPOINT_COLUMNS.map(([t, c]) => `${t}.${c}`);
   for (const c of ['Concept.createdBy', 'ConceptVersion.editedBy', 'ConceptVersion.creditedUserId', 'ConceptRelation.createdBy',
-    'ForumBoard.createdByUserId', 'ForumThread.createdByUserId', 'ForumPost.authorUserId']) {
+    'ConceptRelation.settledBy', 'RelationType.createdBy', 'ForumBoard.createdByUserId', 'ForumThread.createdByUserId', 'ForumPost.authorUserId']) {
     assert.ok(cols.includes(c), c);
   }
 });
@@ -21,6 +21,9 @@ test('repoint: duplicate votes dropped first, then moved; every column updated',
   assert.deepEqual(await repointMergedUserContent(q, KEEP, MERGE), { ok: true });
   assert.match(calls[0].text, /DELETE FROM "ForumPostVote" m WHERE m\."userId" = \$2\s+AND EXISTS \(SELECT 1 FROM "ForumPostVote" k WHERE k\."userId" = \$1 AND k\."postId" = m\."postId"\)/);
   assert.match(calls[1].text, /UPDATE "ForumPostVote" SET "userId" = \$1 WHERE "userId" = \$2/);
+  // Relation stances: one per (relation, user) — duplicates dropped, the rest re-pointed.
+  assert.match(calls[2].text, /DELETE FROM "ConceptRelationStance" m WHERE m\."userId" = \$2\s+AND EXISTS \(SELECT 1 FROM "ConceptRelationStance" k WHERE k\."userId" = \$1 AND k\."relationId" = m\."relationId"\)/);
+  assert.match(calls[3].text, /UPDATE "ConceptRelationStance" SET "userId" = \$1 WHERE "userId" = \$2/);
   for (const c of calls) assert.deepEqual(c.params, [KEEP, MERGE]);
   for (const [t, c] of MERGE_REPOINT_COLUMNS) {
     assert.ok(calls.some((x) => x.text === `UPDATE "${t}" SET "${c}" = $1 WHERE "${c}" = $2`), `${t}.${c}`);
@@ -59,4 +62,10 @@ test('forum probes only match space-scoped rows (course forum users can still be
 test('delete refusal message tells the admin to merge', () => {
   assert.match(deleteBlockedMessage(['forum posts']), /forum posts/);
   assert.match(deleteBlockedMessage(['forum posts']), /[Mm]erge/);
+});
+
+test('relation stances do not block an account deletion (they cascade)', async () => {
+  const texts = [];
+  await findSpaceScopedContent(async (t) => { texts.push(t); return { data: [], error: null }; }, 'u');
+  assert.ok(!texts.some((t) => t.includes('ConceptRelationStance')));
 });

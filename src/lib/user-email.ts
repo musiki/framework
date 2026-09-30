@@ -127,7 +127,7 @@ export async function registerEmailForUser(
  * 1. Transfer all UserEmail rows from mergeId → keepId
  * 2. Reassign all Enrollment rows from mergeId → keepId (skip duplicates)
  * 3. Reassign all Submission rows from mergeId → keepId (skip duplicates)
- * 3b. Re-point mm concept + forum user columns (MERGE_REPOINT_COLUMNS; votes
+ * 3b. Re-point mm concept + forum user columns (MERGE_REPOINT_COLUMNS; votes and relation stances
  *     via MERGE_DEDUPE_COLUMNS, skipping duplicates) mergeId → keepId
  * 4. Delete the mergeId User record
  */

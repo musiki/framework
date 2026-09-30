@@ -8,6 +8,8 @@
 //   a post the kept user already voted on is dropped, the rest move.
 // - Delete (src/pages/api/admin/users/[id].ts): refused (409) while the user
 //   has any space-scoped forum rows or concept rows; the admin merges instead.
+//   Relation stances are not counted: they are deleted with the account (FK
+//   ON DELETE CASCADE, spec "Deleting an account deletes its stances").
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<{ data: any[] | null; error: any }>;
 
@@ -17,6 +19,8 @@ export const MERGE_REPOINT_COLUMNS: ReadonlyArray<readonly [table: string, colum
   ['ConceptVersion', 'editedBy'],
   ['ConceptVersion', 'creditedUserId'],
   ['ConceptRelation', 'createdBy'],
+  ['ConceptRelation', 'settledBy'],
+  ['RelationType', 'createdBy'],
   ['ForumBoard', 'createdByUserId'],
   ['ForumThread', 'createdByUserId'],
   ['ForumPost', 'authorUserId'],
@@ -25,6 +29,8 @@ export const MERGE_REPOINT_COLUMNS: ReadonlyArray<readonly [table: string, colum
 /** Unique-per-user rows: [table, user column, the other columns of the unique key]. */
 export const MERGE_DEDUPE_COLUMNS: ReadonlyArray<readonly [table: string, column: string, keyColumns: readonly string[]]> = [
   ['ForumPostVote', 'userId', ['postId']],
+  // One stance per (relation, user): where both accounts took a stance the kept user's stays.
+  ['ConceptRelationStance', 'userId', ['relationId']],
 ];
 
 /** Missing table/column: the mm migration is not applied on this database, nothing to do. */
