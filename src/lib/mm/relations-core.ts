@@ -25,6 +25,7 @@ import {
 import { listRelationTypes, relationsLockKey, type RelationTypeView } from './relation-types-core.ts';
 import { inferRelations, wouldCloseCycle, MAX_INFERENCE_DEPTH } from './inference.ts';
 import { definitionExcerpt, pickDefinition, type ViewLang } from './view.ts';
+import { REVEAL_AT_SQL } from './stances-core.ts';
 
 const TYPE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -207,6 +208,12 @@ export type GraphEdge = {
   createdAt: string | null;
   /** A curator closed its discussion. */
   settled: boolean;
+  /**
+   * When the stances behind the totals are shown to members (the frozen reveal
+   * date, or the settle time when that came first); null for an inferred
+   * relation. A date only — never who voted.
+   */
+  revealAt: string | null;
 };
 
 export type GraphPayload = { nodes: GraphNode[]; edges: GraphEdge[]; relationTypes: RelationTypeView[] };
@@ -237,6 +244,7 @@ export async function graph(
   const rels = await run(
     q,
     `SELECT r.id, r."sourceId", r."targetId", t.slug AS type, r."createdAt", (r."settledAt" IS NOT NULL) AS settled,
+            ${REVEAL_AT_SQL} AS "revealAt",
             (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'agree')::int AS agree,
             (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'disagree')::int AS disagree
      FROM "ConceptRelation" r
@@ -284,6 +292,7 @@ export async function graph(
     edges.push({
       id: r.id, source, target, type: r.type, inferred: false,
       agree: Number(r.agree) || 0, disagree: Number(r.disagree) || 0, createdAt: iso(r.createdAt), settled: r.settled === true,
+      revealAt: iso(r.revealAt),
     });
   }
 
@@ -301,7 +310,7 @@ export async function graph(
       const at = iso(rels[i].createdAt);
       if (at && (!createdAt || new Date(at).getTime() > new Date(createdAt).getTime())) createdAt = at;
     }
-    edges.push({ id: null, source, target, type: inf.type, inferred: true, agree: 0, disagree: 0, createdAt, settled: false });
+    edges.push({ id: null, source, target, type: inf.type, inferred: true, agree: 0, disagree: 0, createdAt, settled: false, revealAt: null });
   }
   return { nodes, edges, relationTypes };
 }

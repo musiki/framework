@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConceptError } from './concepts-core.ts';
 import { createRelation, deleteRelation, graph } from './relations-core.ts';
+import { REVEAL_AT_SQL } from './stances-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const SPACE = id(1);
@@ -293,6 +294,7 @@ const TYPE_VIEWS = [
 ];
 const relRow = (n, s, t, type, over = {}) => ({
   id: id(50 + n), sourceId: s, targetId: t, type, createdAt: `2026-09-1${n}T00:00:00.000Z`, settled: false, agree: 0, disagree: 0,
+  revealAt: new Date(`2026-09-2${n}T00:00:00.000Z`),
   createdBy: U.member, settledBy: U.curator, ...over,
 });
 
@@ -323,7 +325,7 @@ test('graph: slug nodes with createdAt, typed edges with totals/settled/createdA
   assert.deepEqual(g.nodes[1], { id: 'b', label: 'B', labelNb: null, status: 'neologism', forum: null, excerpt: 'English only.',
     excerptLang: 'en', createdAt: '2026-09-02T00:00:00.000Z' });
   assert.deepEqual(g.edges, [{ id: id(51), source: 'pharmakon', target: 'b', type: 'derives', inferred: false, agree: 3, disagree: 1,
-    createdAt: '2026-09-11T00:00:00.000Z', settled: true }]);
+    createdAt: '2026-09-11T00:00:00.000Z', settled: true, revealAt: '2026-09-21T00:00:00.000Z' }]);
   // Legend: the space's types in order; an archived type without relations is left out.
   assert.deepEqual(g.relationTypes.map((t) => t.slug), ['derives', 'combines']);
   assert.deepEqual(fx.find('FROM "RelationType" t').params, [SPACE, true]);
@@ -338,6 +340,8 @@ test('graph: the relations statement reads stance totals only — never who hold
   const sql = fx.find('JOIN "RelationType" t ON t.id = r."typeId"').text;
   assert.match(sql, /count\(\*\) FROM "ConceptRelationStance" s WHERE s\."relationId" = r\.id AND s\.stance = 'agree'/);
   assert.match(sql, /JOIN "RelationType" t ON t\.id = r\."typeId"/);
+  // The reveal date comes from the frozen column (or an earlier settle), the same expression the stance core uses.
+  assert.ok(sql.includes(`${REVEAL_AT_SQL} AS "revealAt"`));
   for (const c of fx.calls) assert.doesNotMatch(c.text, /s\."userId"|"User"|\.name\b|email/);
 });
 
@@ -348,7 +352,7 @@ test('graph: inferred edges for transitive types — flagged, no id, no totals, 
   const g = await graph(fx.q, { spaceId: SPACE });
   const inferred = g.edges.filter((e) => e.inferred);
   assert.deepEqual(inferred, [{ id: null, source: 'pharmakon', target: 'c', type: 'derives', inferred: true, agree: 0, disagree: 0,
-    createdAt: '2026-09-12T00:00:00.000Z', settled: false }], 'combines is not transitive; createdAt = latest edge of the path');
+    createdAt: '2026-09-12T00:00:00.000Z', settled: false, revealAt: null }], 'combines is not transitive; createdAt = latest edge of the path');
   assert.equal(g.edges.filter((e) => !e.inferred).length, 4);
 
   // The same pair asserted: nothing inferred.
