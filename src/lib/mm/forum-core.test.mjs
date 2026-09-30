@@ -19,6 +19,7 @@ import {
   vote,
   moderatePost,
   editPost,
+  patchPost,
   deleteOwnPost,
   isEdited,
   authorizeOwnerLibraries,
@@ -1143,4 +1144,59 @@ test('listPosts: edited marker, author tombstone, per-post canEdit/canDelete', a
   const anon = await listPosts(db().q, { spaceId: SPACE, threadId: THREAD });
   assert.deepEqual(anon.posts.map((p) => p.canEdit || p.canDelete), [false, false, false, false]);
   assert.equal(anon.posts[0].edited, true);
+});
+
+// ---------------------------------------------------------------------------
+// patchPost (PATCH /api/mm/posts/<id>)
+// ---------------------------------------------------------------------------
+
+const patch = (db, actorUserId, body, postId = POST) => patchPost(db.q, { spaceId: SPACE, postId, actorUserId, patch: body });
+
+test('patchPost: edit → author edit; curators 403; invalid action 400', async () => {
+  const db = editDb();
+  assert.equal((await patch(db, U.member, { action: 'edit', body: 'Hi', move: 'combines' })).move, 'combines');
+  await rejectsStatus(patch(editDb(), U.curator, { action: 'edit', body: 'Hi' }), 403);
+  await rejectsStatus(patch(editDb(), U.member, { action: 'edit' }), 400);
+  await rejectsStatus(patch(editDb(), U.member, { action: 'edit', body: 'Hi', move: 'nope' }), 400);
+  await rejectsStatus(patch(editDb(), null, { action: 'edit', body: 'Hi' }), 401);
+  for (const bad of [{}, { action: 'ban' }, { action: 5 }, { action: 'EDIT' }]) await rejectsStatus(patch(editDb(), U.member, bad), 400);
+});
+
+test('patchPost: delete → author tombstone for the author, moderation delete for curators, 403 for other members', async () => {
+  const own = editDb();
+  assert.deepEqual(await patch(own, U.member, { action: 'delete' }), { postId: POST, status: 'deleted', deletedByAuthor: true });
+  assert.match(own.calls.at(-1).text, /"deletedByAuthor" = true/);
+
+  const mod = modDb();
+  assert.deepEqual(await patch(mod, U.curator, { action: 'delete' }), { postId: POST, status: 'deleted' });
+  assert.ok(!/deletedByAuthor/.test(mod.calls.at(-1).text), 'moderation delete keeps its own wording');
+
+  await rejectsStatus(patch(editDb({ authorUserId: U.curator }), U.member, { action: 'delete' }), 403);
+  await rejectsStatus(patch(editDb(), null, { action: 'delete' }), 401);
+  await rejectsStatus(patch(editDb(), U.stranger, { action: 'delete' }), 403);
+  await rejectsStatus(patch(editDb({ isLocked: true }), U.member, { action: 'delete' }), 409);
+  // a curator's own post in a locked thread goes through moderation
+  const locked = fakeQuery([memberRoute, postByIdRoute({ [POST]: ownPost({ authorUserId: U.curator, isLocked: true }) }), ['UPDATE "ForumPost"', (p) => [{ status: p[0] }]]]);
+  assert.deepEqual(await patch(locked, U.curator, { action: 'delete' }), { postId: POST, status: 'deleted' });
+});
+
+test('patchPost: hide / unhide stay curator-only moderation', async () => {
+  assert.deepEqual(await patch(modDb(), U.curator, { action: 'hide' }), { postId: POST, status: 'hidden' });
+  assert.deepEqual(await patch(modDb('hidden'), U.admin, { action: 'unhide' }), { postId: POST, status: 'published' });
+  await rejectsStatus(patch(editDb(), U.member, { action: 'hide' }), 403); // even on their own post
+});
+
+test('musiki course forum is unaffected: additive migration, course queries ignore the new columns', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync(new URL('../../../postgres-patches/migrations/20260930090000_mm_post_author_edit.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '');
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS "editedAt" timestamptz NULL/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS "deletedByAuthor" boolean NOT NULL DEFAULT false/);
+  assert.doesNotMatch(sql, /DROP|ALTER COLUMN|UPDATE |DELETE /);
+  const musiki = readFileSync(new URL('../forum-queries.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(musiki, /editedAt|deletedByAuthor/);
+  // author writes are pinned to the space, so course posts (spaceId NULL) can never match
+  for (const db of [editDb(), editDb()]) {
+    await (db === undefined ? null : edit(db));
+    assert.match(db.calls.at(-1).text, /et\."spaceId" = \$6::uuid/);
+  }
 });

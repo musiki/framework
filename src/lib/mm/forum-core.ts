@@ -1289,3 +1289,39 @@ export async function deleteOwnPost(
   if (!rows.length) throw new ForumError(409, 'post changed concurrently');
   return { postId: post.id, status: 'deleted', deletedByAuthor: true };
 }
+
+export const POST_PATCH_ACTIONS = ['edit', ...MODERATION_ACTIONS] as const;
+
+/**
+ * PATCH /api/mm/posts/<id> dispatcher:
+ *   { action: 'edit', body, move? }   author only (editPost)
+ *   { action: 'delete' }              the author's own post → deleteOwnPost
+ *                                     ("deleted by the author"); anyone else
+ *                                     → moderation delete (curators/admins)
+ *   { action: 'hide' | 'unhide' }     moderation (curators/admins)
+ * A moderator whose own post sits in a locked/archived thread deletes it
+ * through moderation (authors cannot change posts there).
+ */
+export async function patchPost(
+  q: QueryFn,
+  input: { spaceId: string; postId: string; actorUserId: string | null; patch: Record<string, unknown> },
+) {
+  const { spaceId, postId, actorUserId, patch } = input;
+  const action = patch?.action;
+  if (typeof action !== 'string' || !(POST_PATCH_ACTIONS as readonly string[]).includes(action)) {
+    throw new ForumError(400, 'invalid action');
+  }
+  if (action === 'edit') return editPost(q, { spaceId, postId, actorUserId, body: patch.body, move: patch.move });
+  if (action === 'delete' && actorUserId) {
+    const sid = requireUuid(spaceId, 'space');
+    const role = await getCommonsRole(q, sid, actorUserId);
+    if (role) {
+      const post = await loadSpacePost(q, sid, postId);
+      const frozen = post.isLocked || post.threadArchived || post.forumArchived;
+      if (post.authorUserId === actorUserId && !(frozen && can(role, 'moderate'))) {
+        return deleteOwnPost(q, { spaceId, postId, actorUserId });
+      }
+    }
+  }
+  return moderatePost(q, { spaceId, postId, actorUserId, action });
+}

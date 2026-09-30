@@ -44,6 +44,8 @@ export const listPosts = ({ lang = 'en', ...args }: Omit<Parameters<typeof core.
   core.listPosts(poolQ, { ...args, render: mmRendererFor(mmPostRenderCache, lang) });
 export const vote = (args: Parameters<typeof core.vote>[1]) => core.vote(poolQ, args);
 export const moderatePost = (args: Parameters<typeof core.moderatePost>[1]) => core.moderatePost(poolQ, args);
+/** PATCH /api/mm/posts/<id>: author edit/delete or curator moderation (see core). */
+export const patchPost = (args: Parameters<typeof core.patchPost>[1]) => core.patchPost(poolQ, args);
 export const editPost = (args: Parameters<typeof core.editPost>[1]) => core.editPost(poolQ, args);
 export const deleteOwnPost = (args: Parameters<typeof core.deleteOwnPost>[1]) => core.deleteOwnPost(poolQ, args);
 
