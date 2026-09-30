@@ -24,7 +24,7 @@ const MEMBER_UP = ['member', 'curator', 'admin'];
  * returns every holder unless the text itself carries the reveal guard and the
  * membership check. A module that forgot the guard would leak here.
  */
-function db({ revealed = false, settled = false, stances = [], relSpace = SPACE } = {}) {
+function db({ revealed = false, settled = false, stances = [], relSpace = SPACE, commons = true, fromArchived = false } = {}) {
   const state = {
     revealed,
     settledAt: settled ? '2026-09-20T00:00:00.000Z' : null,
@@ -34,13 +34,16 @@ function db({ revealed = false, settled = false, stances = [], relSpace = SPACE 
   const count = (stance) => state.stances.filter((s) => s.stance === stance).length;
   const routes = [
     ['"SpaceMember" m\n     JOIN "Space" s', ([spaceId, userId]) => (spaceId === SPACE && ROLES[userId] ? [{ role: ROLES[userId] }] : [])],
-    [/^SELECT id, "spaceId" FROM "ConceptRelation"/, ([rid]) => (rid === REL ? [{ id: REL, spaceId: relSpace }] : [])],
-    [/^SELECT r\.id, r\."createdAt"/, ([rid, spaceId]) => (rid === REL && (!spaceId || spaceId === relSpace)
+    [/^SELECT r\.id, r\."spaceId" FROM "ConceptRelation" r/, ([rid, spaceId], text) =>
+      (rid === REL && (!text.includes('r."spaceId" = $2::uuid') || spaceId === relSpace) && (!text.includes("sp.kind = 'commons'") || commons)
+        ? [{ id: REL, spaceId: relSpace }] : [])],
+    [/^SELECT r\.id, r\."createdAt"/, ([rid, spaceId], text) => (rid === REL
+      && (!text.includes('r."spaceId" = $2::uuid') || spaceId === relSpace) && (!text.includes("sp.kind = 'commons'") || commons)
       ? [{
           id: REL, createdAt: '2026-09-10T00:00:00.000Z', createdBy: U.member, createdByName: 'Mem', settled: !!state.settledAt, type: 'derives',
           revealAt: state.settledAt ?? '2026-09-24T00:00:00.000Z', revealed: state.revealed,
           sourceSlug: 'a', sourceLabel: 'A', sourceLabelNb: null, targetSlug: 'b', targetLabel: 'B', targetLabelNb: 'B nb',
-          fromPostId: POST, fromThreadId: THREAD, fromBoardSlug: 'concepts', fromGroupSlug: 'stiegler',
+          fromPostId: POST, fromThreadId: THREAD, fromBoardSlug: 'concepts', fromGroupSlug: 'stiegler', fromArchived,
           agree: count('agree'), disagree: count('disagree'),
         }]
       : [])],
@@ -54,7 +57,11 @@ function db({ revealed = false, settled = false, stances = [], relSpace = SPACE 
       return state.stances.map((s) => ({ stance: s.stance, afterReveal: s.afterReveal, name: NAMES[s.userId] ?? null, deleted: false }));
     }],
     [/^SELECT 1 FROM "ConceptRelation" r\s+JOIN "Space" sp/, ([, viewer]) => (MEMBER_UP.includes(ROLES[viewer]) ? [{ ok: 1 }] : [])],
-    ['DELETE FROM "ConceptRelationStance"', ([, userId]) => { state.stances = state.stances.filter((s) => s.userId !== userId); return []; }],
+    ['DELETE FROM "ConceptRelationStance"', ([rid, userId, spaceId], text) => {
+      const pinned = text.includes('r."spaceId" = $3::uuid');
+      if (rid === REL && (!pinned || spaceId === relSpace)) state.stances = state.stances.filter((s) => s.userId !== userId);
+      return [];
+    }],
     ['INSERT INTO "ConceptRelationStance"', ([, userId, stance], text) => {
       // afterReveal comes from the database clock inside the statement.
       const after = text.includes(`(${REVEALED_SQL})`) ? state.revealed : false;
@@ -186,13 +193,13 @@ test('revealed: guests, strangers and the public still get totals only', async (
   }
   // Anonymous: the names statement is not even run.
   const anon = db({ revealed: true, stances: TWO });
-  await getRelationView(anon.q, { relationId: REL, viewerUserId: null });
+  await getRelationView(anon.q, { relationId: REL, spaceId: SPACE, viewerUserId: null });
   assert.ok(!anon.calls.some((c) => c.text.includes('u.name')));
 });
 
 test('revealed with no stances: a member gets an empty list, a guest null', async () => {
-  assert.deepEqual((await getRelationView(db({ revealed: true }).q, { relationId: REL, viewerUserId: U.member })).stances, []);
-  assert.equal((await getRelationView(db({ revealed: true }).q, { relationId: REL, viewerUserId: U.guest })).stances, null);
+  assert.deepEqual((await getRelationView(db({ revealed: true }).q, { relationId: REL, spaceId: SPACE, viewerUserId: U.member })).stances, []);
+  assert.equal((await getRelationView(db({ revealed: true }).q, { relationId: REL, spaceId: SPACE, viewerUserId: U.guest })).stances, null);
 });
 
 test('getRelationView: shape, provenance, own; pinned to the space; bad ids → null', async () => {
@@ -209,9 +216,17 @@ test('getRelationView: shape, provenance, own; pinned to the space; bad ids → 
   const main = fx.calls[0];
   assert.ok(main.text.includes(`${REVEAL_AT_SQL} AS "revealAt"`) && main.text.includes(`(${REVEALED_SQL}) AS revealed`));
   assert.deepEqual(main.params, [REL, SPACE]);
-  assert.equal(await getRelationView(fx.q, { relationId: REL, spaceId: OTHER_SPACE }), null);
-  assert.equal(await getRelationView(fx.q, { relationId: 'nope' }), null);
-  assert.equal(await getRelationView(fx.q, { relationId: id(999) }), null);
+  assert.equal(await getRelationView(fx.q, { relationId: REL, spaceId: OTHER_SPACE }), null, 'a relation id from another space');
+  assert.equal(await getRelationView(fx.q, { relationId: REL }), null, 'spaceId is required');
+  assert.equal(await getRelationView(fx.q, { relationId: REL, spaceId: null }), null);
+  assert.equal(await getRelationView(db({ commons: false }).q, { relationId: REL, spaceId: SPACE }), null, 'commons spaces only');
+  assert.match(main.text, /JOIN "Space" sp ON sp\.id = r\."spaceId" AND sp\.kind = 'commons'/);
+  assert.match(main.text, /WHERE r\.id = \$1::uuid AND r\."spaceId" = \$2::uuid/);
+  // Provenance link dropped when the post's thread/board (or its group) is archived.
+  assert.equal((await getRelationView(db({ fromArchived: true }).q, { relationId: REL, spaceId: SPACE })).fromPost, null);
+  assert.match(main.text, /ft\."archivedAt" IS NOT NULL OR fb\.id IS NULL OR fb\."isArchived" OR COALESCE\(fpb\."isArchived", false\)/);
+  assert.equal(await getRelationView(fx.q, { relationId: 'nope', spaceId: SPACE }), null);
+  assert.equal(await getRelationView(fx.q, { relationId: id(999), spaceId: SPACE }), null);
 });
 
 // ---------------------------------------------------------------------------
@@ -220,81 +235,106 @@ test('getRelationView: shape, provenance, own; pinned to the space; bad ids → 
 
 test('setStance: members+ only (guests, strangers, anonymous denied); invalid stance 400; unknown relation 404', async () => {
   for (const actor of [U.member, U.curator, U.admin]) {
-    assert.deepEqual(await setStance(db().q, { relationId: REL, actorUserId: actor, stance: 'agree' }), { stance: 'agree', afterReveal: false });
+    assert.deepEqual(await setStance(db().q, { relationId: REL, spaceId: SPACE, actorUserId: actor, stance: 'agree' }), { stance: 'agree', afterReveal: false });
   }
   for (const [actor, status] of [[U.guest, 403], [U.stranger, 403], [null, 401]]) {
     const fx = db();
-    await rejectsStatus(setStance(fx.q, { relationId: REL, actorUserId: actor, stance: 'agree' }), status);
-    await rejectsStatus(setStance(fx.q, { relationId: REL, actorUserId: actor, stance: null }), status);
+    await rejectsStatus(setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: actor, stance: 'agree' }), status);
     assert.equal(fx.state.stances.length, 0);
   }
   for (const stance of ['maybe', 1, undefined, '']) {
-    await rejectsStatus(setStance(db().q, { relationId: REL, actorUserId: U.member, stance }), 400);
+    await rejectsStatus(setStance(db().q, { relationId: REL, spaceId: SPACE, actorUserId: U.member, stance }), 400);
   }
-  await rejectsStatus(setStance(db().q, { relationId: id(999), actorUserId: U.member, stance: 'agree' }), 404);
-  await rejectsStatus(setStance(db().q, { relationId: REL, actorUserId: U.member, stance: 'agree', spaceId: OTHER_SPACE }), 404);
-  await rejectsStatus(setStance(db({ relSpace: OTHER_SPACE }).q, { relationId: REL, actorUserId: U.member, stance: 'agree' }), 403);
+  await rejectsStatus(setStance(db().q, { relationId: id(999), spaceId: SPACE, actorUserId: U.member, stance: 'agree' }), 404);
+  // Pinned to the caller's space: a relation id from another space is a 404 for every entry point.
+  await rejectsStatus(setStance(db().q, { relationId: REL, spaceId: OTHER_SPACE, actorUserId: U.member, stance: 'agree' }), 404);
+  await rejectsStatus(setStance(db({ relSpace: OTHER_SPACE }).q, { relationId: REL, spaceId: SPACE, actorUserId: U.admin, stance: 'agree' }), 404);
+  await rejectsStatus(setStance(db({ commons: false }).q, { relationId: REL, spaceId: SPACE, actorUserId: U.admin, stance: 'agree' }), 404);
+  await rejectsStatus(setStance(db().q, { relationId: REL, actorUserId: U.member, stance: 'agree' }), 404);
+  await rejectsStatus(settleRelation(db({ relSpace: OTHER_SPACE }).q, { relationId: REL, spaceId: SPACE, actorUserId: U.admin }), 404);
+  await rejectsStatus(settleRelation(db().q, { relationId: REL, actorUserId: U.admin }), 404);
 });
 
 test('setStance: one stance per user, changeable (upsert on the primary key)', async () => {
   const fx = db();
-  await setStance(fx.q, { relationId: REL, actorUserId: U.member, stance: 'agree' });
-  await setStance(fx.q, { relationId: REL, actorUserId: U.member, stance: 'disagree' });
+  await setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.member, stance: 'agree' });
+  await setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.member, stance: 'disagree' });
   assert.deepEqual(fx.state.stances, [{ userId: U.member, stance: 'disagree', afterReveal: false }]);
   const ins = fx.calls.find((c) => c.text.includes('INSERT INTO "ConceptRelationStance"'));
   assert.match(ins.text, /ON CONFLICT \("relationId", "userId"\) DO UPDATE/);
-  assert.deepEqual(ins.params, [REL, U.member, 'agree']);
+  assert.deepEqual(ins.params, [REL, U.member, 'agree', SPACE]);
+  assert.match(ins.text, /sp\.kind = 'commons'\s+WHERE r\.id = \$1::uuid AND r\."spaceId" = \$4::uuid/);
 });
 
 test('withdrawn stance leaves no row — nothing is left to reveal', async () => {
   const fx = db({ stances: [...TWO, { userId: U.member, stance: 'agree' }] });
-  assert.deepEqual(await setStance(fx.q, { relationId: REL, actorUserId: U.member, stance: null }), { stance: null, afterReveal: false });
+  assert.deepEqual(await setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.member, stance: null }), { stance: null, afterReveal: false });
   const del = fx.calls.find((c) => c.text.startsWith('DELETE FROM "ConceptRelationStance"'));
-  assert.deepEqual(del.params, [REL, U.member]);
-  assert.match(del.text, /"relationId" = \$1::uuid AND "userId" = \$2::uuid/);
+  assert.deepEqual(del.params, [REL, U.member, SPACE]);
+  assert.match(del.text, /r\."spaceId" = \$3::uuid AND s\."relationId" = \$1::uuid AND s\."userId" = \$2::uuid/);
   assert.ok(!fx.state.stances.some((s) => s.userId === U.member));
   assert.ok(!fx.calls.some((c) => /INSERT|UPDATE/.test(c.text)), 'no tombstone, no flag');
   // After the reveal the withdrawn member is not among the names.
   fx.state.revealed = true;
-  const view = await getRelationView(fx.q, { relationId: REL, viewerUserId: U.admin });
+  const view = await getRelationView(fx.q, { relationId: REL, spaceId: SPACE, viewerUserId: U.admin });
   assert.deepEqual(view.stances.map((s) => s.name), ['Vera Voter', null]);
   assert.deepEqual([view.agree, view.disagree], [1, 1]);
+});
+
+test('withdrawing is always possible: a removed or demoted member deletes their own row without any role check', async () => {
+  for (const actor of [U.guest, U.stranger]) { // demoted to guest / no longer in the space
+    const fx = db({ stances: [...TWO, { userId: actor, stance: 'agree' }] });
+    assert.deepEqual(await setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: actor, stance: null }), { stance: null, afterReveal: false });
+    assert.ok(!fx.state.stances.some((s) => s.userId === actor));
+    assert.equal(fx.state.stances.length, 2, 'only the caller\'s own row');
+    assert.ok(!fx.calls.some((c) => c.text.includes('"SpaceMember"')), 'no role lookup before the delete');
+    // …but they cannot set one.
+    await rejectsStatus(setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: actor, stance: 'agree' }), 403);
+  }
+  const anon = db({ stances: TWO });
+  await rejectsStatus(setStance(anon.q, { relationId: REL, spaceId: SPACE, actorUserId: null, stance: null }), 401);
+  assert.equal(anon.calls.length, 0);
+  // Pinned to the space: another space's id deletes nothing.
+  const other = db({ stances: [{ userId: U.member, stance: 'agree' }] });
+  await setStance(other.q, { relationId: REL, spaceId: OTHER_SPACE, actorUserId: U.member, stance: null });
+  assert.equal(other.state.stances.length, 1);
+  await rejectsStatus(setStance(db().q, { relationId: 'nope', spaceId: SPACE, actorUserId: U.member, stance: null }), 404);
 });
 
 test('afterReveal: set by the database clock when a stance is created or changed after the reveal; kept when repeated', async () => {
   const fx = db({ revealed: true, stances: [{ userId: U.voter, stance: 'agree', afterReveal: false }] });
   // Created after the reveal.
-  assert.deepEqual(await setStance(fx.q, { relationId: REL, actorUserId: U.member, stance: 'agree' }), { stance: 'agree', afterReveal: true });
+  assert.deepEqual(await setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.member, stance: 'agree' }), { stance: 'agree', afterReveal: true });
   // Repeating a pre-reveal stance does not flag it…
-  assert.deepEqual(await setStance(fx.q, { relationId: REL, actorUserId: U.voter, stance: 'agree' }), { stance: 'agree', afterReveal: false });
+  assert.deepEqual(await setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.voter, stance: 'agree' }), { stance: 'agree', afterReveal: false });
   // …changing it does.
-  assert.deepEqual(await setStance(fx.q, { relationId: REL, actorUserId: U.voter, stance: 'disagree' }), { stance: 'disagree', afterReveal: true });
+  assert.deepEqual(await setStance(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.voter, stance: 'disagree' }), { stance: 'disagree', afterReveal: true });
   const ins = fx.calls.find((c) => c.text.includes('INSERT INTO "ConceptRelationStance"'));
   assert.ok(ins.text.includes(`SELECT r.id, $2::uuid, $3::text, (${REVEALED_SQL})`), 'the flag is computed in SQL, not passed in');
   assert.match(ins.text, /CASE WHEN cur\.stance IS DISTINCT FROM EXCLUDED\.stance THEN EXCLUDED\."afterReveal" ELSE cur\."afterReveal" END/);
-  assert.equal(ins.params.length, 3);
+  assert.equal(ins.params.length, 4);
   // Before the reveal nothing is flagged.
   const open = db();
-  assert.equal((await setStance(open.q, { relationId: REL, actorUserId: U.member, stance: 'agree' })).afterReveal, false);
+  assert.equal((await setStance(open.q, { relationId: REL, spaceId: SPACE, actorUserId: U.member, stance: 'agree' })).afterReveal, false);
 });
 
 test('settleRelation: curator/admin only; reveals from then on; idempotent; member cannot reveal', async () => {
   for (const [actor, status] of [[U.member, 403], [U.voter, 403], [U.guest, 403], [null, 401]]) {
     const fx = db({ stances: TWO });
-    await rejectsStatus(settleRelation(fx.q, { relationId: REL, actorUserId: actor }), status);
+    await rejectsStatus(settleRelation(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: actor }), status);
     assert.equal(fx.state.revealed, false);
     assert.ok(!fx.calls.some((c) => c.text.includes('UPDATE')));
   }
   const fx = db({ stances: TWO });
-  assert.equal((await getRelationView(fx.q, { relationId: REL, viewerUserId: U.curator })).stances, null);
-  assert.deepEqual(await settleRelation(fx.q, { relationId: REL, actorUserId: U.curator }), { settled: true, settledAt: '2026-09-30T12:00:00.000Z' });
+  assert.equal((await getRelationView(fx.q, { relationId: REL, spaceId: SPACE, viewerUserId: U.curator })).stances, null);
+  assert.deepEqual(await settleRelation(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.curator }), { settled: true, settledAt: '2026-09-30T12:00:00.000Z' });
   const upd = fx.calls.find((c) => c.text.includes('UPDATE "ConceptRelation"'));
   assert.match(upd.text, /"settledAt" = COALESCE\("settledAt", now\(\)\), "settledBy" = COALESCE\("settledBy", \$2::uuid\)/);
-  assert.deepEqual(upd.params, [REL, U.curator]);
-  const after = await getRelationView(fx.q, { relationId: REL, viewerUserId: U.member });
+  assert.deepEqual(upd.params, [REL, U.curator, SPACE]);
+  const after = await getRelationView(fx.q, { relationId: REL, spaceId: SPACE, viewerUserId: U.member });
   assert.deepEqual([after.settled, after.revealed, after.stances.length], [true, true, 2]);
   assert.ok(!JSON.stringify(after).includes(U.curator), 'who settled is not exposed');
   // Settling again keeps the first settle time.
-  assert.equal((await settleRelation(fx.q, { relationId: REL, actorUserId: U.admin })).settledAt, '2026-09-30T12:00:00.000Z');
-  await rejectsStatus(settleRelation(db().q, { relationId: id(999), actorUserId: U.admin }), 404);
+  assert.equal((await settleRelation(fx.q, { relationId: REL, spaceId: SPACE, actorUserId: U.admin })).settledAt, '2026-09-30T12:00:00.000Z');
+  await rejectsStatus(settleRelation(db().q, { relationId: id(999), spaceId: SPACE, actorUserId: U.admin }), 404);
 });

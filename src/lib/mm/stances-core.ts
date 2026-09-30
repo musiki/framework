@@ -21,6 +21,11 @@
 //     only (the same statement checks the viewer's membership); guests and the
 //     public get totals;
 //   * a viewer's own stance is read by (relationId, viewer's own id) only;
+//   * withdrawing (`stance: null`) needs no role: anyone signed in can delete
+//     their OWN row, so a removed or demoted member can still pull a stance out
+//     before it is revealed;
+//   * every function is pinned to the caller's space (`spaceId` is required)
+//     and to commons spaces: a relation id of another space is a 404;
 //   * no statement here returns a stance holder's user id or e-mail — names are
 //     display names through `publicName`.
 // Totals (agree / disagree counts) are public.
@@ -109,7 +114,7 @@ export type RelationView = {
   /** Whether the viewer proposed it (never the id). */
   own: boolean;
   createdAt: string;
-  /** The post where it was argued, with what a page needs to link it. */
+  /** The post where it was argued, with what a page needs to link it; null when there is none or its board is archived. */
   fromPost: { id: string; threadId: string; groupSlug: string | null; channelSlug: string | null } | null;
   settled: boolean;
   /** When names are (or were) revealed to members. */
@@ -129,14 +134,15 @@ const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : Strin
 /**
  * One relation with its agreement: totals for everyone, the viewer's own
  * stance, the reveal date, and — once revealed, for members — the names.
- * `spaceId` pins the read to the tenant's space. Public read.
+ * `spaceId` (required) pins the read to the tenant's commons space: a relation
+ * of another space is null. Public read.
  */
 export async function getRelationView(
   q: QueryFn,
-  { relationId, spaceId, viewerUserId = null }: { relationId: string; spaceId?: string | null; viewerUserId?: string | null },
+  { relationId, spaceId, viewerUserId = null }: { relationId: string; spaceId: string; viewerUserId?: string | null },
 ): Promise<RelationView | null> {
   if (typeof relationId !== 'string' || !isUuid(relationId)) return null;
-  if (spaceId !== undefined && spaceId !== null && !isUuid(spaceId)) return null;
+  if (typeof spaceId !== 'string' || !isUuid(spaceId)) return null;
   const viewer = typeof viewerUserId === 'string' && isUuid(viewerUserId) ? viewerUserId : null;
   const rows = await run(
     q,
@@ -147,10 +153,11 @@ export async function getRelationView(
             src.slug AS "sourceSlug", src.label AS "sourceLabel", src."labelNb" AS "sourceLabelNb",
             tgt.slug AS "targetSlug", tgt.label AS "targetLabel", tgt."labelNb" AS "targetLabelNb",
             fp.id AS "fromPostId", ft.id AS "fromThreadId", fb.slug AS "fromBoardSlug", fpb.slug AS "fromGroupSlug",
+            (ft."archivedAt" IS NOT NULL OR fb.id IS NULL OR fb."isArchived" OR COALESCE(fpb."isArchived", false)) AS "fromArchived",
             (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'agree')::int AS agree,
             (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'disagree')::int AS disagree
      FROM "ConceptRelation" r
-     JOIN "Space" sp ON sp.id = r."spaceId"
+     JOIN "Space" sp ON sp.id = r."spaceId" AND sp.kind = 'commons'
      JOIN "RelationType" t ON t.id = r."typeId"
      JOIN "Concept" src ON src.id = r."sourceId"
      JOIN "Concept" tgt ON tgt.id = r."targetId"
@@ -159,9 +166,9 @@ export async function getRelationView(
      LEFT JOIN "ForumThread" ft ON ft.id = fp."threadId" AND ft."spaceId" = r."spaceId"
      LEFT JOIN "ForumBoard" fb ON fb.id = ft."boardId"
      LEFT JOIN "ForumBoard" fpb ON fpb.id = fb."parentId"
-     WHERE r.id = $1::uuid AND ($2::uuid IS NULL OR r."spaceId" = $2::uuid)
+     WHERE r.id = $1::uuid AND r."spaceId" = $2::uuid
      LIMIT 1`,
-    [relationId, spaceId ?? null],
+    [relationId, spaceId],
   );
   const r = rows[0];
   if (!r) return null;
@@ -204,7 +211,8 @@ export async function getRelationView(
     createdBy: userRef(r.createdBy, r.createdByName),
     own: !!viewer && r.createdBy === viewer,
     createdAt: iso(r.createdAt),
-    fromPost: r.fromPostId && r.fromThreadId
+    // No link to a post whose thread or board (or its group) is archived: those pages are gone.
+    fromPost: r.fromPostId && r.fromThreadId && r.fromArchived !== true
       ? {
           id: r.fromPostId,
           threadId: r.fromThreadId,
@@ -236,45 +244,63 @@ async function viewerIsMember(q: QueryFn, relationId: string, viewer: string): P
   return rows.length > 0;
 }
 
-async function loadRelationSpace(q: QueryFn, relationId: unknown, spaceId?: string | null): Promise<{ id: string; spaceId: string }> {
+/** The relation, only when it belongs to `spaceId` and that space is a commons space; else 404. */
+async function loadRelationSpace(q: QueryFn, relationId: unknown, spaceId: unknown): Promise<{ id: string; spaceId: string }> {
   const id = requireUuid(relationId, 'relation');
-  const rows = await run(q, `SELECT id, "spaceId" FROM "ConceptRelation" WHERE id = $1::uuid LIMIT 1`, [id]);
-  const rel = rows[0];
-  if (!rel || (spaceId && rel.spaceId !== spaceId)) throw new ConceptError(404, 'relation not found');
-  return rel;
+  const space = requireUuid(spaceId, 'relation');
+  const rows = await run(
+    q,
+    `SELECT r.id, r."spaceId" FROM "ConceptRelation" r
+     JOIN "Space" sp ON sp.id = r."spaceId" AND sp.kind = 'commons'
+     WHERE r.id = $1::uuid AND r."spaceId" = $2::uuid LIMIT 1`,
+    [id, space],
+  );
+  if (!rows.length) throw new ConceptError(404, 'relation not found');
+  return rows[0];
 }
 
 /**
  * Sets, changes or withdraws (`stance: null`) the actor's stance on a relation.
- * Members, curators and admins only. A withdrawn stance is deleted — nothing
- * remains to reveal. `afterReveal` is decided by the database clock in the same
+ * Setting or changing: members, curators and admins only. Withdrawing: anyone
+ * signed in may delete their OWN row (no role check — someone removed from the
+ * space, or demoted to guest, can still withdraw before the reveal); it is
+ * idempotent. A withdrawn stance is deleted — nothing remains to reveal. `afterReveal` is decided by the database clock in the same
  * statement: true when the stance is created or changed once the relation is
  * revealed (such stances are signed from the start); repeating the same stance
  * leaves the flag as it was.
  */
 export async function setStance(
   q: QueryFn,
-  input: { relationId: string; actorUserId: string | null; stance: unknown; spaceId?: string | null },
+  input: { relationId: string; spaceId: string; actorUserId: string | null; stance: unknown },
 ): Promise<{ stance: Stance | null; afterReveal: boolean }> {
+  if (input.stance === null) {
+    // Before any role check: the row is the caller's own.
+    if (!input.actorUserId) throw new ConceptError(401, 'sign in required');
+    const relationId = requireUuid(input.relationId, 'relation');
+    const spaceId = requireUuid(input.spaceId, 'relation');
+    await run(
+      q,
+      `DELETE FROM "ConceptRelationStance" s USING "ConceptRelation" r
+       WHERE r.id = s."relationId" AND r."spaceId" = $3::uuid AND s."relationId" = $1::uuid AND s."userId" = $2::uuid`,
+      [relationId, input.actorUserId, spaceId],
+    );
+    return { stance: null, afterReveal: false };
+  }
   const rel = await loadRelationSpace(q, input.relationId, input.spaceId);
   await authorize(q, rel.spaceId, input.actorUserId, 'stance');
   const actor = input.actorUserId as string;
-  if (input.stance === null) {
-    await run(q, `DELETE FROM "ConceptRelationStance" WHERE "relationId" = $1::uuid AND "userId" = $2::uuid`, [rel.id, actor]);
-    return { stance: null, afterReveal: false };
-  }
   if (!isStance(input.stance)) throw new ConceptError(400, 'stance must be agree, disagree or null');
   const rows = await run(
     q,
     `INSERT INTO "ConceptRelationStance" AS cur ("relationId", "userId", stance, "afterReveal")
      SELECT r.id, $2::uuid, $3::text, (${REVEALED_SQL})
-     FROM "ConceptRelation" r JOIN "Space" sp ON sp.id = r."spaceId"
-     WHERE r.id = $1::uuid
+     FROM "ConceptRelation" r JOIN "Space" sp ON sp.id = r."spaceId" AND sp.kind = 'commons'
+     WHERE r.id = $1::uuid AND r."spaceId" = $4::uuid
      ON CONFLICT ("relationId", "userId") DO UPDATE
        SET stance = EXCLUDED.stance,
            "afterReveal" = CASE WHEN cur.stance IS DISTINCT FROM EXCLUDED.stance THEN EXCLUDED."afterReveal" ELSE cur."afterReveal" END
      RETURNING stance, "afterReveal"`,
-    [rel.id, actor, input.stance],
+    [rel.id, actor, input.stance, rel.spaceId],
   );
   if (!rows.length) throw new ConceptError(404, 'relation not found');
   return { stance: rows[0].stance, afterReveal: rows[0].afterReveal === true };
@@ -283,19 +309,21 @@ export async function setStance(
 /**
  * A curator or admin closes the discussion of a relation: its stances are
  * revealed to members from now on. Settling is final (there is no un-settle:
- * that would hide names already shown) and idempotent.
+ * that would hide names already shown — the database refuses it too) and
+ * idempotent. It can only bring the reveal forward, never past the relation's
+ * frozen reveal date.
  */
 export async function settleRelation(
   q: QueryFn,
-  input: { relationId: string; actorUserId: string | null; spaceId?: string | null },
+  input: { relationId: string; spaceId: string; actorUserId: string | null },
 ): Promise<{ settled: true; settledAt: string }> {
   const rel = await loadRelationSpace(q, input.relationId, input.spaceId);
   await authorize(q, rel.spaceId, input.actorUserId, 'settleRelation');
   const rows = await run(
     q,
     `UPDATE "ConceptRelation" SET "settledAt" = COALESCE("settledAt", now()), "settledBy" = COALESCE("settledBy", $2::uuid)
-     WHERE id = $1::uuid RETURNING "settledAt"`,
-    [rel.id, input.actorUserId],
+     WHERE id = $1::uuid AND "spaceId" = $3::uuid RETURNING "settledAt"`,
+    [rel.id, input.actorUserId, rel.spaceId],
   );
   if (!rows.length) throw new ConceptError(404, 'relation not found');
   return { settled: true, settledAt: iso(rows[0].settledAt) };
