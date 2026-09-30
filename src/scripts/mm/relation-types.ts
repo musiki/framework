@@ -336,5 +336,15 @@ const table = document.querySelector<HTMLElement>('[data-mm-rt-table]');
 if (table) {
   initFilter(table);
   initRowActions(table);
+  // After a save the page reloads at #mm-rt-row-<slug>; the graph above is
+  // drawn later (after the fonts) and pushes the row down, and a reload may
+  // restore the old scroll: bring the row back into view once all that is done.
+  const hash = window.location.hash.slice(1);
+  const target = hash.startsWith('mm-rt') ? document.getElementById(decodeURIComponent(hash)) : null;
+  if (target) {
+    const reveal = () => window.setTimeout(() => target.scrollIntoView({ block: 'center' }), 50);
+    if (document.fonts?.ready) document.fonts.ready.then(reveal, reveal);
+    else reveal();
+  }
 }
 document.querySelectorAll<HTMLFormElement>('form[data-mm-rt-form]').forEach(initForm);

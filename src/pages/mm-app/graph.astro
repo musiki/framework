@@ -176,7 +176,7 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
                 const boxId = `mm-rt-show-${rt.slug}`;
                 return (
                   <tr id={`mm-rt-row-${rt.slug}`} data-slug={rt.slug} class={rt.isArchived ? 'is-archived' : undefined}>
-                    <td><MmRelationSample type={rt} label={sampleDescription(lang, rt)} /></td>
+                    <td class="mm-rt-cell-sample"><MmRelationSample type={rt} label={sampleDescription(lang, rt)} /></td>
                     <th scope="row">
                       <a class="mm-rt-name" href={typePath(rt.slug)} lang={l.lang}>{l.text}</a>
                       {inv && <span class="mm-rt-inverse">{t(lang, 'mm.modeler.inverse', { label: '' })}<span lang={inv.lang}>{inv.text}</span></span>}
@@ -187,22 +187,22 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
                         </span>
                       )}
                     </th>
-                    <td>
+                    <td class="mm-rt-cell-props">
                       {props.length ? (
                         <ul class="mm-chips">{props.map((p) => <li class="mm-chip" title={p.help}>{p.name}</li>)}</ul>
                       ) : (
                         <span class="mm-muted">{t(lang, 'mm.modeler.noProperties')}</span>
                       )}
                     </td>
-                    <td class="mm-num">{rt.relationCount}</td>
-                    <td>
+                    <td class="mm-num mm-rt-cell-count" data-label={t(lang, 'mm.modeler.colCount')}>{rt.relationCount}</td>
+                    <td class="mm-rt-cell-show" data-label={t(lang, 'mm.modeler.colShow')}>
                       <span class="mm-rt-show">
                         <input type="checkbox" id={boxId} data-mm-rt-show data-slug={rt.slug} checked />
                         <label for={boxId}><span class="mm-visually-hidden">{t(lang, 'mm.modeler.show', { label: l.text })}</span></label>
                       </span>
                     </td>
                     {canManage && (
-                      <td>
+                      <td class="mm-rt-cell-actions">
                         <span class="mm-rt-actions">
                           <button type="button" class="mm-textbutton" data-mm-rt-edit data-type={typeJson(rt)} aria-controls="mm-rt-panel" aria-expanded="false"
                             aria-label={t(lang, 'mm.modeler.editLabel', { label: l.text })}>{t(lang, 'mm.modeler.edit')}</button>
