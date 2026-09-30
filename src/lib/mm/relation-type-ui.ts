@@ -161,6 +161,23 @@ export function sampleSpec(t: Pick<TypeLike, 'render' | 'stroke' | 'arrow' | 'co
   return { width: SAMPLE_W, height: SAMPLE_H, shapes };
 }
 
+/**
+ * The attributes to set on a sample shape's element. Colours are CSS custom
+ * properties, which SVG presentation attributes do not resolve reliably, so
+ * `stroke` and `fill` go into the element's style (a plain declaration list
+ * of brand tokens; set as an attribute, never through markup).
+ */
+export function svgAttrs(shape: SvgShape): Record<string, string> {
+  const out: Record<string, string> = {};
+  const style: string[] = [];
+  for (const [k, v] of Object.entries(shape.attrs)) {
+    if (k === 'stroke' || k === 'fill') style.push(`${k}:${v}`);
+    else out[k] = String(v);
+  }
+  if (style.length) out.style = style.join(';');
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Form rules and validation (mirror of relation-types-core)
 // ---------------------------------------------------------------------------

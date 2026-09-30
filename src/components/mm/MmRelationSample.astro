@@ -1,0 +1,29 @@
+---
+// Inline SVG sample of a relation type's encoding (line: colour + pattern +
+// arrowhead / double; area: tint square with a border in the slot colour).
+// Shapes come from the pure sampleSpec (the form preview draws the same). The
+// image is described by `label` (role img) or, when the surrounding text
+// already says it, hidden from assistive technology (decorative).
+import { sampleSpec, svgAttrs, type TypeLike } from '../../lib/mm/relation-type-ui';
+
+interface Props {
+  type: Pick<TypeLike, 'render' | 'stroke' | 'arrow' | 'color' | 'symmetric'>;
+  label?: string | null;
+  class?: string;
+}
+const { type, label = null, class: cls = '' } = Astro.props;
+const spec = sampleSpec(type);
+const shapes = spec.shapes.map((s) => ({ Tag: s.tag, attrs: svgAttrs(s) }));
+---
+<svg
+  class={`mm-rt-sample ${cls}`.trim()}
+  viewBox={`0 0 ${spec.width} ${spec.height}`}
+  width={spec.width}
+  height={spec.height}
+  focusable="false"
+  role={label ? 'img' : undefined}
+  aria-label={label ?? undefined}
+  aria-hidden={label ? undefined : 'true'}
+>
+  {shapes.map(({ Tag, attrs }) => <Tag {...attrs} />)}
+</svg>

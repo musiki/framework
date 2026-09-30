@@ -422,6 +422,7 @@ export const mmEn = {
     relationsEmpty: 'No relations use this type yet.',
     relationsLimited: 'Showing the first {count}.',
     agreement: '{agree} agree · {disagree} disagree',
+    agreementCol: 'Agreement',
     settled: 'settled',
     edit: 'Edit this relation type',
     editDefinitionTitle: 'Write a new version of the definition',

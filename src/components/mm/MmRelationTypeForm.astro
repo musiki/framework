@@ -1,0 +1,198 @@
+---
+// Add / edit form of a relation type (curators, admins). One form per page:
+// on /graph it starts hidden and serves both "Add relation +" (create) and a
+// row's "Edit" (the script fills it from the row's data); on /r/<slug> it is
+// the edit form of that type, prefilled here. The script
+// (src/scripts/mm/relation-types.ts) applies the rules (area → hierarchical;
+// symmetric ⟂ hierarchical), draws the live preview, validates like the
+// server, and sends the FLAT JSON body (real booleans) to
+//   create: POST  /api/mm/relation-types
+//   edit:   PATCH /api/mm/relation-types/<slug>   (type fields only)
+// Errors: per field (aria-describedby + aria-invalid) and a summary in an
+// alert region that takes focus. Palette = named radio swatches of brand
+// tokens only; there is no free colour input.
+import MmRelationSample from './MmRelationSample.astro';
+import { t, type MessageKey } from '../../lib/i18n';
+import { TYPE_COLORS, TYPE_STROKES, TYPE_PROPERTIES, formRules, type TypeLike } from '../../lib/mm/relation-type-ui';
+import type { MmLang } from '../../lib/mm/ui-lang';
+
+type Prefill = TypeLike & { skos?: string | null; wikidata?: string | null };
+
+interface Props {
+  lang: MmLang;
+  /** Edit this type (prefilled, edit mode); without it the form starts in create mode. */
+  type?: Prefill | null;
+  hidden?: boolean;
+  /** id prefix (one form per page). */
+  id?: string;
+}
+const { lang, type = null, hidden = false, id = 'mm-rt' } = Astro.props;
+const mode = type ? 'edit' : 'create';
+const v: Prefill = type ?? {
+  slug: '', label: '', labelNb: null, inverseLabel: null, inverseLabelNb: null, render: 'line', stroke: 'solid', arrow: true,
+  color: 'ink', symmetric: false, transitive: false, hierarchical: false, skos: null, wikidata: null,
+};
+const rules = formRules(v);
+const f = (k: string) => t(lang, `mm.modeler.form.${k}` as MessageKey);
+const strings = JSON.stringify({
+  addTitle: f('addTitle'),
+  editTitle: f('editTitle'),
+  create: f('create'),
+  save: f('save'),
+  saved: f('saved'),
+  errorSummary: f('errorSummary'),
+  ...Object.fromEntries(
+    ['labelRequired', 'tooLong', 'invalidChoice', 'areaNeedsHierarchical', 'symmetricHierarchical', 'invalidSkos', 'invalidWikidata',
+      'definitionRequired', 'definitionTooLong'].map((k) => [`error.${k}`, t(lang, `mm.modeler.errors.${k}` as MessageKey)]),
+  ),
+  ...Object.fromEntries(TYPE_COLORS.map((c) => [`color.${c}`, t(lang, `mm.modeler.colors.${c}` as MessageKey)])),
+  ...Object.fromEntries(TYPE_STROKES.map((s) => [`stroke.${s}`, t(lang, `mm.modeler.strokes.${s}` as MessageKey)])),
+  sampleLine: t(lang, 'mm.modeler.sampleLine'),
+  sampleArrow: t(lang, 'mm.modeler.sampleArrow'),
+  sampleArea: t(lang, 'mm.modeler.sampleArea'),
+});
+const title = type ? f('editTitle').replace('{label}', type.label) : f('addTitle');
+const text = (name: string, labelKey: string, value: string | null | undefined, opts: { help?: string; required?: boolean; lang?: string; max?: number } = {}) => ({
+  name, label: f(labelKey), value: value ?? '', ...opts,
+});
+const labelFields = [
+  text('label', 'label', v.label, { help: 'labelHelp', required: true, lang: 'en' }),
+  text('labelNb', 'labelNb', v.labelNb, { lang: 'nb' }),
+  text('inverseLabel', 'inverse', v.inverseLabel, { help: 'inverseHelp', lang: 'en' }),
+  text('inverseLabelNb', 'inverseNb', v.inverseLabelNb, { lang: 'nb' }),
+];
+const mappingFields = [
+  text('skos', 'skos', v.skos, { help: 'skosHelp', max: 100 }),
+  text('wikidata', 'wikidata', v.wikidata, { help: 'wikidataHelp', max: 100 }),
+];
+---
+<section class="mm-panel mm-rt-panel" id={`${id}-panel`} data-mm-rt-panel hidden={hidden} aria-labelledby={`${id}-title`}>
+  <h2 id={`${id}-title`} tabindex="-1" data-mm-rt-title>{title}</h2>
+  <form
+    class="mm-form mm-rt-form"
+    data-mm-rt-form
+    data-mode={mode}
+    data-slug={type?.slug ?? ''}
+    data-strings={strings}
+    novalidate
+    aria-labelledby={`${id}-title`}
+  >
+    <p class="mm-alert" id={`${id}-summary`} data-mm-rt-summary role="alert" tabindex="-1" hidden></p>
+
+    <fieldset>
+      <legend>{f('labels')}</legend>
+      {labelFields.map((fl) => (
+        <div class="mm-form-row">
+          <label for={`${id}-${fl.name}`}>{fl.label}</label>
+          <input
+            type="text"
+            id={`${id}-${fl.name}`}
+            name={fl.name}
+            value={fl.value}
+            maxlength="200"
+            required={fl.required}
+            aria-required={fl.required ? 'true' : undefined}
+            lang={fl.lang}
+            autocomplete="off"
+            aria-describedby={[fl.help ? `${id}-${fl.name}-help` : null, `${id}-${fl.name}-err`].filter(Boolean).join(' ')}
+          />
+          {fl.help && <p class="mm-help" id={`${id}-${fl.name}-help`}>{f(fl.help)}</p>}
+          <p class="mm-field-error" id={`${id}-${fl.name}-err`} data-for={fl.name} hidden></p>
+        </div>
+      ))}
+    </fieldset>
+
+    <fieldset>
+      <legend>{f('look')}</legend>
+      <fieldset class="mm-form-row" aria-describedby={`${id}-render-err`}>
+        <legend>{f('render')}</legend>
+        <div class="mm-radios">
+          <label><input type="radio" name="render" value="line" checked={v.render !== 'area'} /> {f('renderLine')}</label>
+          <label><input type="radio" name="render" value="area" checked={v.render === 'area'} disabled={rules.disabled.area} /> {f('renderArea')}</label>
+        </div>
+        <p class="mm-field-error" id={`${id}-render-err`} data-for="render" hidden></p>
+      </fieldset>
+      <fieldset class="mm-form-row" aria-describedby={`${id}-stroke-err`}>
+        <legend>{f('stroke')}</legend>
+        <div class="mm-radios">
+          {TYPE_STROKES.map((s) => (
+            <label><input type="radio" name="stroke" value={s} checked={v.stroke === s} /> {t(lang, `mm.modeler.strokes.${s}` as MessageKey)}</label>
+          ))}
+        </div>
+        <p class="mm-field-error" id={`${id}-stroke-err`} data-for="stroke" hidden></p>
+      </fieldset>
+      <div class="mm-check">
+        <input type="checkbox" id={`${id}-arrow`} name="arrow" checked={v.arrow} />
+        <label for={`${id}-arrow`}>{f('arrow')}</label>
+      </div>
+      <fieldset class="mm-form-row" aria-describedby={`${id}-color-help ${id}-color-err`}>
+        <legend>{f('palette')}</legend>
+        <div class="mm-swatches">
+          {TYPE_COLORS.map((c) => (
+            <label class="mm-swatch-option">
+              <input type="radio" name="color" value={c} checked={v.color === c} />
+              <span class={`mm-swatch mm-swatch-${c}`} aria-hidden="true"></span>
+              <span>{t(lang, `mm.modeler.colors.${c}` as MessageKey)}</span>
+            </label>
+          ))}
+        </div>
+        <p class="mm-help" id={`${id}-color-help`}>{f('paletteHelp')}</p>
+        <p class="mm-field-error" id={`${id}-color-err`} data-for="color" hidden></p>
+      </fieldset>
+      <div class="mm-rt-preview">
+        <span class="mm-help">{f('preview')}</span>
+        <span data-mm-rt-preview><MmRelationSample type={v} /></span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>{f('properties')}</legend>
+      {TYPE_PROPERTIES.map((p) => {
+        const checked = p === 'hierarchical' ? v.hierarchical || rules.forceHierarchical : v[p];
+        const disabled = p === 'transitive' ? false : rules.disabled[p];
+        return (
+          <div class="mm-check mm-rt-prop">
+            <input type="checkbox" id={`${id}-${p}`} name={p} checked={checked} disabled={disabled}
+              aria-describedby={`${id}-${p}-help ${id}-${p}-err`} />
+            <div>
+              <label for={`${id}-${p}`}>{t(lang, `mm.modeler.properties.${p}` as MessageKey)}</label>
+              <p class="mm-help" id={`${id}-${p}-help`}>{t(lang, `mm.modeler.propertyHelp.${p}` as MessageKey)}</p>
+              <p class="mm-field-error" id={`${id}-${p}-err`} data-for={p} hidden></p>
+            </div>
+          </div>
+        );
+      })}
+      <ul class="mm-help mm-rt-rules">
+        <li data-mm-rt-rule="area">{f('ruleArea')}</li>
+        <li data-mm-rt-rule="exclusive">{f('ruleExclusive')}</li>
+      </ul>
+    </fieldset>
+
+    <fieldset>
+      <legend>{f('mappings')}</legend>
+      {mappingFields.map((fl) => (
+        <div class="mm-form-row">
+          <label for={`${id}-${fl.name}`}>{fl.label}</label>
+          <input type="text" id={`${id}-${fl.name}`} name={fl.name} value={fl.value} maxlength="100" autocomplete="off" spellcheck="false"
+            aria-describedby={`${id}-${fl.name}-help ${id}-${fl.name}-err`} />
+          <p class="mm-help" id={`${id}-${fl.name}-help`}>{f(fl.help!)}</p>
+          <p class="mm-field-error" id={`${id}-${fl.name}-err`} data-for={fl.name} hidden></p>
+        </div>
+      ))}
+    </fieldset>
+
+    <div class="mm-form-row" data-mm-rt-create-only hidden={mode !== 'create'}>
+      <label for={`${id}-definition`}>{f('definition')}</label>
+      <textarea id={`${id}-definition`} name="definition" maxlength="20000" lang="en" aria-required="true"
+        aria-describedby={`${id}-definition-help ${id}-definition-err`}></textarea>
+      <p class="mm-help" id={`${id}-definition-help`}>{f('definitionHelp')}</p>
+      <p class="mm-field-error" id={`${id}-definition-err`} data-for="definition" hidden></p>
+    </div>
+
+    <div class="mm-form-actions">
+      <button class="mm-button" type="submit" data-mm-rt-submit>{mode === 'create' ? f('create') : f('save')}</button>
+      <button class="mm-button mm-button-quiet" type="button" data-mm-rt-cancel>{f('cancel')}</button>
+    </div>
+    <p class="mm-visually-hidden" data-mm-rt-live aria-live="polite"></p>
+  </form>
+</section>

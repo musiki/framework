@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TYPE_COLORS, TYPE_STROKES, TYPE_RENDERS, typeLabel, typeInverse, typeProperties, typePath, strokeColor, tintColor,
-  dashArray, sampleSpec, formRules, buildTypeBody, moveSlug, visibleSlugs,
+  dashArray, sampleSpec, svgAttrs, formRules, buildTypeBody, moveSlug, visibleSlugs,
 } from './relation-type-ui.ts';
 import { RELATION_COLORS, RELATION_STROKES, RELATION_RENDERS, cleanRelationTypeFields } from './relation-types-core.ts';
 
@@ -107,6 +107,15 @@ test('sampleSpec: area = tint square + slot-coloured border, no radius', () => {
   const dashed = sampleSpec({ ...contains, stroke: 'dashed' });
   assert.equal(dashed.shapes[1].attrs['stroke-dasharray'], '6 4');
   assert.deepEqual(tags(sampleSpec({ ...contains, stroke: 'double' })), ['rect', 'rect', 'rect']);
+});
+
+test('svgAttrs: colours move into style, geometry stays attributes', () => {
+  const s = sampleSpec({ render: 'line', stroke: 'dashed', arrow: true, color: 'green', symmetric: false });
+  assert.deepEqual(svgAttrs(s.shapes[0]), {
+    'stroke-width': '2', 'stroke-linecap': 'butt', 'stroke-linejoin': 'miter', 'stroke-dasharray': '6 4',
+    x1: '4', y1: '12', x2: '52', y2: '12', style: 'stroke:var(--mm-green);fill:none',
+  });
+  assert.equal(svgAttrs(s.shapes[1]).style, 'fill:var(--mm-green);stroke:none');
 });
 
 test('sampleSpec: unknown values fall back safely', () => {

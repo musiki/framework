@@ -425,6 +425,7 @@ export const nb: Pick<Dict, 'mm'> = {
       relationsEmpty: 'Ingen relasjoner bruker denne typen ennå.',
       relationsLimited: 'Viser de første {count}.',
       agreement: '{agree} enig · {disagree} uenig',
+      agreementCol: 'Enighet',
       settled: 'avgjort',
       edit: 'Rediger denne relasjonstypen',
       editDefinitionTitle: 'Skriv en ny versjon av definisjonen',
