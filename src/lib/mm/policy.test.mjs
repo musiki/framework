@@ -9,6 +9,7 @@ const matrix = {
   read: [T, T, T, T, T],
   vote: [T, T, T, T, F],
   post: [F, T, T, T, F],
+  editOwnPost: [F, F, F, F, F], // only with isAuthor (see ctx tests)
   proposeConcept: [F, T, T, T, F],
   editDefinition: [F, F, T, T, F], // member: only with isAuthor (see ctx tests)
   adoptPost: [F, F, T, T, F],
@@ -36,6 +37,15 @@ test('editDefinition: member only when author', () => {
   assert.equal(can('curator', 'editDefinition', { isAuthor: false }), true);
   assert.equal(can('guest', 'editDefinition', { isAuthor: true }), false);
   assert.equal(can(null, 'editDefinition', { isAuthor: true }), false);
+});
+
+test('editOwnPost: author only (members, curators, admins); never guests or non-authors', () => {
+  for (const role of ['member', 'curator', 'admin']) {
+    assert.equal(can(role, 'editOwnPost', { isAuthor: true }), true, role);
+    assert.equal(can(role, 'editOwnPost', { isAuthor: false }), false, role);
+  }
+  assert.equal(can('guest', 'editOwnPost', { isAuthor: true }), false);
+  assert.equal(can(null, 'editOwnPost', { isAuthor: true }), false);
 });
 
 test('deleteRelation: member only own relation', () => {

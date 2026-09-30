@@ -826,6 +826,13 @@ export type PostView = {
   myVote: number;
   /** Set when a curator adopted this post as a concept definition version. */
   adopted: { versionId: string; lang: string | null; conceptSlug: string | null } | null;
+  /** The author edited the post more than EDIT_GRACE_MS after posting. */
+  edited: boolean;
+  /** Deleted posts: removed by the author (true) or by a moderator (false). */
+  deletedByAuthor: boolean;
+  /** The viewer (the author, still a member) may edit / delete this post now. */
+  canEdit: boolean;
+  canDelete: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -859,6 +866,19 @@ async function safeRender(render: Render, body: string, post?: RenderPostRef): P
     console.error('[mm/forum-core] markdown render failed:', err);
     return plainRender(body);
   }
+}
+
+/** Edits within this window after posting do not show the "edited" marker. */
+export const EDIT_GRACE_MS = 60_000;
+
+/** True when `editedAt` is set and later than `createdAt` + EDIT_GRACE_MS. */
+export function isEdited(createdAt: unknown, editedAt: unknown): boolean {
+  if (editedAt === null || editedAt === undefined || editedAt === '') return false;
+  const e = new Date(editedAt as string | Date).getTime();
+  const c = new Date(createdAt as string | Date).getTime();
+  if (!Number.isFinite(e)) return false;
+  if (!Number.isFinite(c)) return true;
+  return e > c + EDIT_GRACE_MS;
 }
 
 const emptyVotes = (): VoteCounts => ({ useful: 0, clarifies: 0, reference: 0, total: 0 });
@@ -913,7 +933,7 @@ export async function listPosts(
   const rows = await run(
     q,
     `SELECT p.id, p."parentPostId", p."authorUserId", p.body, p.status, p.move, p."adoptedAsVersionId",
-            p."createdAt", p."updatedAt", u.name AS "authorName",
+            p."createdAt", p."updatedAt", p."editedAt", p."deletedByAuthor", u.name AS "authorName",
             av.lang AS "adoptedLang", ac.slug AS "adoptedConceptSlug"
      FROM "ForumPost" p
      LEFT JOIN "User" u ON u.id = p."authorUserId"
@@ -944,12 +964,15 @@ export async function listPosts(
     votesByPost.set(v.postId, entry);
   }
 
+  const threadOpen = !t.isLocked;
   const posts: PostView[] = [];
   for (const p of rows) {
     const status = p.status === 'hidden' || p.status === 'deleted' ? p.status : 'published';
     const visible = status === 'published' || (status === 'hidden' && canModerate);
     const body = visible ? String(p.body ?? '') : null;
     const v = votesByPost.get(p.id);
+    const own = !!viewerUserId && p.authorUserId === viewerUserId;
+    const mayEditOwn = own && threadOpen && can(role, 'editOwnPost', { isAuthor: true });
     posts.push({
       id: p.id,
       parentPostId: p.parentPostId ?? null,
@@ -958,12 +981,16 @@ export async function listPosts(
       body,
       bodyHtml: body ? await safeRender(render, body, { id: p.id, updatedAt: p.updatedAt ?? null, forumId: t.forumId ?? null, forumBibliography }) : '',
       author: userRef(p.authorUserId, p.authorName),
-      own: !!viewerUserId && p.authorUserId === viewerUserId,
+      own,
       votes: v?.votes ?? emptyVotes(),
       myVote: v?.mine ?? 0,
       adopted: p.adoptedAsVersionId
         ? { versionId: p.adoptedAsVersionId, lang: p.adoptedLang ?? null, conceptSlug: p.adoptedConceptSlug ?? null }
         : null,
+      edited: status !== 'deleted' && isEdited(p.createdAt, p.editedAt),
+      deletedByAuthor: status === 'deleted' && p.deletedByAuthor === true,
+      canEdit: mayEditOwn && status === 'published',
+      canDelete: mayEditOwn && status !== 'deleted',
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     });
@@ -1018,7 +1045,8 @@ async function loadSpacePost(q: QueryFn, spaceId: string, postId: unknown) {
   const rows = await run(
     q,
     `SELECT p.id, p."threadId", p.status, t."archivedAt" AS "threadArchived",
-            (b."isArchived" OR COALESCE(pb."isArchived", false)) AS "forumArchived"
+            (b."isArchived" OR COALESCE(pb."isArchived", false)) AS "forumArchived",
+            p."authorUserId", p."adoptedAsVersionId", t."isLocked"
      FROM "ForumPost" p JOIN "ForumThread" t ON t.id = p."threadId"
      LEFT JOIN "ForumBoard" b ON b.id = t."boardId" LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"
      WHERE p.id = $1::uuid AND t."spaceId" = $2::uuid
@@ -1173,4 +1201,91 @@ export async function moderatePost(
   );
   if (!rows.length) throw new ForumError(409, 'post changed concurrently');
   return { postId: post.id, status: rows[0].status };
+}
+
+// ---------------------------------------------------------------------------
+// Author edit / delete
+// ---------------------------------------------------------------------------
+
+/** SQL predicate: post alias `p` is in an open (unlocked, unarchived) thread and forum of space `$spaceParam`. */
+const IN_OPEN_SPACE_THREAD = (spaceParam: string) =>
+  `EXISTS (SELECT 1 FROM "ForumThread" et LEFT JOIN "ForumBoard" eb ON eb.id = et."boardId"
+            LEFT JOIN "ForumBoard" epb ON epb.id = eb."parentId"
+            WHERE et.id = p."threadId" AND et."spaceId" = ${spaceParam}::uuid AND et."isLocked" IS NOT TRUE
+              AND et."archivedAt" IS NULL AND eb."isArchived" IS NOT TRUE AND epb."isArchived" IS NOT TRUE)`;
+
+/**
+ * The author's own post, checked on every request: the actor must still hold a
+ * member+ role in the space (removed/blocked members have none; guests cannot
+ * post) and be the post's author. Curators get no edit power over others'
+ * posts (they keep hide/unhide/delete via moderatePost). The thread must be
+ * open (not locked/archived, forum not archived): otherwise 409.
+ */
+async function loadOwnOpenPost(q: QueryFn, spaceId: string, actorUserId: string | null, postId: unknown) {
+  if (!actorUserId) throw new ForumError(401, 'sign in required');
+  const role = await getCommonsRole(q, spaceId, actorUserId);
+  if (!role || !can(role, 'post')) throw new ForumError(403, 'not allowed: editOwnPost');
+  const post = await loadSpacePost(q, spaceId, postId);
+  if (!can(role, 'editOwnPost', { isAuthor: post.authorUserId === actorUserId })) {
+    throw new ForumError(403, 'only the author can change this post');
+  }
+  if (post.threadArchived || post.forumArchived) throw new ForumError(409, 'thread is archived');
+  if (post.isLocked) throw new ForumError(409, 'thread is locked');
+  return post;
+}
+
+/**
+ * Author only: replace the body (same limits as createPost) and optionally the
+ * move (`move` omitted keeps it; null/'' clears it). Published posts only.
+ * Sets "editedAt" + "updatedAt" (the render cache keys on updatedAt + text
+ * hash). An adopted post's ConceptVersion is never touched: the definition
+ * keeps its own copy of the adopted text and credit.
+ */
+export async function editPost(
+  q: QueryFn,
+  input: { spaceId: string; postId: string; actorUserId: string | null; body: unknown; move?: unknown },
+): Promise<{ postId: string; body: string; move: PostMove | null; updatedAt: string; editedAt: string }> {
+  const spaceId = requireUuid(input.spaceId, 'space');
+  const post = await loadOwnOpenPost(q, spaceId, input.actorUserId, input.postId);
+  const body = cleanPostBody(input.body);
+  const keepMove = input.move === undefined;
+  const move = keepMove ? null : cleanMove(input.move);
+  if (post.status !== 'published') throw new ForumError(409, 'post is not published');
+  const rows = await run(
+    q,
+    `UPDATE "ForumPost" p SET body = $1, move = CASE WHEN $2::boolean THEN p.move ELSE $3 END,
+            "editedAt" = now(), "updatedAt" = now()
+     WHERE p.id = $4::uuid AND p."authorUserId" = $5::uuid AND p.status = 'published'
+       AND ${IN_OPEN_SPACE_THREAD('$6')}
+     RETURNING p.id, p.body, p.move, p."updatedAt", p."editedAt"`,
+    [body, keepMove, move, post.id, input.actorUserId, spaceId],
+  );
+  if (!rows.length) throw new ForumError(409, 'post changed concurrently');
+  const r = rows[0];
+  return { postId: r.id, body: r.body, move: isPostMove(r.move) ? r.move : null, updatedAt: r.updatedAt, editedAt: r.editedAt };
+}
+
+/**
+ * Author only: soft delete (as musiki: body cleared, status 'deleted',
+ * terminal) marked "deletedByAuthor" so the tombstone reads "Deleted by the
+ * author". Replies stay (they keep their parentPostId). Published or hidden
+ * posts; an adopted post's ConceptVersion is never touched.
+ */
+export async function deleteOwnPost(
+  q: QueryFn,
+  input: { spaceId: string; postId: string; actorUserId: string | null },
+): Promise<{ postId: string; status: 'deleted'; deletedByAuthor: true }> {
+  const spaceId = requireUuid(input.spaceId, 'space');
+  const post = await loadOwnOpenPost(q, spaceId, input.actorUserId, input.postId);
+  if (post.status === 'deleted') throw new ForumError(409, 'post is deleted');
+  const rows = await run(
+    q,
+    `UPDATE "ForumPost" p SET status = 'deleted', body = '', "deletedByAuthor" = true, "updatedAt" = now()
+     WHERE p.id = $1::uuid AND p."authorUserId" = $2::uuid AND p.status IN ('published', 'hidden')
+       AND ${IN_OPEN_SPACE_THREAD('$3')}
+     RETURNING p.id`,
+    [post.id, input.actorUserId, spaceId],
+  );
+  if (!rows.length) throw new ForumError(409, 'post changed concurrently');
+  return { postId: post.id, status: 'deleted', deletedByAuthor: true };
 }
