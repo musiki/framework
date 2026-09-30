@@ -197,6 +197,8 @@ function draw(holder: HTMLElement): void {
     .filter((e: Event) => {
       const ev = e as WheelEvent;
       if (ev.type === 'wheel') return ev.ctrlKey || holder.matches(':focus-within');
+      // One finger scrolls the page (touch-action: pan-y); two fingers pan and zoom the graph.
+      if (ev.type.startsWith('touch')) return (e as TouchEvent).touches.length > 1;
       return !ev.ctrlKey && !(ev as MouseEvent).button;
     })
     .on('zoom', (e) => {
@@ -263,7 +265,7 @@ function draw(holder: HTMLElement): void {
     render();
     if (status) {
       status.textContent = d
-        ? (holder.dataset.selectedTemplate ?? '{label}').replace('{label}', d.label).replace('{relations}', String(neighbours.get(d.id)!.size))
+        ? (holder.dataset.selectedTemplate ?? '{label}').replace(/\{label\}|\{relations\}/g, (m) => (m === '{label}' ? d.label : String(neighbours.get(d.id)!.size)))
         : '';
     }
     if (d && reveal) {

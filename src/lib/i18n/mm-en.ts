@@ -292,7 +292,7 @@ export const mmEn = {
     resetLabel: 'Reset the zoom',
     showLabels: 'Show all labels',
     canvas: 'Interactive concept graph',
-    keys: 'Scroll or pinch to zoom, drag the background to pan. Click a concept to select it and click again to open it. With the graph focused: + and − zoom, 0 resets, the arrow keys move between concepts, Enter opens the selected one, Escape clears the selection.',
+    keys: 'Click the graph, then scroll to zoom (or pinch with two fingers); drag the background to pan. Click a concept to select it and click again to open it. With the graph focused: + and − zoom, 0 resets, the arrow keys move between concepts, Enter opens the selected one, Escape clears the selection.',
     selected: '{label}: {relations} relations. Press Enter to open.',
   },
   admin: {

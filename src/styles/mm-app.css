@@ -133,7 +133,7 @@
 .mm-graph { width: 100%; border: var(--mm-rule); margin: 0 0 0.5rem; background: var(--mm-white); }
 .mm-graph:empty { display: none; }
 .mm-graph:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
-.mm-graph svg { display: block; width: 100%; height: 520px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.mm-graph svg { display: block; width: 100%; height: 520px; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 .mm-graph svg:active { cursor: grabbing; }
 .mm-graph .cm-node { cursor: pointer; }
 .mm-graph .cm-node rect { stroke: var(--mm-ink); stroke-width: 2px; fill: var(--mm-st, var(--mm-white)); }
