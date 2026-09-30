@@ -203,7 +203,7 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
                       <td><a href={typePath(r.type)} lang={relLabel(r.type).lang}>{relLabel(r.type).text}</a></td>
                       <td>{r.direction === 'out' ? otherCell : selfCell}</td>
                       <td>
-                        {can(role, 'deleteRelation', { isOwnRelation: r.own }) && (
+                        {(can(role, 'deleteRelation') || (can(role, 'deleteRelation', { isOwnRelation: r.own }) && !r.settled && r.agree + r.disagree === 0)) && (
                           <button type="button" class="mm-textbutton" data-mm-action data-method="DELETE" data-endpoint={`/api/mm/relations/${r.id}`} data-then="reload"
                             title={t(lang, 'mm.concept.relationBy', { name: displayName(r.createdBy, formerMember, memberLabel) })}>{t(lang, 'mm.concept.removeRelation')}</button>
                         )}
