@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConceptError } from './concepts-core.ts';
 import {
-  getRelationView, setStance, settleRelation, stanceRevealDays, revealAt,
-  REVEAL_AT_SQL, REVEALED_SQL, REVEAL_DAYS_SQL, STANCE_NAMES_SQL,
+  getRelationView, setStance, settleRelation, stanceRevealDays, revealAt, frozenRevealAt,
+  REVEAL_AT_SQL, REVEALED_SQL, STANCE_NAMES_SQL,
 } from './stances-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -91,15 +91,13 @@ const VIEWERS = [['admin', U.admin], ['curator', U.curator], ['member', U.member
 // Reveal time
 // ---------------------------------------------------------------------------
 
-test('reveal SQL: COALESCE(settledAt, createdAt + stanceRevealDays days), default 14, clamped 1–90', () => {
-  assert.match(REVEAL_AT_SQL, /^COALESCE\(r\."settledAt", r\."createdAt" \+ make_interval\(days => /);
-  assert.match(REVEAL_DAYS_SQL, /jsonb_typeof\(sp\.settings -> 'stanceRevealDays'\) = 'number'/);
-  assert.match(REVEAL_DAYS_SQL, /LEAST\(90, GREATEST\(1, round\(\(sp\.settings ->> 'stanceRevealDays'\)::numeric\)\)\)::int/);
-  assert.match(REVEAL_DAYS_SQL, /ELSE 14 END/);
+test('reveal SQL: the frozen per-relation date, or an earlier settle time — never the space setting', () => {
+  assert.equal(REVEAL_AT_SQL, 'LEAST(r."revealAt", COALESCE(r."settledAt", r."revealAt"))');
   assert.equal(REVEALED_SQL, `now() >= ${REVEAL_AT_SQL}`);
+  assert.doesNotMatch(REVEAL_AT_SQL, /settings|stanceRevealDays|createdAt/);
 });
 
-test('stanceRevealDays / revealAt (pure mirror): default, clamp, settle wins, auto-reveal by date', () => {
+test('stanceRevealDays / frozenRevealAt / revealAt (pure mirrors): default, clamp, settle only brings the reveal forward', () => {
   assert.equal(stanceRevealDays({}), 14);
   assert.equal(stanceRevealDays(null), 14);
   assert.equal(stanceRevealDays({ stanceRevealDays: '7' }), 14, 'only numbers count');
@@ -107,11 +105,13 @@ test('stanceRevealDays / revealAt (pure mirror): default, clamp, settle wins, au
   assert.equal(stanceRevealDays('{"stanceRevealDays": 30}'), 30);
   assert.equal(stanceRevealDays({ stanceRevealDays: 0 }), 1);
   assert.equal(stanceRevealDays({ stanceRevealDays: 1e9 }), 90);
-  const created = '2026-09-10T00:00:00.000Z';
-  assert.equal(revealAt(created, null, 14).toISOString(), '2026-09-24T00:00:00.000Z');
-  assert.equal(revealAt(created, '2026-09-12T08:00:00.000Z', 14).toISOString(), '2026-09-12T08:00:00.000Z');
+  const frozen = frozenRevealAt('2026-09-10T00:00:00.000Z', stanceRevealDays({}));
+  assert.equal(frozen.toISOString(), '2026-09-24T00:00:00.000Z');
+  assert.equal(revealAt(frozen, null).toISOString(), '2026-09-24T00:00:00.000Z');
+  assert.equal(revealAt(frozen, '2026-09-12T08:00:00.000Z').toISOString(), '2026-09-12T08:00:00.000Z', 'settled early');
+  assert.equal(revealAt(frozen, '2026-09-28T00:00:00.000Z').toISOString(), '2026-09-24T00:00:00.000Z', 'settling late never moves the date');
   // Auto-reveal by date: open the day before, revealed on the day.
-  const at = revealAt(created, null, stanceRevealDays({}));
+  const at = revealAt(frozen, null);
   assert.ok(new Date('2026-09-23T23:59:59Z') < at && new Date('2026-09-24T00:00:00Z') >= at);
 });
 

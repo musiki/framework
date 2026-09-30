@@ -6,7 +6,12 @@
 --     keeps the two namespaces apart under the existing unique ("spaceId", slug).
 --   * "RelationType": label/inverse, visual encoding (palette slot, never a free
 --     colour), logical properties, built-in/archived flags.
---   * "ConceptRelation": "typeId" (FK), provenance "fromPostId", settle state.
+--   * "ConceptRelation": "typeId" (FK), provenance "fromPostId", settle state, and
+--     "revealAt": the date its stances are revealed, FROZEN when the relation is
+--     created (createdAt + the space's stanceRevealDays at that moment). Changing
+--     the space setting later never moves it; settling can only bring the reveal
+--     forward. The trigger below sets it on INSERT and refuses any later change,
+--     and refuses to change or clear a settle time (no un-settle).
 --     The legacy text column "type" stays for one release and always holds the type's
 --     slug: a trigger keeps "type" and "typeId" in step whichever one a writer sets,
 --     so the engine version deployed before this migration keeps working.
@@ -83,6 +88,8 @@ ALTER TABLE "ConceptRelation" ADD COLUMN IF NOT EXISTS "typeId" uuid NULL;
 ALTER TABLE "ConceptRelation" ADD COLUMN IF NOT EXISTS "fromPostId" uuid NULL;
 ALTER TABLE "ConceptRelation" ADD COLUMN IF NOT EXISTS "settledAt" timestamptz NULL;
 ALTER TABLE "ConceptRelation" ADD COLUMN IF NOT EXISTS "settledBy" uuid NULL;
+-- Set by the trigger on INSERT, backfilled below, then NOT NULL.
+ALTER TABLE "ConceptRelation" ADD COLUMN IF NOT EXISTS "revealAt" timestamptz NULL;
 
 DO $$
 BEGIN
@@ -108,9 +115,19 @@ CREATE INDEX IF NOT EXISTS "ConceptRelation_fromPostId_idx"
 -- "type" now holds any relation type slug of the space, not only the five built-ins.
 ALTER TABLE "ConceptRelation" DROP CONSTRAINT IF EXISTS "ConceptRelation_type_check";
 
+-- Days between a relation's creation and the reveal of its stances, from the
+-- space's settings: "stanceRevealDays" when it is a JSON number (rounded, clamped
+-- to 1–90), else 14. Only read when a relation is created.
+CREATE OR REPLACE FUNCTION mm_stance_reveal_days(p_settings jsonb) RETURNS integer
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE WHEN jsonb_typeof(p_settings -> 'stanceRevealDays') = 'number'
+              THEN LEAST(90, GREATEST(1, round((p_settings ->> 'stanceRevealDays')::numeric)))::int
+              ELSE 14 END
+$$;
+
 -- ── ConceptRelationStance ──────────────────────────────────────────────────────
 -- Blind-then-revealed is enforced by the queries that read this table (names are
--- selected only once now() >= reveal time); a withdrawn stance is a deleted row.
+-- selected only once now() >= reveal time = the earlier of "revealAt" and "settledAt"); a withdrawn stance is a deleted row.
 CREATE TABLE IF NOT EXISTS "ConceptRelationStance" (
   "relationId"  uuid        NOT NULL REFERENCES "ConceptRelation"("id") ON DELETE CASCADE,
   "userId"      uuid        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
@@ -207,7 +224,11 @@ BEGIN
 END
 $$;
 
--- ── "type" ⇄ "typeId" ──────────────────────────────────────────────────────────
+-- ── "type" ⇄ "typeId", frozen "revealAt", no un-settle ─────────────────────────
+-- INSERT: "revealAt" is always computed here (whatever the writer sent), so the
+-- engine version deployed before this migration, which does not know the column,
+-- keeps working. UPDATE: "revealAt" cannot change once set, and a settle time
+-- cannot be changed or cleared.
 -- Whichever column the writer sets, the other follows; "typeId" wins when both are
 -- given. The type must belong to the relation's space. Runs BEFORE the NOT NULL
 -- checks, so an INSERT may give only one of the two.
@@ -217,6 +238,18 @@ DECLARE
   t_slug text;
   t_space uuid;
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW."revealAt" := COALESCE(NEW."createdAt", now()) + make_interval(days => COALESCE(
+      (SELECT mm_stance_reveal_days(sp."settings") FROM "Space" sp WHERE sp."id" = NEW."spaceId"), 14));
+  ELSE
+    IF OLD."revealAt" IS NOT NULL AND NEW."revealAt" IS DISTINCT FROM OLD."revealAt" THEN
+      RAISE EXCEPTION 'a relation''s reveal date cannot change' USING ERRCODE = 'check_violation';
+    END IF;
+    IF OLD."settledAt" IS NOT NULL AND NEW."settledAt" IS DISTINCT FROM OLD."settledAt" THEN
+      RAISE EXCEPTION 'a settled relation cannot be un-settled or re-settled' USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+
   -- An UPDATE that changes only the legacy "type" re-resolves "typeId" from it.
   IF TG_OP = 'UPDATE' AND NEW."type" IS DISTINCT FROM OLD."type"
      AND NEW."typeId" IS NOT DISTINCT FROM OLD."typeId" THEN
@@ -247,7 +280,7 @@ $$;
 
 DROP TRIGGER IF EXISTS "ConceptRelation_type_sync" ON "ConceptRelation";
 CREATE TRIGGER "ConceptRelation_type_sync"
-  BEFORE INSERT OR UPDATE OF "type", "typeId", "spaceId" ON "ConceptRelation"
+  BEFORE INSERT OR UPDATE ON "ConceptRelation"
   FOR EACH ROW EXECUTE FUNCTION mm_concept_relation_type_sync();
 
 -- Backfill: the five legacy "type" strings are the built-in slugs, one to one.
@@ -257,6 +290,14 @@ UPDATE "ConceptRelation" r
  WHERE r."typeId" IS NULL
    AND t."spaceId" = r."spaceId"
    AND t."slug" = r."type";
+
+-- Backfill "revealAt" for relations that predate the column: creation time plus
+-- the space's current setting.
+UPDATE "ConceptRelation" r
+   SET "revealAt" = r."createdAt" + make_interval(days => mm_stance_reveal_days(sp."settings"))
+  FROM "Space" sp
+ WHERE r."revealAt" IS NULL
+   AND sp."id" = r."spaceId";
 
 -- Uniqueness moves from the legacy string to the type FK.
 ALTER TABLE "ConceptRelation" DROP CONSTRAINT IF EXISTS "ConceptRelation_source_target_type_key";
@@ -272,6 +313,10 @@ BEGIN
     RAISE EXCEPTION 'ConceptRelation rows without a relation type remain after backfill';
   END IF;
   ALTER TABLE "ConceptRelation" ALTER COLUMN "typeId" SET NOT NULL;
+  IF EXISTS (SELECT 1 FROM "ConceptRelation" WHERE "revealAt" IS NULL) THEN
+    RAISE EXCEPTION 'ConceptRelation rows without a reveal date remain after backfill';
+  END IF;
+  ALTER TABLE "ConceptRelation" ALTER COLUMN "revealAt" SET NOT NULL;
 END
 $$;
 
@@ -292,7 +337,7 @@ BEGIN
         EXECUTE format('ALTER TABLE public.%I OWNER TO app', t);
       END IF;
     END LOOP;
-    FOREACH f IN ARRAY ARRAY['mm_seed_relation_types(uuid)', 'mm_concept_relation_type_sync()'] LOOP
+    FOREACH f IN ARRAY ARRAY['mm_seed_relation_types(uuid)', 'mm_concept_relation_type_sync()', 'mm_stance_reveal_days(jsonb)'] LOOP
       IF EXISTS (
         SELECT 1 FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace

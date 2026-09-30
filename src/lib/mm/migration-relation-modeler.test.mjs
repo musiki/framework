@@ -33,7 +33,7 @@ test('relation modeler migration is one guarded, re-runnable transaction', () =>
   // ownership only when the app role exists
   assert.match(statements, /IF EXISTS \(SELECT 1 FROM pg_roles WHERE rolname = 'app'\) THEN/);
   assert.match(statements, /ARRAY\['RelationType', 'ConceptRelationStance'\]/);
-  assert.match(statements, /ARRAY\['mm_seed_relation_types\(uuid\)', 'mm_concept_relation_type_sync\(\)'\]/);
+  assert.match(statements, /ARRAY\['mm_seed_relation_types\(uuid\)', 'mm_concept_relation_type_sync\(\)', 'mm_stance_reveal_days\(jsonb\)'\]/);
 });
 
 test('relation modeler migration: enums, palette, area rule, stances', () => {
@@ -62,7 +62,8 @@ test('relation modeler migration: ConceptRelation type FK, provenance, uniquenes
   assert.match(statements, /UNIQUE \("sourceId", "targetId", "typeId"\)/);
   // the legacy "type" column is kept (one release), never dropped here
   assert.doesNotMatch(statements, /DROP COLUMN/);
-  assert.match(statements, /BEFORE INSERT OR UPDATE OF "type", "typeId", "spaceId" ON "ConceptRelation"/);
+  // the trigger sees every UPDATE (it also guards "revealAt" and "settledAt")
+  assert.match(statements, /BEFORE INSERT OR UPDATE ON "ConceptRelation"/);
   // order: seed → sync trigger → backfill → new uniqueness → NOT NULL
   const at = (re) => {
     const i = statements.search(re);
@@ -95,4 +96,30 @@ test('relation modeler migration: the five built-ins with their encodings', () =
   assert.match(statements, /VALUES \(p_space, 'rel:' \|\| b\.slug, b\.label, b\.label_nb, 'relation-type', NULL, NULL\)/);
   assert.match(statements, /VALUES \(v_concept, 'en', b\.definition, NULL, NULL\)/);
   assert.match(statements, /'line', b\.stroke, b\.arrow, b\.color, b\.is_symmetric, b\.is_transitive, false,\s+b\.pos, true, NULL/);
+});
+
+test('relation modeler migration: reveal date frozen per relation, no un-settle (DB level)', () => {
+  assert.match(statements, /ADD COLUMN IF NOT EXISTS "revealAt" timestamptz NULL/);
+  // days: the space setting when it is a number, clamped 1–90, else 14
+  assert.match(statements, /CREATE OR REPLACE FUNCTION mm_stance_reveal_days\(p_settings jsonb\) RETURNS integer/);
+  assert.match(statements, /jsonb_typeof\(p_settings -> 'stanceRevealDays'\) = 'number'/);
+  assert.match(statements, /LEAST\(90, GREATEST\(1, round\(\(p_settings ->> 'stanceRevealDays'\)::numeric\)\)\)::int\s+ELSE 14 END/);
+  // INSERT: always computed by the trigger (the old engine does not send it)
+  assert.match(statements, /IF TG_OP = 'INSERT' THEN\s+NEW\."revealAt" := COALESCE\(NEW\."createdAt", now\(\)\) \+ make_interval\(days => COALESCE\(\s+\(SELECT mm_stance_reveal_days\(sp\."settings"\) FROM "Space" sp WHERE sp\."id" = NEW\."spaceId"\), 14\)\);/);
+  // UPDATE: a set reveal date never changes; a settle time is never changed or cleared
+  assert.match(statements, /IF OLD\."revealAt" IS NOT NULL AND NEW\."revealAt" IS DISTINCT FROM OLD\."revealAt" THEN\s+RAISE EXCEPTION/);
+  assert.match(statements, /IF OLD\."settledAt" IS NOT NULL AND NEW\."settledAt" IS DISTINCT FROM OLD\."settledAt" THEN\s+RAISE EXCEPTION/);
+  // order: helper → trigger → backfill (only NULLs) → NOT NULL
+  const at = (re) => {
+    const i = statements.search(re);
+    assert.notEqual(i, -1, String(re));
+    return i;
+  };
+  const order = [
+    at(/CREATE OR REPLACE FUNCTION mm_stance_reveal_days/),
+    at(/CREATE TRIGGER "ConceptRelation_type_sync"/),
+    at(/SET "revealAt" = r\."createdAt" \+ make_interval\(days => mm_stance_reveal_days\(sp\."settings"\)\)\s+FROM "Space" sp\s+WHERE r\."revealAt" IS NULL/),
+    at(/ALTER COLUMN "revealAt" SET NOT NULL/),
+  ];
+  assert.deepEqual(order, [...order].sort((a, b) => a - b));
 });

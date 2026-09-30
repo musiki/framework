@@ -6,8 +6,12 @@
 // user, changeable; withdrawing deletes the row (no trace).
 //
 // SECURITY INVARIANT — enforced in SQL, not in callers:
-//   * reveal time = COALESCE(settledAt, createdAt + stanceRevealDays days),
-//     stanceRevealDays from Space.settings (default 14, clamped 1–90);
+//   * every relation has a FROZEN reveal date, ConceptRelation."revealAt", set by
+//     the database when the relation is created (createdAt + the space's
+//     stanceRevealDays at that moment: default 14, clamped 1–90). Changing the
+//     space setting later moves nothing. Settling can only bring the reveal
+//     forward: reveal time = LEAST(revealAt, COALESCE(settledAt, revealAt)).
+//     The database refuses to change "revealAt" or to change/clear a settle time;
 //   * before the reveal, NOTHING in this module returns who holds which stance,
 //     for any role (admins and curators included): the only statement that
 //     reads a name next to a stance (STANCE_NAMES_SQL) carries
@@ -35,7 +39,11 @@ export const STANCE_REVEAL_DAYS_DEFAULT = 14;
 export const STANCE_REVEAL_DAYS_MIN = 1;
 export const STANCE_REVEAL_DAYS_MAX = 90;
 
-/** The space's `stanceRevealDays` setting: a number clamped to 1–90, else the default 14. Mirrors REVEAL_DAYS_SQL. */
+/**
+ * The space's `stanceRevealDays` setting: a number clamped to 1–90, else the
+ * default 14. Mirrors the SQL function mm_stance_reveal_days; only used when a
+ * relation is created (by the database trigger).
+ */
 export function stanceRevealDays(settings: unknown): number {
   let obj: unknown = settings;
   if (typeof obj === 'string') {
@@ -50,18 +58,24 @@ export function stanceRevealDays(settings: unknown): number {
   return Math.min(STANCE_REVEAL_DAYS_MAX, Math.max(STANCE_REVEAL_DAYS_MIN, Math.round(raw)));
 }
 
-/** Reveal time of a relation (pure mirror of REVEAL_AT_SQL, for display and tests). */
-export function revealAt(createdAt: string | Date, settledAt: string | Date | null | undefined, days: number): Date {
-  if (settledAt) return new Date(settledAt);
+/**
+ * Reveal time of a relation (pure mirror of REVEAL_AT_SQL, for display and
+ * tests): its frozen reveal date, or the settle time when that came first.
+ */
+export function revealAt(frozenRevealAt: string | Date, settledAt?: string | Date | null): Date {
+  const frozen = new Date(frozenRevealAt);
+  if (!settledAt) return frozen;
+  const settled = new Date(settledAt);
+  return settled.getTime() < frozen.getTime() ? settled : frozen;
+}
+
+/** The frozen reveal date a relation created at `createdAt` gets (mirror of the DB trigger). */
+export function frozenRevealAt(createdAt: string | Date, days: number): Date {
   return new Date(new Date(createdAt).getTime() + days * 86_400_000);
 }
 
-/** Days until reveal, from Space.settings (alias `sp`). Not a number → 14; clamped before the cast. */
-export const REVEAL_DAYS_SQL = `(CASE WHEN jsonb_typeof(sp.settings -> 'stanceRevealDays') = 'number'
-        THEN LEAST(${STANCE_REVEAL_DAYS_MAX}, GREATEST(${STANCE_REVEAL_DAYS_MIN}, round((sp.settings ->> 'stanceRevealDays')::numeric)))::int
-        ELSE ${STANCE_REVEAL_DAYS_DEFAULT} END)`;
-/** Reveal time of relation `r` in space `sp`. */
-export const REVEAL_AT_SQL = `COALESCE(r."settledAt", r."createdAt" + make_interval(days => ${REVEAL_DAYS_SQL}))`;
+/** Reveal time of relation `r`: its frozen date, or an earlier settle time. Never later than "revealAt". */
+export const REVEAL_AT_SQL = `LEAST(r."revealAt", COALESCE(r."settledAt", r."revealAt"))`;
 /** THE blind guard: true only once the relation's stances are revealed. */
 export const REVEALED_SQL = `now() >= ${REVEAL_AT_SQL}`;
 
