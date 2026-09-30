@@ -358,7 +358,7 @@ const FORUM_SELECT = `SELECT b.id, b.slug, b.title, b.description, b.settings, b
        (SELECT count(*) FROM "ForumThread" t
          WHERE ${SUBTREE('t')} AND t."spaceId" = b."spaceId" AND t."archivedAt" IS NULL)::int AS "threadCount",
        (SELECT count(*) FROM "Concept" c
-         WHERE c."spaceId" = b."spaceId" AND (c."forumId" = b.id OR EXISTS (
+         WHERE c."spaceId" = b."spaceId" AND c.kind = 'concept' AND (c."forumId" = b.id OR EXISTS (
            SELECT 1 FROM "ForumThread" ct WHERE ct.id = c."threadId" AND ct."boardId" = b.id)))::int AS "conceptCount",
        (SELECT max(p."createdAt") FROM "ForumPost" p JOIN "ForumThread" t ON t.id = p."threadId"
          WHERE ${SUBTREE('t')} AND t."spaceId" = b."spaceId" AND p.status = 'published') AS "lastActivityAt"
@@ -743,7 +743,7 @@ export async function listThreads(
      LEFT JOIN "User" u ON u.id = t."createdByUserId"
      LEFT JOIN LATERAL (
        SELECT c.slug, c.label FROM "Concept" c
-       WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId"
+       WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId" AND c.kind = 'concept'
        ORDER BY c."createdAt" ASC, c.id ASC LIMIT 1
      ) c ON true
      WHERE t."spaceId" = $1::uuid AND t."boardId" = $2::uuid AND t."archivedAt" IS NULL
@@ -914,7 +914,7 @@ export async function listPosts(
      LEFT JOIN "ForumBoard" pb ON pb.id = b."parentId"
      LEFT JOIN LATERAL (
        SELECT c.slug, c.label FROM "Concept" c
-       WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId"
+       WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId" AND c.kind = 'concept'
        ORDER BY c."createdAt" ASC, c.id ASC LIMIT 1
      ) c ON true
      WHERE t.id = $1::uuid AND t."spaceId" = $2::uuid

@@ -657,6 +657,7 @@ test('thread reads take at most one concept per thread (LATERAL … LIMIT 1)', a
   await listPosts(posts.q, { spaceId: SPACE, threadId: THREAD });
   for (const c of [...list.calls, ...posts.calls].filter((c) => c.text.includes('"Concept" c'))) {
     assert.match(c.text, /LEFT JOIN LATERAL \(\s+SELECT c\.slug, c\.label FROM "Concept" c[\s\S]*LIMIT 1\s+\) c ON true/);
+    assert.match(c.text, /c\.kind = 'concept'/);
   }
 });
 

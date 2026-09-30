@@ -253,7 +253,7 @@ export async function findForumId(q: QueryFn, spaceId: string, ref: unknown): Pr
 /** Concept id by slug in the space. */
 export async function findConceptId(q: QueryFn, spaceId: string, slug: unknown): Promise<string> {
   if (typeof slug !== 'string' || !slug || slug.length > 200) throw new MmApiError(404, 'concept not found');
-  const r = (await rows(q, `SELECT id FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2 LIMIT 1`, [spaceId, slug]))[0];
+  const r = (await rows(q, `SELECT id FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2 AND kind = 'concept' LIMIT 1`, [spaceId, slug]))[0];
   if (!r) throw new MmApiError(404, 'concept not found');
   return r.id;
 }

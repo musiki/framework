@@ -164,7 +164,7 @@ export async function loadExport(q: QueryFn, spaceId: string, now: Date = new Da
     q,
     `SELECT c.id, c.slug, c.label, c."labelNb", c.status, f.slug AS "forumSlug", f.title AS "forumTitle"
        FROM "Concept" c LEFT JOIN "ForumBoard" f ON f.id = c."forumId"
-      WHERE c."spaceId" = $1::uuid
+      WHERE c."spaceId" = $1::uuid AND c.kind = 'concept'
       ORDER BY lower(c.label) ASC, c.id ASC`,
     [spaceId],
   );
@@ -174,7 +174,7 @@ export async function loadExport(q: QueryFn, spaceId: string, now: Date = new Da
     `SELECT v."conceptId", v.lang, v.definition, v."createdAt",
             u.name AS "creditedName", (v."creditedUserId" IS NULL OR u.id IS NULL) AS "creditedDeleted"
        FROM "ConceptVersion" v
-       JOIN "Concept" c ON c.id = v."conceptId" AND c."spaceId" = $1::uuid
+       JOIN "Concept" c ON c.id = v."conceptId" AND c."spaceId" = $1::uuid AND c.kind = 'concept'
        LEFT JOIN "User" u ON u.id = v."creditedUserId"
       ORDER BY v."createdAt" ASC, v.id ASC`,
     [spaceId],

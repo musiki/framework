@@ -101,6 +101,9 @@ test('loader SQL selects only display names and is scoped to the space', async (
   const versionSql = seen.find((s) => /ConceptVersion/.test(s.text)).text;
   assert.match(versionSql, /u\.name AS "creditedName"/);
   assert.doesNotMatch(versionSql, /SELECT[^]*"creditedUserId",/);
+  // Relation types' definition concepts (kind 'relation-type') are not concepts of the export.
+  assert.match(seen.find((s) => /FROM "Concept" c LEFT JOIN/.test(s.text)).text, /c\.kind = 'concept'/);
+  assert.match(versionSql, /c\.kind = 'concept'/);
 });
 
 test('names that look like e-mails are omitted from authors (living users are not "deleted")', () => {

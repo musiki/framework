@@ -235,13 +235,18 @@ type ConceptRow = {
   status: ConceptStatus;
   threadId: string | null;
   createdBy: string | null;
+  /** 'concept', or 'relation-type' for the definition concept of a relation type (never a graph node). */
+  kind?: string;
 };
+
+export const RELATION_TYPE_KIND = 'relation-type';
+const isRelationTypeConcept = (c: { kind?: string }) => c.kind === RELATION_TYPE_KIND;
 
 async function loadConceptById(q: QueryFn, conceptId: unknown, forUpdate = false): Promise<ConceptRow> {
   const id = requireUuid(conceptId, 'concept');
   const rows = await run(
     q,
-    `SELECT id, "spaceId", "forumId", slug, label, "labelNb", status, "threadId", "createdBy"
+    `SELECT id, "spaceId", "forumId", slug, label, "labelNb", status, "threadId", "createdBy", kind
      FROM "Concept" WHERE id = $1::uuid LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
     [id],
   );
@@ -512,7 +517,15 @@ export async function getConcept(
     slug,
     viewerUserId = null,
     render = plainDefinitionHtml,
-  }: { spaceId: string; slug: string; viewerUserId?: string | null; render?: DefinitionRender },
+    kind = 'concept',
+  }: {
+    spaceId: string;
+    slug: string;
+    viewerUserId?: string | null;
+    render?: DefinitionRender;
+    /** 'concept' (default) or 'relation-type' (relation-types-core reads a type's definition concept). */
+    kind?: 'concept' | 'relation-type';
+  },
 ): Promise<ConceptView | null> {
   if (typeof spaceId !== 'string' || !isUuid(spaceId) || typeof slug !== 'string' || !slug) return null;
   const rows = await run(
@@ -528,9 +541,9 @@ export async function getConcept(
      LEFT JOIN "ForumThread" ct ON ct.id = c."threadId" AND ct."spaceId" = c."spaceId"
      LEFT JOIN "ForumBoard" tb ON tb.id = ct."boardId"
      LEFT JOIN "ForumBoard" tpb ON tpb.id = tb."parentId"
-     WHERE c."spaceId" = $1::uuid AND c.slug = $2
+     WHERE c."spaceId" = $1::uuid AND c.slug = $2 AND c.kind = $3
      LIMIT 1`,
-    [spaceId, slug],
+    [spaceId, slug, kind],
   );
   const c = rows[0];
   if (!c) return null;
@@ -627,9 +640,12 @@ export async function editDefinition(
   input: { conceptId: string; actorUserId: string | null; lang: unknown; definition: unknown; sources?: unknown },
 ): Promise<{ versionId: string }> {
   const concept = await loadConceptById(q, input.conceptId);
-  await authorize(q, concept.spaceId, input.actorUserId, 'editDefinition', () => ({
-    isAuthor: !!concept.createdBy && concept.createdBy === input.actorUserId,
-  }));
+  // A relation type's definition is vocabulary of the space: curators/admins only.
+  if (isRelationTypeConcept(concept)) await authorize(q, concept.spaceId, input.actorUserId, 'manageRelationTypes');
+  else
+    await authorize(q, concept.spaceId, input.actorUserId, 'editDefinition', () => ({
+      isAuthor: !!concept.createdBy && concept.createdBy === input.actorUserId,
+    }));
   if (!isConceptLang(input.lang)) throw new ConceptError(400, 'invalid lang');
   const lang = input.lang;
   const definition = cleanDefinition(input.definition);
@@ -716,6 +732,7 @@ export async function setStatus(
   input: { conceptId: string; actorUserId: string | null; status: unknown },
 ): Promise<{ status: ConceptStatus }> {
   const concept = await loadConceptById(q, input.conceptId);
+  if (isRelationTypeConcept(concept)) throw new ConceptError(404, 'concept not found');
   await authorize(q, concept.spaceId, input.actorUserId, 'changeStatus');
   if (!isConceptStatus(input.status)) throw new ConceptError(400, 'invalid status');
   const rows = await run(
@@ -733,6 +750,8 @@ export async function setLabels(
   input: { conceptId: string; actorUserId: string | null; label?: unknown; labelNb?: unknown },
 ): Promise<{ label: string; labelNb: string | null }> {
   const concept = await loadConceptById(q, input.conceptId);
+  // A relation type's labels live on RelationType (updateRelationType keeps both in step).
+  if (isRelationTypeConcept(concept)) throw new ConceptError(404, 'concept not found');
   await authorize(q, concept.spaceId, input.actorUserId, 'editDefinition', () => ({
     isAuthor: !!concept.createdBy && concept.createdBy === input.actorUserId,
   }));
@@ -759,11 +778,13 @@ export async function createRelation(
   input: { sourceId: string; targetId: string; type: unknown; actorUserId: string | null },
 ): Promise<{ id: string }> {
   const source = await loadConceptById(q, input.sourceId);
+  if (isRelationTypeConcept(source)) throw new ConceptError(404, 'concept not found');
   await authorize(q, source.spaceId, input.actorUserId, 'createRelation');
   if (!isRelationType(input.type)) throw new ConceptError(400, 'invalid relation type');
   const targetId = requireUuid(input.targetId, 'target concept');
   if (targetId === source.id) throw new ConceptError(400, 'a concept cannot relate to itself');
   const target = await loadConceptById(q, targetId);
+  if (isRelationTypeConcept(target)) throw new ConceptError(404, 'target concept not found');
   if (target.spaceId !== source.spaceId) throw new ConceptError(400, 'concepts belong to different spaces');
 
   const existing = await run(
@@ -835,7 +856,7 @@ export async function listConcepts(
             COALESCE((SELECT array_agg(DISTINCT v.lang) FROM "ConceptVersion" v WHERE v."conceptId" = c.id), '{}') AS langs
      FROM "Concept" c
      LEFT JOIN "ForumBoard" f ON f.id = c."forumId"
-     WHERE c."spaceId" = $1::uuid
+     WHERE c."spaceId" = $1::uuid AND c.kind = 'concept'
        AND ($2::uuid IS NULL OR c."forumId" = $2::uuid OR EXISTS (
          SELECT 1 FROM "ForumThread" ct WHERE ct.id = c."threadId" AND ct."boardId" = $2::uuid))
        AND ($3::text IS NULL OR c.status = $3)

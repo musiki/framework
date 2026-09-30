@@ -661,3 +661,45 @@ test('shouldDestroyClient: domain errors keep the connection, db errors / failed
   assert.equal(shouldDestroyClient(new Error('connection reset'), false), true);
   assert.equal(shouldDestroyClient(new ConceptError(409, 'x'), true), true);
 });
+
+// ---------------------------------------------------------------------------
+// kind = 'relation-type' concepts (definition concepts of relation types)
+// ---------------------------------------------------------------------------
+
+const RT = id(23);
+const relTypeConcept = () => conceptRow({ id: RT, slug: 'rel:derives', label: 'derives from', kind: 'relation-type', threadId: null, createdBy: null });
+
+test('relation-type concepts are excluded from lists, graph nodes and getConcept by default', async () => {
+  const fx = fakeQuery([['FROM "Concept" c', () => listRows]]);
+  await listConcepts(fx.q, { spaceId: SPACE });
+  assert.match(fx.calls[0].text, /c\.kind = 'concept'/);
+
+  const g = fakeQuery([['FROM "Concept" c', () => listRows]]);
+  await graph(g.q, { spaceId: SPACE });
+  assert.match(g.calls.find((c) => c.text.includes('FROM "Concept" c')).text, /c\.kind = 'concept'/);
+
+  const one = fakeQuery([]);
+  assert.equal(await getConcept(one.q, { spaceId: SPACE, slug: 'rel:derives' }), null);
+  assert.match(one.calls[0].text, /c\.slug = \$2 AND c\.kind = \$3/);
+  assert.deepEqual(one.calls[0].params, [SPACE, 'rel:derives', 'concept']);
+  const asType = fakeQuery([]);
+  await getConcept(asType.q, { spaceId: SPACE, slug: 'rel:derives', kind: 'relation-type' });
+  assert.deepEqual(asType.calls[0].params, [SPACE, 'rel:derives', 'relation-type']);
+});
+
+test('relation-type concepts: never a relation endpoint, no status/labels; definition edits need manageRelationTypes', async () => {
+  const mk = () => fakeQuery([
+    memberRoute,
+    conceptByIdRoute({ [C1]: conceptRow(), [RT]: relTypeConcept() }),
+    ['INSERT INTO "ConceptVersion"', () => [{ id: 'v9', createdAt: 't' }]],
+    ['INSERT INTO "ConceptRelation"', () => [{ id: REL }]],
+  ]);
+  await rejectsStatus(createRelation(mk().q, { sourceId: RT, targetId: C1, type: 'derives', actorUserId: U.curator }), 404);
+  const fx = mk();
+  await rejectsStatus(createRelation(fx.q, { sourceId: C1, targetId: RT, type: 'derives', actorUserId: U.curator }), 404);
+  assert.ok(!fx.calls.some((c) => c.text.includes('INSERT INTO')));
+  await rejectsStatus(setStatus(mk().q, { conceptId: RT, actorUserId: U.admin, status: 'assimilated' }), 404);
+  await rejectsStatus(setLabels(mk().q, { conceptId: RT, actorUserId: U.admin, label: 'x' }), 404);
+  await rejectsStatus(editDefinition(mk().q, { conceptId: RT, actorUserId: U.member, lang: 'en', definition: 'd' }), 403);
+  assert.deepEqual(await editDefinition(mk().q, { conceptId: RT, actorUserId: U.curator, lang: 'nb', definition: 'd' }), { versionId: 'v9' });
+});
