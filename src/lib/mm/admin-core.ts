@@ -168,3 +168,47 @@ export async function setOpenJoin(q: QueryFn, spaceId: string, value: unknown): 
 }
 
 export const openJoinOf = (settings: Record<string, unknown>): boolean => settings?.openJoin === true;
+
+export const STANCE_REVEAL_DAYS_RANGE = { min: 1, max: 90 } as const;
+
+/**
+ * `Space.settings.stanceRevealDays` as a JSON integer, 1–90. Anything else —
+ * a string ("14"), a fraction, null, out of range — is a 400: the database
+ * function that freezes each relation's reveal date ignores non-numbers, so a
+ * string would silently fall back to 14. Only relations proposed after the
+ * change use the new value (the reveal date is frozen per relation).
+ */
+export async function setStanceRevealDays(q: QueryFn, spaceId: string, value: unknown): Promise<{ stanceRevealDays: number }> {
+  const { min, max } = STANCE_REVEAL_DAYS_RANGE;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+    throw new MmApiError(400, `stanceRevealDays must be a whole number from ${min} to ${max}`);
+  }
+  const r = await run(
+    q,
+    `UPDATE "Space" SET settings = jsonb_set(COALESCE(settings, '{}'::jsonb), '{stanceRevealDays}', to_jsonb($1::int), true)
+      WHERE id = $2::uuid AND kind = 'commons' RETURNING settings -> 'stanceRevealDays' AS "stanceRevealDays"`,
+    [value, spaceId],
+  );
+  if (!r.length) throw new MmApiError(404, 'space not found');
+  return { stanceRevealDays: Number(r[0].stanceRevealDays) };
+}
+
+/**
+ * PATCH /api/mm/admin/settings body: `openJoin` and/or `stanceRevealDays`,
+ * nothing else. Validates everything before any write.
+ */
+export function settingsPatch(body: Record<string, unknown>): { openJoin?: unknown; stanceRevealDays?: unknown } {
+  const keys = Object.keys(body);
+  const extra = keys.filter((k) => k !== 'openJoin' && k !== 'stanceRevealDays');
+  if (extra.length) throw new MmApiError(400, `unexpected field: ${extra[0].slice(0, 40)}`);
+  if (!keys.length) throw new MmApiError(400, 'send openJoin and/or stanceRevealDays');
+  if ('openJoin' in body && typeof body.openJoin !== 'boolean') throw new MmApiError(400, 'openJoin must be a boolean');
+  if ('stanceRevealDays' in body) {
+    const v = body.stanceRevealDays;
+    const { min, max } = STANCE_REVEAL_DAYS_RANGE;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
+      throw new MmApiError(400, `stanceRevealDays must be a whole number from ${min} to ${max}`);
+    }
+  }
+  return body;
+}

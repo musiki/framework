@@ -381,6 +381,15 @@ export const mmEn = {
       on: 'Open joining is on.',
       off: 'Open joining is off.',
     },
+    reveal: {
+      title: 'Stance reveal',
+      label: 'Days until stances on a relation are revealed',
+      help: 'Agree and disagree stances on a relation stay anonymous (only the totals show) until the relation is settled or this many days after it was proposed; then members see who took which stance. From 1 to 90 days; 14 by default.',
+      note: 'A change applies only to relations proposed from now on: each relation keeps the reveal date it got when it was proposed.',
+      save: 'Save',
+      saved: 'Stances on new relations will be revealed after {days} days.',
+      invalid: 'Enter a whole number from 1 to 90.',
+    },
     forums: {
       title: 'Forums',
       lead: 'Create forums, edit their title and description, link a bibliography, or archive them. Archived forums are hidden from readers; nothing is deleted.',

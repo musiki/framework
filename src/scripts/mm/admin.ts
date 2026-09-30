@@ -416,6 +416,46 @@ function initOpenJoin(): void {
   });
 }
 
+// ——— Stance reveal delay ———
+// Only relations proposed after a change use the new delay (reveal dates are frozen per relation).
+function initStanceReveal(): void {
+  const sec = new Section('reveal');
+  const form = sec.el.querySelector<HTMLFormElement>('[data-reveal-form]')!;
+  const input = form.querySelector<HTMLInputElement>('[data-reveal-days]')!;
+  const save = form.querySelector<HTMLButtonElement>('[data-reveal-save]')!;
+  void (async () => {
+    try {
+      const r = await mmApi<{ stanceRevealDays: number }>('/api/mm/admin/settings');
+      input.value = String(r.stanceRevealDays);
+      input.disabled = false;
+      save.disabled = false;
+    } catch (err) {
+      sec.err(`${S('loadFailed')} ${errorMessage(err)}`);
+    }
+  })();
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const days = Number(input.value.trim());
+    if (!input.value.trim() || !Number.isInteger(days) || days < 1 || days > 90) {
+      sec.err(S('reveal.invalid'));
+      focusLater(input);
+      return;
+    }
+    save.disabled = true;
+    try {
+      // A JSON number: the server refuses strings.
+      const r = await mmApi<{ stanceRevealDays: number }>('/api/mm/admin/settings', { method: 'PATCH', body: { stanceRevealDays: days } });
+      input.value = String(r.stanceRevealDays);
+      sec.ok(S('reveal.saved', { days: r.stanceRevealDays }));
+    } catch (err) {
+      sec.err(errorMessage(err));
+    } finally {
+      save.disabled = false;
+      focusLater(input);
+    }
+  });
+}
+
 // ——— Seshat library picker ———
 type LibraryListing = { available: boolean; libraries: PickerLibrary[] };
 const LIBRARY_TTL_MS = 60_000;
@@ -850,5 +890,6 @@ if (root) {
   initRules();
   initMembers();
   initOpenJoin();
+  initStanceReveal();
   initForums();
 }

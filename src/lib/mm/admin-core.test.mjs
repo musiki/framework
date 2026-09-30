@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requireAdmin, setMemberRole, removeMember, setOpenJoin, revokeInvite, openJoinOf } from './admin-core.ts';
+import { requireAdmin, setMemberRole, removeMember, setOpenJoin, revokeInvite, openJoinOf, setStanceRevealDays, settingsPatch } from './admin-core.ts';
+import { stanceRevealDays } from './stances-core.ts';
 import { validateInviteInput, validateAccessRuleInput } from '../tenant/space-roles.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -95,6 +96,31 @@ test('setOpenJoin writes a JSON boolean; rejects non-booleans', async () => {
   assert.equal(openJoinOf({ openJoin: true }), true);
   assert.equal(openJoinOf({ openJoin: 'true' }), false);
   assert.equal(openJoinOf({}), false);
+});
+
+test('setStanceRevealDays writes a JSON integer 1-90; strings and others are 400 before any write', async () => {
+  const { q, calls } = fakeQ([[/UPDATE "Space"/, (_t, p) => ({ data: [{ stanceRevealDays: p[0] }], error: null })]]);
+  assert.deepEqual(await setStanceRevealDays(q, SPACE, 7), { stanceRevealDays: 7 });
+  assert.deepEqual(await setStanceRevealDays(q, SPACE, 1), { stanceRevealDays: 1 });
+  assert.deepEqual(await setStanceRevealDays(q, SPACE, 90), { stanceRevealDays: 90 });
+  assert.match(calls[0].text, /to_jsonb\(\$1::int\)/);
+  assert.match(calls[0].text, /kind = 'commons'/);
+  const before = calls.length;
+  for (const bad of ['14', '7', 0, 91, -1, 1.5, NaN, Infinity, null, undefined, true, [14], { d: 14 }]) {
+    await assert.rejects(setStanceRevealDays(q, SPACE, bad), (e) => e.status === 400, String(bad));
+  }
+  assert.equal(calls.length, before, 'no write for a rejected value');
+  // What is stored is what the reveal-date reader understands.
+  assert.equal(stanceRevealDays({ stanceRevealDays: 7 }), 7);
+});
+
+test('settingsPatch: openJoin and/or stanceRevealDays, validated together, nothing else', () => {
+  assert.deepEqual(settingsPatch({ openJoin: true }), { openJoin: true });
+  assert.deepEqual(settingsPatch({ stanceRevealDays: 30 }), { stanceRevealDays: 30 });
+  assert.deepEqual(settingsPatch({ openJoin: false, stanceRevealDays: 3 }), { openJoin: false, stanceRevealDays: 3 });
+  for (const bad of [{}, { other: 1 }, { openJoin: 'true' }, { stanceRevealDays: '14' }, { openJoin: true, stanceRevealDays: 0 }]) {
+    assert.throws(() => settingsPatch(bad), (e) => e.status === 400, JSON.stringify(bad));
+  }
 });
 
 test('revokeInvite validates the id and scopes to the space', async () => {

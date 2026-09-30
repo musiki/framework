@@ -74,6 +74,7 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
           <li><a href="#mm-a-rules">{A('rules.title')}</a></li>
           <li><a href="#mm-a-members">{A('members.title')}</a></li>
           <li><a href="#mm-a-open">{A('openJoin.title')}</a></li>
+          <li><a href="#mm-a-reveal">{A('reveal.title')}</a></li>
           <li><a href="#mm-a-forums">{A('forums.title')}</a></li>
         </ul>
       </nav>
@@ -153,6 +154,19 @@ const GRANTABLE = ['curator', 'member', 'guest'] as const;
           </div>
           <p id="mm-open-join-help" class="mm-help">{A('openJoin.help')}</p>
         </div>
+        <div class="mm-admin-result" data-ok role="status" aria-live="polite"></div>
+        <p class="mm-alert" data-err role="alert" hidden></p>
+      </section>
+
+      <section aria-labelledby="mm-a-reveal" class="mm-panel" data-section="reveal">
+        <h2 id="mm-a-reveal">{A('reveal.title')}</h2>
+        <form class="mm-form" data-reveal-form novalidate>
+          <label for="mm-reveal-days">{A('reveal.label')}</label>
+          <input id="mm-reveal-days" name="stanceRevealDays" type="number" inputmode="numeric" min="1" max="90" step="1" required disabled data-reveal-days aria-describedby="mm-reveal-days-help mm-reveal-days-note" />
+          <p id="mm-reveal-days-help" class="mm-help">{A('reveal.help')}</p>
+          <p id="mm-reveal-days-note" class="mm-help">{A('reveal.note')}</p>
+          <p><button type="submit" class="mm-button" disabled data-reveal-save>{A('reveal.save')}</button></p>
+        </form>
         <div class="mm-admin-result" data-ok role="status" aria-live="polite"></div>
         <p class="mm-alert" data-err role="alert" hidden></p>
       </section>

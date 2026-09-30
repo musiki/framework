@@ -384,6 +384,15 @@ export const nb: Pick<Dict, 'mm'> = {
         on: 'Åpen påmelding er på.',
         off: 'Åpen påmelding er av.',
       },
+      reveal: {
+        title: 'Avsløring av standpunkter',
+        label: 'Dager før standpunktene til en relasjon blir avslørt',
+        help: 'Standpunktene enig og uenig til en relasjon er anonyme (bare summene vises) til relasjonen er avgjort eller så mange dager etter at den ble foreslått; da ser medlemmene hvem som mente hva. Fra 1 til 90 dager; 14 som standard.',
+        note: 'En endring gjelder bare relasjoner som blir foreslått fra nå av: hver relasjon beholder avsløringsdatoen den fikk da den ble foreslått.',
+        save: 'Lagre',
+        saved: 'Standpunkter til nye relasjoner blir avslørt etter {days} dager.',
+        invalid: 'Skriv et helt tall fra 1 til 90.',
+      },
       forums: {
         title: 'Forum',
         lead: 'Opprett forum, rediger tittel og beskrivelse, koble til en litteraturliste eller arkiver dem. Arkiverte forum er skjult for leserne; ingenting slettes.',
