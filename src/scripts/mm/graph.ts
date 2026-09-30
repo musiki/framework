@@ -29,6 +29,11 @@
 //   relations get a broken pattern and a small square at the middle.
 // The type filter of the modeler table ('mm:relation-filter') hides every
 // element of a type: lines, hit targets, markers, labels, areas.
+// Timeline: a slider under the graph shows it as of a date (graph-layout
+// visibleAt): concepts and relations not created yet are hidden (faded without
+// reduced motion) without moving anything; Play walks through the creation
+// days (with reduced motion only the step buttons); it composes with the type
+// filter. Statuses and agreement are the current ones.
 //
 // Accessibility: the SVG is decorative for assistive technology
 // (aria-hidden, nothing focusable inside); the canvas element itself is one
@@ -50,7 +55,8 @@ import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import {
   truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock,
   hullPolygon, hullLabelAnchor, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
-  clipToBox, offsetSegment, pairSlots, cycleIndex, type Box, type AreaGroup, type Point,
+  clipToBox, offsetSegment, pairSlots, cycleIndex, visibleAt, timelineDays, stepDay, dayEnd, DAY_MS,
+  type Box, type AreaGroup, type Point, type VisibleAt,
 } from '../../lib/mm/graph-layout';
 import {
   RELATION_FILTER_EVENT, dashArray, sampleSpec, strokeColor, svgAttrs, tintColor, typeLabel, typePath,
@@ -74,17 +80,17 @@ const typeHidden = (type: string) => visibleTypes !== null && !visibleTypes.has(
 type Lang = 'en' | 'nb' | 'nn';
 type Node = {
   id: string; label: string; lang?: string; status: string; statusLabel?: string; href: string;
-  excerpt?: string; excerptLang?: string | null;
+  excerpt?: string; excerptLang?: string | null; createdAt?: string | null;
   fold: string; wFull: number; wFold: number; full?: boolean;
   x?: number; y?: number; vx?: number; vy?: number; fx?: number | null; fy?: number | null;
 };
 type RawLink = {
   id: string | null; source: string; target: string; type: string; label: string; inferred?: boolean;
-  agree?: number; disagree?: number; settled?: boolean; revealAt?: string | null;
+  agree?: number; disagree?: number; settled?: boolean; revealAt?: string | null; createdAt?: string | null;
 };
 type Link = {
   id: string | null; source: Node; target: Node; type: string; label: string; inferred: boolean;
-  agree: number; disagree: number; settled: boolean; revealAt: string | null;
+  agree: number; disagree: number; settled: boolean; revealAt: string | null; createdAt: string | null;
   rt: TypeLike | null; area: boolean; slot: number; w: number; tag: Tag;
 };
 // An edge label (or, when `node` is set, a concept box acting as a fixed obstacle) in the label simulation.
@@ -107,6 +113,7 @@ const AREA_CLEAR = 24; // world px an unrelated concept is kept clear of an area
 const SCALE: [number, number] = [0.2, 4];
 const CARD_DELAY = 150; // hover rest before the card opens (ms)
 const CARD_GRACE = 250; // time to travel from the node to the card (ms)
+const TIMELINE_STEP = 700; // Play: time per creation day (ms)
 const VIEW_FRESH = 30_000; // a hovered relation reuses its loaded view for this long (ms)
 const VIEW_RECENT = 2_000; // pinning right after a load does not load again (ms)
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -166,7 +173,7 @@ function draw(holder: HTMLElement): void {
       return {
         id: l.id ?? null, source: byId.get(String(l.source))!, target: byId.get(String(l.target))!, type: String(l.type), label: l.label,
         inferred: l.inferred === true, agree: Number(l.agree) || 0, disagree: Number(l.disagree) || 0, settled: l.settled === true,
-        revealAt: l.revealAt ?? null, rt, area, slot: 0, w, tag: { x: 0, y: 0, mx: 0, my: 0, r: (w + EDGE_H) / 4 + 2 },
+        revealAt: l.revealAt ?? null, createdAt: l.createdAt ?? null, rt, area, slot: 0, w, tag: { x: 0, y: 0, mx: 0, my: 0, r: (w + EDGE_H) / 4 + 2 },
       };
     });
   const lineLinks = links.filter((l) => !l.area);
@@ -181,6 +188,18 @@ function draw(holder: HTMLElement): void {
     neighbours.get(l.target.id)!.add(l.source.id);
   }
   const order = [...nodes].sort((a, b) => a.label.localeCompare(b.label));
+
+  // Timeline: what exists at the slider's date (null = now, everything). Positions never change;
+  // the rest is only hidden (faded without reduced motion) and cannot be hovered, clicked or reached.
+  const linkIndex = new Map(links.map((l, i) => [l, i]));
+  const tlItems = {
+    nodes, areas: groups,
+    edges: links.map((l) => ({ source: l.source.id, target: l.target.id, type: l.type, createdAt: l.createdAt })),
+  };
+  let seen: VisibleAt | null = null;
+  const gone = (n: Node) => seen !== null && !seen.nodes.has(n.id);
+  const linkGone = (l: Link) => seen !== null && !seen.edges.has(linkIndex.get(l)!);
+  const areaMembers = (g: AreaGroup) => (seen === null ? g.members : seen.areas.get(g.key) ?? null);
 
   // --- elements -----------------------------------------------------------
   // Arrowheads: one marker per palette slot in use.
@@ -421,7 +440,9 @@ function draw(holder: HTMLElement): void {
       const sel = select(this);
       if (typeHidden(g.type)) { sel.attr('display', 'none'); return; }
       sel.attr('display', null);
-      const boxes = [g.container, ...g.members].map((id) => byId.get(id)).filter((n): n is Node => !!n).map((n) => boxOf(n, s));
+      const members = areaMembers(g);
+      if (!members) return; // not there yet at the timeline's date (faded out, last shape kept)
+      const boxes = [g.container, ...members].map((id) => byId.get(id)).filter((n): n is Node => !!n).map((n) => boxOf(n, s));
       const pad = areaPadding(g.level) * s;
       const poly = hullPolygon(boxes, pad);
       const d = (p: [number, number][] | null) => (p ? `M${p.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join('L')}Z` : null);
@@ -460,12 +481,12 @@ function draw(holder: HTMLElement): void {
     });
 
     // Edge labels: the offset found by the label simulation is kept in screen pixels.
-    const nodeBoxes: Box[] = nodes.map((d) => boxOf(d, s));
+    const nodeBoxes: Box[] = nodes.filter((d) => !gone(d)).map((d) => boxOf(d, s));
     const shown: number[] = [];
     const forced = new Set<number>();
     const boxes: Box[] = [];
     lineLinks.forEach((l, i) => {
-      if (typeHidden(l.type)) return;
+      if (typeHidden(l.type) || linkGone(l)) return;
       // Inferred relations are labelled only when one of their ends is the selected concept.
       const lit = l.inferred ? isLit(l, focusId) : isLit(l, focusId) || isLit(l, hoverId) || l === relLink;
       if (!lit && (l.inferred || !lod.edgeLabels)) return;
@@ -958,7 +979,7 @@ function draw(holder: HTMLElement): void {
     if (!focusId) return [];
     const other = (l: Link) => nodeLabel(l.source.id === focusId ? l.target.id : l.source.id);
     return links
-      .filter((l) => isLit(l, focusId) && !typeHidden(l.type))
+      .filter((l) => isLit(l, focusId) && !typeHidden(l.type) && !linkGone(l))
       .sort((a, b) => Number(a.inferred) - Number(b.inferred) || other(a).localeCompare(other(b)) || a.type.localeCompare(b.type));
   };
   const stepEdge = (dir: 1 | -1) => {
@@ -1058,8 +1079,10 @@ function draw(holder: HTMLElement): void {
       return;
     }
     const step = (dir: number) => {
-      const i = order.findIndex((n) => n.id === focusId);
-      setFocus(order[i < 0 ? (dir > 0 ? 0 : order.length - 1) : (i + dir + order.length) % order.length].id, true);
+      const shown = order.filter((n) => !gone(n) || n.id === focusId);
+      if (!shown.length) return;
+      const i = shown.findIndex((n) => n.id === focusId);
+      setFocus(shown[i < 0 ? (dir > 0 ? 0 : shown.length - 1) : (i + dir + shown.length) % shown.length].id, true);
     };
     switch (event.key) {
       case '+': case '=': zoomBy(1.4); break;
@@ -1130,6 +1153,81 @@ function draw(holder: HTMLElement): void {
   };
   filterListeners.add(applyTypeFilter);
   applyTypeFilter();
+
+  // --- timeline -------------------------------------------------------------
+  const applyTimeline = () => {
+    node.classed('cm-gone', gone);
+    edge.classed('cm-gone', linkGone);
+    edgeLabel.classed('cm-gone', linkGone);
+    areaG.classed('cm-gone', (g) => !areaMembers(g));
+    if (relLink && linkGone(relLink)) closeRel();
+    if (hoverEdge && linkGone(hoverEdge)) hoverEdge = null;
+    const hovered = hoverId ? byId.get(hoverId) : null;
+    if (hovered && gone(hovered)) hoverId = null;
+    const focused = focusId ? byId.get(focusId) : null;
+    if (focused && gone(focused)) setFocus(null);
+    else if (cardId && gone(byId.get(cardId)!)) showCard(focusId);
+    paintFocus();
+    render();
+  };
+  const tl = wrap?.querySelector<HTMLElement>('[data-mm-timeline]') ?? null;
+  const range = tl?.querySelector<HTMLInputElement>('[data-mm-tl-range]') ?? null;
+  if (tl && range) {
+    const days = timelineDays(tlItems, Date.now());
+    const out = tl.querySelector<HTMLOutputElement>('[data-mm-tl-date]');
+    const btn = (act: string) => tl.querySelector<HTMLButtonElement>(`[data-mm-tl-act="${act}"]`);
+    const playBtn = btn('play');
+    const dayFmt = new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'nb-NO', { dateStyle: 'long', timeZone: 'UTC' });
+    const dayText = (day: number) => dayFmt.format(new Date(day * DAY_MS));
+    range.min = String(days.first);
+    range.max = String(days.last);
+    let day = days.last;
+    let playTimer = 0;
+    const announce = () => {
+      if (!status) return;
+      const shownNodes = nodes.filter((n) => !gone(n)).length;
+      const shownRels = links.filter((l) => !l.inferred && !linkGone(l) && !typeHidden(l.type)).length;
+      status.textContent = S('tl.shown', { date: dayText(day), nodes: shownNodes, relations: shownRels });
+    };
+    const setDay = (d: number, speak = false) => {
+      day = clamp(Math.round(d), days.first, days.last);
+      range.value = String(day);
+      const now = day >= days.last;
+      seen = now ? null : visibleAt(tlItems, dayEnd(day));
+      const text = now ? S('tl.nowValue', { date: dayText(day) }) : dayText(day);
+      if (out) out.textContent = text;
+      range.setAttribute('aria-valuetext', text);
+      applyTimeline();
+      if (speak) announce();
+    };
+    const stop = (speak = false) => {
+      if (!playTimer) return;
+      window.clearInterval(playTimer);
+      playTimer = 0;
+      if (playBtn) playBtn.textContent = S('tl.play');
+      if (speak) announce();
+    };
+    const play = () => {
+      if (day >= days.last) setDay(days.first);
+      if (playBtn) playBtn.textContent = S('tl.pause');
+      playTimer = window.setInterval(() => {
+        const next = stepDay(days.steps, day, 1);
+        if (next === null) { stop(true); return; }
+        setDay(next);
+        if (next >= days.last) stop(true);
+      }, TIMELINE_STEP);
+    };
+    // Reduced motion: no autoplay animation; the step buttons move one creation day at a time.
+    if (playBtn) playBtn.hidden = reduceMotion;
+    playBtn?.addEventListener('click', () => (playTimer ? stop(true) : play()));
+    btn('prev')?.addEventListener('click', () => { stop(); setDay(stepDay(days.steps, day, -1) ?? days.first, true); });
+    btn('next')?.addEventListener('click', () => { stop(); setDay(stepDay(days.steps, day, 1) ?? days.last, true); });
+    btn('now')?.addEventListener('click', () => { stop(); setDay(days.last, true); });
+    range.addEventListener('input', () => { stop(); setDay(Number(range.value)); });
+    // Nothing to scrub when everything was made today.
+    tl.hidden = days.first === days.last;
+    setDay(days.last);
+  }
 
   node.call(
     drag<HTMLAnchorElement | SVGAElement, Node>()

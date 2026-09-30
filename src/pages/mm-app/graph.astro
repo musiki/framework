@@ -84,7 +84,11 @@ const REL_STRING_KEYS = [
   'namesTitle', 'noNames', 'afterReveal', 'nameAgrees', 'nameDisagrees', 'membersOnly', 'settle', 'settleHelp', 'settledNow', 'saved',
   'withdrawn', 'slowDown', 'loading', 'close', 'typeLink',
 ] as const;
-const strings = clientStrings(lang, Object.fromEntries(REL_STRING_KEYS.map((k) => [`rel.${k}`, t(lang, `mm.graph.rel.${k}` as MessageKey)])));
+const TL_STRING_KEYS = ['now', 'nowValue', 'play', 'pause', 'shown'] as const;
+const strings = clientStrings(lang, {
+  ...Object.fromEntries(REL_STRING_KEYS.map((k) => [`rel.${k}`, t(lang, `mm.graph.rel.${k}` as MessageKey)])),
+  ...Object.fromEntries(TL_STRING_KEYS.map((k) => [`tl.${k}`, t(lang, `mm.graph.timeline.${k}` as MessageKey)])),
+});
 const typeJson = (rt: RelationTypeView) => JSON.stringify({
   slug: rt.slug, label: rt.label, labelNb: rt.labelNb, inverseLabel: rt.inverseLabel, inverseLabelNb: rt.inverseLabelNb, render: rt.render,
   stroke: rt.stroke, arrow: rt.arrow, color: rt.color, symmetric: rt.symmetric, transitive: rt.transitive, hierarchical: rt.hierarchical,
@@ -92,10 +96,10 @@ const typeJson = (rt: RelationTypeView) => JSON.stringify({
 });
 const labelOf = new Map(nodes.map((n) => [n.id, conceptLabel(n, lang)]));
 const graphData = JSON.stringify({
-  nodes: nodes.map((n) => ({ id: n.id, label: labelOf.get(n.id)!.text, lang: labelOf.get(n.id)!.lang, status: n.status, statusLabel: t(lang, `mm.status.${n.status}` as MessageKey), href: conceptPath(n.id), excerpt: n.excerpt, excerptLang: n.excerptLang })),
+  nodes: nodes.map((n) => ({ id: n.id, label: labelOf.get(n.id)!.text, lang: labelOf.get(n.id)!.lang, status: n.status, statusLabel: t(lang, `mm.status.${n.status}` as MessageKey), href: conceptPath(n.id), excerpt: n.excerpt, excerptLang: n.excerptLang, createdAt: n.createdAt || null })),
   links: edges.map((e) => ({
     id: e.id, source: e.source, target: e.target, type: e.type, label: relLabel(e.type), inferred: e.inferred,
-    agree: e.agree, disagree: e.disagree, settled: e.settled, revealAt: e.revealAt,
+    agree: e.agree, disagree: e.disagree, settled: e.settled, revealAt: e.revealAt, createdAt: e.createdAt,
   })),
   // The encodings the lines, areas and card samples are drawn with (the same helpers as the key above).
   types: relationTypes.map((rt) => ({
@@ -164,6 +168,22 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
             aria-label={t(lang, 'mm.graph.canvas')}
             aria-describedby="mm-g-keys"
           ></div>
+          <div class="mm-graph-timeline" data-mm-timeline role="group" aria-labelledby="mm-g-tl-title" aria-controls="mm-g-canvas">
+            <p class="mm-graph-timeline-title" id="mm-g-tl-title">{t(lang, 'mm.graph.timeline.title')}</p>
+            <div class="mm-graph-timeline-row">
+              <label for="mm-g-tl">{t(lang, 'mm.graph.timeline.label')}</label>
+              <output for="mm-g-tl" class="mm-graph-timeline-date" data-mm-tl-date></output>
+            </div>
+            <input type="range" id="mm-g-tl" class="mm-range" data-mm-tl-range min="0" max="0" step="1" value="0" aria-describedby="mm-g-tl-help mm-g-tl-note" />
+            <div class="mm-graph-timeline-buttons">
+              <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-tl-act="prev">{t(lang, 'mm.graph.timeline.prev')}</button>
+              <button type="button" class="mm-button mm-button-small" data-mm-tl-act="play">{t(lang, 'mm.graph.timeline.play')}</button>
+              <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-tl-act="next">{t(lang, 'mm.graph.timeline.next')}</button>
+              <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-tl-act="now">{t(lang, 'mm.graph.timeline.now')}</button>
+            </div>
+            <p class="mm-help" id="mm-g-tl-help">{t(lang, 'mm.graph.timeline.help')}</p>
+            <p class="mm-help" id="mm-g-tl-note">{t(lang, 'mm.graph.timeline.note')}</p>
+          </div>
           <p class="mm-help" id="mm-g-keys">{t(lang, 'mm.graph.keys')}</p>
           <p class="mm-visually-hidden" aria-live="polite" data-mm-graph-status></p>
         </div>

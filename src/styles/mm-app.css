@@ -160,9 +160,29 @@
 .mm-graph svg.has-focus .cm-edge.cm-inferred:not(.is-on):not(.is-sel) { opacity: 0.12; }
 .mm-graph svg.has-focus .cm-area:not(.is-on) { opacity: 0.45; }
 .mm-graph svg.has-focus .cm-edge-label:not(.is-on) { opacity: 0.35; }
-.mm-graph .cm-node, .mm-graph .cm-edge, .mm-graph .cm-area { transition: opacity 0.15s; }
+.mm-graph .cm-node, .mm-graph .cm-edge, .mm-graph .cm-area, .mm-graph .cm-edge-label { transition: opacity 0.25s; }
+/* Timeline: not there yet at the slider's date (positions kept; faded, never hoverable). */
+.mm-graph svg .cm-gone { opacity: 0 !important; }
+.mm-graph svg .cm-gone, .mm-graph svg .cm-gone * { pointer-events: none !important; }
 @media (prefers-reduced-motion: reduce) { .mm-graph svg * { transition: none !important; } }
 @media (max-width: 40rem) { .mm-graph > svg { height: 420px; } }
+
+.mm-graph-timeline { margin: 0.25rem 0 0.75rem; padding: 0.6rem 0 0.2rem; border-top: var(--mm-rule); }
+.mm-graph-timeline[hidden] { display: none; }
+.mm-graph-timeline p { margin: 0; }
+.mm-graph-timeline-title { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 1.05rem; }
+.mm-graph-timeline-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.6rem; margin-top: 0.3rem; }
+.mm-graph-timeline-date { font-weight: 700; font-variant-numeric: tabular-nums; }
+.mm-graph-timeline-buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.35rem 0 0.4rem; }
+.mm-graph-timeline-buttons .mm-button { min-height: 2.75rem; }
+.mm-graph-timeline .mm-help + .mm-help { margin-top: 0.25rem; }
+/* Flat range: an ink rule with a square ink thumb (no radius, no shadow). */
+.mm-range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 2.75rem; margin: 0; background: transparent; cursor: pointer; }
+.mm-range:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
+.mm-range::-webkit-slider-runnable-track { height: 2px; background: var(--mm-ink); border: 0; border-radius: 0; }
+.mm-range::-moz-range-track { height: 2px; background: var(--mm-ink); border: 0; border-radius: 0; }
+.mm-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 1.1rem; height: 1.1rem; margin-top: calc(-0.55rem + 1px); background: var(--mm-yellow); border: 2px solid var(--mm-ink); border-radius: 0; box-shadow: none; }
+.mm-range::-moz-range-thumb { width: 1.1rem; height: 1.1rem; box-sizing: border-box; background: var(--mm-yellow); border: 2px solid var(--mm-ink); border-radius: 0; box-shadow: none; }
 /* Hover / selection card: flat, ink rule, white, square bullet on the link. */
 .mm-graph-card { position: absolute; z-index: 2; box-sizing: border-box; width: min(20rem, calc(100% - 8px)); max-height: calc(100% - 8px); overflow: auto; padding: 0.7rem 0.85rem 0.8rem; background: var(--mm-white); color: var(--mm-ink); border: var(--mm-rule); border-radius: 0; box-shadow: none; }
 .mm-graph-card[hidden] { display: none; }
