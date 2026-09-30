@@ -130,7 +130,7 @@
 .mm-graph-tools { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.5rem; }
 .mm-graph-tools .mm-button { min-width: 2.75rem; min-height: 2.75rem; }
 .mm-graph-tools .mm-button[aria-pressed='true'] { background: var(--mm-ink); color: var(--mm-white); }
-.mm-graph { width: 100%; border: var(--mm-rule); margin: 0 0 0.5rem; background: var(--mm-white); }
+.mm-graph { position: relative; width: 100%; border: var(--mm-rule); margin: 0 0 0.5rem; background: var(--mm-white); }
 .mm-graph:empty { display: none; }
 .mm-graph:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
 .mm-graph svg { display: block; width: 100%; height: 520px; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
@@ -154,6 +154,23 @@
 .mm-graph .cm-node, .mm-graph .cm-link { transition: opacity 0.15s; }
 @media (prefers-reduced-motion: reduce) { .mm-graph svg * { transition: none !important; } }
 @media (max-width: 40rem) { .mm-graph svg { height: 420px; } }
+/* Hover / selection card: flat, ink rule, white, square bullet on the link. */
+.mm-graph-card { position: absolute; z-index: 2; box-sizing: border-box; width: min(20rem, calc(100% - 8px)); max-height: calc(100% - 8px); overflow: auto; padding: 0.7rem 0.85rem 0.8rem; background: var(--mm-white); color: var(--mm-ink); border: var(--mm-rule); border-radius: 0; box-shadow: none; }
+.mm-graph-card[hidden] { display: none; }
+.mm-graph-card p { margin: 0; }
+.mm-graph-card-title { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 1.15rem; line-height: 1.1; overflow-wrap: anywhere; }
+.mm-graph-card-status { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.3rem; font-size: 0.8rem; color: var(--mm-ink-70); }
+.mm-graph-card-status::before { content: ''; flex: none; width: 0.7rem; height: 0.7rem; box-sizing: border-box; border: 2px solid var(--mm-ink); background: var(--mm-st, var(--mm-white)); }
+.mm-graph-card-text { margin-top: 0.5rem; font-size: 0.9rem; line-height: 1.4; overflow-wrap: anywhere; }
+.mm-graph-card-text.is-empty { color: var(--mm-ink-70); font-style: italic; }
+.mm-graph .mm-graph-card-link { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.6rem; min-height: 2.75rem; font-weight: 700; font-size: 0.9rem; color: var(--mm-ink); text-decoration: underline; text-underline-offset: 0.2em; cursor: pointer; }
+.mm-graph-card-link::before { content: ''; flex: none; width: 0.55rem; height: 0.55rem; background: var(--mm-ink); }
+.mm-graph .mm-graph-card-link:hover { background: var(--mm-yellow); }
+.mm-graph-card-link:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
+/* Phone width: dock at the bottom of the frame instead of floating by the node. */
+.mm-graph-card.is-docked { left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 62%; border-width: 2px 0 0; }
+@media (prefers-reduced-motion: no-preference) { .mm-graph-card { animation: mm-card-in 0.12s ease-out; } }
+@keyframes mm-card-in { from { opacity: 0; } to { opacity: 1; } }
 .mm-filters { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: end; margin: 1rem 0; }
 .mm-filters .mm-form-row { gap: 0.2rem; }
 .mm-filters select { font: inherit; border: var(--mm-rule); border-radius: 0; padding: 0.4rem 0.5rem; background: var(--mm-white); color: var(--mm-ink); }

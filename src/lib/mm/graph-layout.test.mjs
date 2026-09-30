@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { truncateLabel, boxesOverlap, hiddenByOverlap, boundsOf, fitTransform, linkDistance, levelOfDetail } from './graph-layout.ts';
+import { truncateLabel, boxesOverlap, hiddenByOverlap, boundsOf, fitTransform, linkDistance, levelOfDetail, placeCard, shouldDock } from './graph-layout.ts';
 
 test('truncateLabel keeps short labels and folds long ones with an ellipsis', () => {
   assert.equal(truncateLabel('Sonic ecology', 18), 'Sonic ecology');
@@ -73,4 +73,38 @@ test('levelOfDetail thresholds and the show-all toggle', () => {
   assert.deepEqual(levelOfDetail(0.5, false), { fullLabels: false, edgeLabels: false });
   assert.deepEqual(levelOfDetail(2, false), { fullLabels: true, edgeLabels: true });
   assert.deepEqual(levelOfDetail(0.3, true), { fullLabels: true, edgeLabels: true });
+});
+
+test('placeCard: right of the node, flipping left / below / above near the edges, always inside the frame', () => {
+  const frame = { w: 800, h: 520 };
+  const card = { w: 280, h: 140 };
+  const node = (x, y) => ({ x, y, w: 100, h: 26 });
+  assert.deepEqual(placeCard(node(200, 260), card, frame), { x: 258, y: 190, side: 'right' });
+  const l = placeCard(node(700, 260), card, frame);
+  assert.equal(l.side, 'left');
+  assert.equal(l.x, 700 - 50 - 8 - 280);
+  // narrow frame: neither side fits, below the node
+  const b = placeCard(node(150, 100), card, { w: 320, h: 520 });
+  assert.equal(b.side, 'below');
+  assert.equal(b.y, 100 + 13 + 8);
+  // narrow and near the bottom: above
+  const a = placeCard(node(150, 480), card, { w: 320, h: 520 });
+  assert.equal(a.side, 'above');
+  assert.equal(a.y, 480 - 13 - 8 - 140);
+  // vertical clamping at the top edge
+  assert.equal(placeCard(node(200, 5), card, frame).y, 4);
+  // nothing fits: clamped, still inside
+  const c = placeCard(node(100, 60), { w: 300, h: 300 }, { w: 320, h: 320 });
+  assert.equal(c.side, 'clamped');
+  assert.ok(c.x >= 0 && c.x + 300 <= 320 && c.y >= 0 && c.y + 300 <= 320);
+  // a card bigger than the frame does not go negative
+  const big = placeCard(node(50, 50), { w: 900, h: 700 }, frame);
+  assert.ok(big.x >= 0 && big.y >= 0);
+});
+
+test('shouldDock: phone-width frames dock the card', () => {
+  assert.equal(shouldDock(375), true);
+  assert.equal(shouldDock(479), true);
+  assert.equal(shouldDock(480), false);
+  assert.equal(shouldDock(800), false);
 });

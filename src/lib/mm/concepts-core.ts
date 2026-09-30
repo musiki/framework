@@ -24,7 +24,7 @@
 import { can, type MmAction, type MmPolicyCtx } from './policy.ts';
 import { COMMONS_ROLES, isUuid, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
-import { publicName } from './view.ts';
+import { publicName, definitionExcerpt, pickDefinition, type ViewLang } from './view.ts';
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<{ data: any[] | null; error: any }>;
 
@@ -860,13 +860,23 @@ export type GraphNode = {
   labelNb: string | null;
   status: ConceptStatus;
   forum: string | null; // forum slug
+  /** Plain-text excerpt of the current definition in the reader's language ('' when there is none). */
+  excerpt: string;
+  /** Language of the excerpt (the reader's, or the fallback); null when there is none. */
+  excerptLang: ConceptLang | null;
 };
 export type GraphEdge = { source: string; target: string; type: RelationType };
 
-/** Concept graph for a space (optionally one forum); edges only between included nodes. */
+export const GRAPH_EXCERPT_CHARS = 240;
+
+/**
+ * Concept graph for a space (optionally one forum); edges only between
+ * included nodes. Each node carries a plain-text excerpt of its current
+ * definition in `lang` (same fallback chain as the concept page).
+ */
 export async function graph(
   q: QueryFn,
-  { spaceId, forumId, status }: { spaceId: string; forumId?: string | null; status?: string | null },
+  { spaceId, forumId, status, lang }: { spaceId: string; forumId?: string | null; status?: string | null; lang?: ViewLang },
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
   const concepts = await listConcepts(q, { spaceId, forumId, status });
   if (!concepts.length) return { nodes: [], edges: [] };
@@ -877,13 +887,35 @@ export async function graph(
      ORDER BY "createdAt" ASC, id ASC`,
     [spaceId],
   );
-  const nodes: GraphNode[] = concepts.map((c) => ({
-    id: c.slug,
-    label: c.label,
-    labelNb: c.labelNb,
-    status: c.status,
-    forum: c.forum?.slug ?? null,
-  }));
+  // Latest definition per concept and language (bounded: only the head of a long text is needed).
+  const defRows = await run(
+    q,
+    `SELECT DISTINCT ON (v."conceptId", v.lang) v."conceptId", v.lang, left(v.definition, 4000) AS definition
+     FROM "ConceptVersion" v
+     WHERE v."conceptId" = ANY($1::uuid[])
+     ORDER BY v."conceptId", v.lang, v."createdAt" DESC, v.id DESC`,
+    [concepts.map((c) => c.id)],
+  );
+  const defs = new Map<string, Partial<Record<string, { lang: string; definition: string }>>>();
+  for (const r of defRows) {
+    if (!isConceptLang(r.lang)) continue;
+    const byLang = defs.get(r.conceptId) ?? {};
+    byLang[r.lang] = { lang: r.lang, definition: String(r.definition ?? '') };
+    defs.set(r.conceptId, byLang);
+  }
+  const nodes: GraphNode[] = concepts.map((c) => {
+    const pick = pickDefinition(defs.get(c.id) ?? {}, lang ?? 'en');
+    const excerpt = pick.version ? definitionExcerpt(pick.version.definition, GRAPH_EXCERPT_CHARS) : '';
+    return {
+      id: c.slug,
+      label: c.label,
+      labelNb: c.labelNb,
+      status: c.status,
+      forum: c.forum?.slug ?? null,
+      excerpt,
+      excerptLang: excerpt && pick.lang && isConceptLang(pick.lang) ? pick.lang : null,
+    };
+  });
   const edges: GraphEdge[] = [];
   for (const r of rels) {
     const source = slugById.get(r.sourceId);

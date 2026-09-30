@@ -566,12 +566,36 @@ test('graph: slug nodes, edges only between included nodes, no user fields', asy
       { sourceId: C1, targetId: C2, type: 'derives', createdBy: U.member },
       { sourceId: C1, targetId: C3, type: 'contrasts', createdBy: U.member }, // C3 filtered out
     ]],
+    ['FROM "ConceptVersion"', () => [
+      { conceptId: C1, lang: 'en', definition: 'A **remedy** and a [poison](https://x.org) <b>at once</b>' },
+      { conceptId: C1, lang: 'nb', definition: 'Både *medisin* og gift.' },
+    ]],
   ]);
   const g = await graph(fx.q, { spaceId: SPACE });
-  assert.deepEqual(g.nodes[0], { id: 'pharmakon', label: 'Pharmakon', labelNb: 'Farmakon', status: 'discussion', forum: 'stiegler' });
+  assert.deepEqual(g.nodes[0], { id: 'pharmakon', label: 'Pharmakon', labelNb: 'Farmakon', status: 'discussion', forum: 'stiegler',
+    excerpt: 'A remedy and a poison at once', excerptLang: 'en' });
+  assert.deepEqual(g.nodes[1], { id: 'b', label: 'B', labelNb: null, status: 'neologism', forum: null, excerpt: '', excerptLang: null });
   assert.deepEqual(g.edges, [{ source: 'pharmakon', target: 'b', type: 'derives' }]);
   const json = JSON.stringify(g);
   assert.ok(!json.includes(U.member) && !/email|createdBy|userId/i.test(json));
+});
+
+test('graph: excerpt follows the reader language, falls back to English, is capped plain text', async () => {
+  const long = 'word '.repeat(200);
+  const fx = fakeQuery([
+    ['FROM "Concept" c', () => listRows],
+    ['FROM "ConceptVersion"', () => [
+      { conceptId: C1, lang: 'en', definition: long },
+      { conceptId: C1, lang: 'nb', definition: 'Både *medisin* og gift.' },
+      { conceptId: C2, lang: 'en', definition: 'English only.' },
+    ]],
+  ]);
+  const nb = await graph(fx.q, { spaceId: SPACE, lang: 'nb' });
+  assert.deepEqual([nb.nodes[0].excerpt, nb.nodes[0].excerptLang], ['Både medisin og gift.', 'nb']);
+  assert.deepEqual([nb.nodes[1].excerpt, nb.nodes[1].excerptLang], ['English only.', 'en']); // fallback
+  const en = await graph(fx.q, { spaceId: SPACE });
+  assert.ok(en.nodes[0].excerpt.length <= 240 && en.nodes[0].excerpt.endsWith('…'));
+  assert.deepEqual(fx.calls.find((c) => c.text.includes('DISTINCT ON')).params, [[C1, C2]]);
 });
 
 // ---------------------------------------------------------------------------

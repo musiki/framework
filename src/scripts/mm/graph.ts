@@ -17,16 +17,20 @@
 // Accessibility: the SVG is decorative for assistive technology
 // (aria-hidden, nothing focusable inside); the canvas element itself is one
 // focusable group with keyboard shortcuts and a live status line, and the
-// lists below the graph carry the same information.
+// lists below the graph carry the same information. A small card (plain HTML,
+// built with textContent, outside the SVG) shows the hovered or selected
+// concept's status, a short excerpt of its definition and a link to it; while
+// a concept is selected it is also the canvas's aria-describedby target.
 
 import { forceSimulation, forceLink, forceManyBody, forceX, forceY, forceCollide } from 'd3-force';
 import { select } from 'd3-selection';
 import { drag } from 'd3-drag';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
-import { truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, type Box } from '../../lib/mm/graph-layout';
+import { truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock, type Box } from '../../lib/mm/graph-layout';
 
 type Node = {
-  id: string; label: string; lang?: string; status: string; href: string;
+  id: string; label: string; lang?: string; status: string; statusLabel?: string; href: string;
+  excerpt?: string; excerptLang?: string | null;
   fold: string; wFull: number; wFold: number; full?: boolean;
   x?: number; y?: number; fx?: number | null; fy?: number | null;
 };
@@ -39,6 +43,8 @@ const NODE_H = 26;
 const NODE_PAD_X = 8;
 const EDGE_H = 14;
 const SCALE: [number, number] = [0.2, 4];
+const CARD_DELAY = 150; // hover rest before the card opens (ms)
+const CARD_GRACE = 250; // time to travel from the node to the card (ms)
 
 function draw(holder: HTMLElement): void {
   let data: { nodes: Node[]; links: Link[] };
@@ -100,6 +106,29 @@ function draw(holder: HTMLElement): void {
     .attr('tabindex', '-1');
   node.append('rect').attr('y', -NODE_H / 2).attr('height', NODE_H);
   node.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('lang', (d) => d.lang ?? null);
+
+  // --- hover card ---------------------------------------------------------
+  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string) => {
+    const e = document.createElement(tag);
+    e.className = cls;
+    return e;
+  };
+  const card = el('div', 'mm-graph-card');
+  card.id = `${holder.id || 'mm-g-canvas'}-card`;
+  card.hidden = true;
+  const cardTitle = el('p', 'mm-graph-card-title');
+  const cardStatus = el('p', 'mm-graph-card-status');
+  const cardText = el('p', 'mm-graph-card-text');
+  const cardLink = el('a', 'mm-graph-card-link');
+  cardLink.textContent = holder.dataset.openLabel ?? 'Open concept';
+  card.append(cardTitle, cardStatus, cardText, cardLink);
+  holder.append(card);
+  const baseDescribedBy = holder.getAttribute('aria-describedby');
+  let cardId: string | null = null;
+  let cardSize = { w: 0, h: 0 };
+  let overCard = false;
+  let showTimer = 0;
+  let hideTimer = 0;
 
   // --- state --------------------------------------------------------------
   let t: ZoomTransform = zoomIdentity;
@@ -179,7 +208,69 @@ function draw(holder: HTMLElement): void {
         const b = at.get(i);
         return b ? `translate(${b.x},${b.y}) scale(${s})` : null;
       });
+    positionCard();
   };
+
+  const positionCard = () => {
+    const d = cardId ? byId.get(cardId) : null;
+    if (!d || card.hidden) return;
+    const dock = shouldDock(width);
+    card.classList.toggle('is-docked', dock);
+    if (dock) {
+      card.style.left = card.style.top = '';
+      card.style.visibility = '';
+      return;
+    }
+    const sx = t.applyX(d.x ?? 0), sy = t.applyY(d.y ?? 0);
+    const s = Math.min(1, t.k);
+    // A node panned out of the frame takes its card with it.
+    card.style.visibility = sx < 0 || sx > width || sy < 0 || sy > height ? 'hidden' : '';
+    const p = placeCard({ x: sx, y: sy, w: (d.full ? d.wFull : d.wFold) * s, h: NODE_H * s }, cardSize, { w: width, h: height });
+    card.style.left = `${Math.round(p.x)}px`;
+    card.style.top = `${Math.round(p.y)}px`;
+  };
+  /** Shows the card for a concept (null closes it). Text only, never markup. */
+  const showCard = (id: string | null) => {
+    window.clearTimeout(showTimer);
+    window.clearTimeout(hideTimer);
+    const d = id ? byId.get(id) : null;
+    if (!d) {
+      cardId = null;
+      card.hidden = true;
+    } else if (cardId !== d.id || card.hidden) {
+      cardId = d.id;
+      card.className = `mm-graph-card mm-st-${d.status}`;
+      cardTitle.textContent = d.label;
+      cardTitle.lang = d.lang ?? '';
+      cardStatus.textContent = d.statusLabel ?? d.status;
+      cardText.textContent = d.excerpt || holder.dataset.noDefinition || '';
+      cardText.classList.toggle('is-empty', !d.excerpt);
+      if (d.excerpt && d.excerptLang) cardText.lang = d.excerptLang; else cardText.removeAttribute('lang');
+      cardLink.href = d.href;
+      card.hidden = false;
+      card.classList.toggle('is-docked', shouldDock(width)); // measure in its final shape
+      cardSize = { w: card.offsetWidth, h: card.offsetHeight };
+      positionCard();
+    }
+    const described = cardId !== null && cardId === focusId;
+    if (described) holder.setAttribute('aria-describedby', [baseDescribedBy, card.id].filter(Boolean).join(' '));
+    else if (baseDescribedBy) holder.setAttribute('aria-describedby', baseDescribedBy);
+    else holder.removeAttribute('aria-describedby');
+  };
+  /** Hover opens the card after a short rest; leaving lets it linger (so the link can be reached) and falls back to the selection. */
+  const cardHoverIn = (id: string) => {
+    window.clearTimeout(hideTimer);
+    window.clearTimeout(showTimer);
+    if (cardId === id && !card.hidden) return;
+    showTimer = window.setTimeout(() => { if (!pressed && hoverId === id) showCard(id); }, CARD_DELAY);
+  };
+  const cardHoverOut = () => {
+    window.clearTimeout(showTimer);
+    window.clearTimeout(hideTimer);
+    hideTimer = window.setTimeout(() => { if (!overCard && hoverId === null) showCard(focusId); }, CARD_GRACE);
+  };
+  card.addEventListener('pointerenter', () => { overCard = true; window.clearTimeout(hideTimer); });
+  card.addEventListener('pointerleave', () => { overCard = false; cardHoverOut(); });
 
   const paintFocus = () => {
     const near = focusId ? neighbours.get(focusId)! : null;
@@ -254,7 +345,7 @@ function draw(holder: HTMLElement): void {
   };
   let raiseTimer = 0;
   let pressed = false;
-  svgEl.addEventListener('pointerdown', () => { pressed = true; window.clearTimeout(raiseTimer); }, true);
+  svgEl.addEventListener('pointerdown', () => { pressed = true; window.clearTimeout(raiseTimer); window.clearTimeout(showTimer); }, true);
   window.addEventListener('pointerup', () => { pressed = false; });
   window.addEventListener('pointercancel', () => { pressed = false; });
   const setFocus = (id: string | null, reveal = false) => {
@@ -263,12 +354,23 @@ function draw(holder: HTMLElement): void {
     if (d) node.filter((n) => n.id === id).each(function () { toFront(this); });
     paintFocus();
     render();
+    showCard(id);
+    // Docked at the bottom: keep the selected concept above the card.
+    if (d && !card.hidden && shouldDock(width)) {
+      const room = height - cardSize.h;
+      const sx = t.applyX(d.x ?? 0), sy = t.applyY(d.y ?? 0);
+      const offX = sx < 0 || sx > width;
+      if (sy > room - NODE_H || sy < NODE_H || offX) {
+        auto = false;
+        moveTo({ k: t.k, x: offX ? t.x + width / 2 - sx : t.x, y: t.y + room / 2 - sy });
+      }
+    }
     if (status) {
       status.textContent = d
         ? (holder.dataset.selectedTemplate ?? '{label}').replace(/\{label\}|\{relations\}/g, (m) => (m === '{label}' ? d.label : String(neighbours.get(d.id)!.size)))
         : '';
     }
-    if (d && reveal) {
+    if (d && reveal && !shouldDock(width)) {
       const sx = t.applyX(d.x ?? 0), sy = t.applyY(d.y ?? 0);
       const mx = Math.min(d.wFull / 2 + 8, width / 2), my = NODE_H;
       if (sx < mx || sx > width - mx || sy < my || sy > height - my) {
@@ -291,6 +393,7 @@ function draw(holder: HTMLElement): void {
       hoverId = d.id;
       window.clearTimeout(raiseTimer);
       raiseTimer = window.setTimeout(() => { if (!pressed && hoverId === d.id) toFront(this); }, 150);
+      cardHoverIn(d.id);
       paintFocus();
       render();
     })
@@ -298,6 +401,7 @@ function draw(holder: HTMLElement): void {
       window.clearTimeout(raiseTimer);
       if (hoverId === null) return;
       hoverId = null;
+      cardHoverOut();
       paintFocus();
       render();
     });
@@ -308,10 +412,19 @@ function draw(holder: HTMLElement): void {
   holder.tabIndex = 0;
   // Nothing inside the aria-hidden SVG keeps focus: a clicked concept hands it to the canvas.
   holder.addEventListener('focusin', (event) => {
-    if (event.target !== holder) holder.focus({ preventScroll: true });
+    if (event.target !== holder && !card.contains(event.target as globalThis.Node)) holder.focus({ preventScroll: true });
   });
   holder.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.target !== holder) {
+      // Inside the card only Escape is ours (Enter follows the link natively).
+      if (event.key !== 'Escape' || !cardId) return;
+      hoverId = null;
+      setFocus(null);
+      holder.focus({ preventScroll: true });
+      event.preventDefault();
+      return;
+    }
     const step = (dir: number) => {
       const i = order.findIndex((n) => n.id === focusId);
       setFocus(order[i < 0 ? (dir > 0 ? 0 : order.length - 1) : (i + dir + order.length) % order.length].id, true);
@@ -322,7 +435,11 @@ function draw(holder: HTMLElement): void {
       case '0': reset(); break;
       case 'ArrowRight': case 'ArrowDown': step(1); break;
       case 'ArrowLeft': case 'ArrowUp': step(-1); break;
-      case 'Escape': if (!focusId) return; setFocus(null); break;
+      case 'Escape':
+        if (!focusId && !cardId) return;
+        hoverId = null;
+        setFocus(null);
+        break;
       case 'Enter': {
         const d = focusId ? byId.get(focusId) : null;
         if (!d) return;
@@ -403,6 +520,7 @@ function draw(holder: HTMLElement): void {
       if (!w || !h || (w === width && h === height)) return;
       width = w; height = h;
       svg.attr('viewBox', `0 0 ${width} ${height}`);
+      if (!card.hidden) cardSize = { w: card.offsetWidth, h: card.offsetHeight };
       if (auto) fit(false); else render();
     }).observe(holder);
   }
