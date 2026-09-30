@@ -349,8 +349,8 @@ function draw(holder: HTMLElement): void {
         cx /= ns.length; cy /= ns.length;
         let r = 0;
         for (const n of ns) {
-          n.vx = (n.vx ?? 0) + (cx - (n.x ?? 0)) * 0.04 * alpha;
-          n.vy = (n.vy ?? 0) + (cy - (n.y ?? 0)) * 0.04 * alpha;
+          n.vx = (n.vx ?? 0) + (cx - (n.x ?? 0)) * 0.07 * alpha;
+          n.vy = (n.vy ?? 0) + (cy - (n.y ?? 0)) * 0.07 * alpha;
           r = Math.max(r, Math.hypot((n.x ?? 0) - cx, (n.y ?? 0) - cy) + n.wFold / 2);
         }
         r += AREA_CLEAR;
@@ -359,7 +359,7 @@ function draw(holder: HTMLElement): void {
           const dx = (n.x ?? 0) - cx, dy = (n.y ?? 0) - cy;
           const d = Math.hypot(dx, dy) || 1;
           if (d >= r + n.wFold / 2) continue;
-          const push = ((r + n.wFold / 2 - d) / d) * 0.06 * alpha;
+          const push = ((r + n.wFold / 2 - d) / d) * 0.3 * alpha;
           n.vx = (n.vx ?? 0) + dx * push;
           n.vy = (n.vy ?? 0) + dy * push;
         }
