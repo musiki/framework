@@ -126,16 +126,33 @@
 /* Graph (Lab visual language). */
 .mm-legend { list-style: none; padding: 0; margin: 1rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: 0.9rem; }
 .mm-legend li { display: flex; align-items: center; gap: 0.5rem; }
-.mm-graph { width: 100%; border: var(--mm-rule); margin: 1rem 0 2rem; background: var(--mm-white); }
+.mm-graph-wrap { margin: 1rem 0 2rem; }
+.mm-graph-tools { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.5rem; }
+.mm-graph-tools .mm-button { min-width: 2.75rem; min-height: 2.75rem; }
+.mm-graph-tools .mm-button[aria-pressed='true'] { background: var(--mm-ink); color: var(--mm-white); }
+.mm-graph { width: 100%; border: var(--mm-rule); margin: 0 0 0.5rem; background: var(--mm-white); }
 .mm-graph:empty { display: none; }
-.mm-graph svg { display: block; width: 100%; height: 520px; }
+.mm-graph:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
+.mm-graph svg { display: block; width: 100%; height: 520px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.mm-graph svg:active { cursor: grabbing; }
+.mm-graph .cm-node { cursor: pointer; }
 .mm-graph .cm-node rect { stroke: var(--mm-ink); stroke-width: 2px; fill: var(--mm-st, var(--mm-white)); }
-.mm-graph .cm-node text { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 13px; fill: var(--mm-ink); pointer-events: none; }
+.mm-graph .cm-node text, .mm-graph text.cm-node-probe { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 13px; fill: var(--mm-ink); pointer-events: none; }
 .mm-graph .cm-node:hover rect { stroke-width: 3px; }
+.mm-graph .cm-node.is-focus rect { stroke-width: 4px; }
 .mm-graph .cm-link { stroke: var(--mm-ink-40); stroke-width: 1.5px; }
 .mm-graph .cm-link.cm-contrasts { stroke-dasharray: 6 4; }
 .mm-graph .cm-link.cm-reformulates { stroke-dasharray: 2 3; }
-.mm-graph .cm-edge-label { font-family: var(--mm-font-body); font-size: 10px; fill: var(--mm-ink-70); }
+.mm-graph .cm-link.is-on, .mm-graph .cm-link.is-hover { stroke: var(--mm-ink); stroke-width: 2px; }
+.mm-graph .cm-edge-label {
+  font-family: var(--mm-font-body); font-size: 10px; fill: var(--mm-ink-70); pointer-events: none;
+  paint-order: stroke; stroke: var(--mm-white); stroke-width: 4px; stroke-linejoin: round;
+}
+.mm-graph .cm-edge-label.is-on { fill: var(--mm-ink); font-weight: 700; }
+.mm-graph svg.has-focus .cm-node:not(.is-on), .mm-graph svg.has-focus .cm-link:not(.is-on) { opacity: 0.22; }
+.mm-graph svg.has-focus .cm-edge-label:not(.is-on) { opacity: 0.35; }
+.mm-graph .cm-node, .mm-graph .cm-link { transition: opacity 0.15s; }
+@media (prefers-reduced-motion: reduce) { .mm-graph svg * { transition: none !important; } }
 @media (max-width: 40rem) { .mm-graph svg { height: 420px; } }
 .mm-filters { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: end; margin: 1rem 0; }
 .mm-filters .mm-form-row { gap: 0.2rem; }
