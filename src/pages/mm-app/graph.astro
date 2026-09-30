@@ -6,13 +6,27 @@
 // the data attribute, in the MishMash Lab's visual language. The graph wrapper
 // (toolbar, canvas, key help) stays hidden until the script draws, so readers
 // without JS only get the lists.
+//
+// Relation modeler: below the graph, the table of the space's relation types
+// (sample of the encoding, label / other way, properties, count, visibility
+// box, link to /r/<slug>) is the graph's key and filter (relation-types.ts
+// sends 'mm:relation-filter'; graph.ts hides the other types' edges).
+// Curators/admins also get "Add relation +", Edit, Archive/Restore and
+// reorder, and see archived types; the form is MmRelationTypeForm.
 import MmLayout from '../../layouts/MmLayout.astro';
 import MmStatus from '../../components/mm/MmStatus.astro';
+import MmRelationSample from '../../components/mm/MmRelationSample.astro';
+import MmRelationTypeForm from '../../components/mm/MmRelationTypeForm.astro';
 import { t, type MessageKey } from '../../lib/i18n';
 import { applyMmLang } from '../../lib/mm/ui-lang';
 import { CONCEPT_STATUSES, graph, type GraphEdge, type GraphNode } from '../../lib/mm/concepts';
 import { listForums, type ForumSummary } from '../../lib/mm/forum';
 import { loadMmViewer, logPageError } from '../../lib/mm/page-data';
+import { clientStrings } from '../../lib/mm/page-strings';
+import { can } from '../../lib/mm/policy';
+import { listRelationTypes, type RelationTypeView } from '../../lib/mm/relation-types';
+import { typeInverse, typeLabel, typePath } from '../../lib/mm/relation-type-ui';
+import { propertyNames, sampleDescription } from '../../lib/mm/relation-type-text';
 import { conceptLabel, conceptPath } from '../../lib/mm/view';
 export const prerender = false;
 
@@ -27,6 +41,8 @@ let forums: ForumSummary[] = [];
 let nodes: GraphNode[] = [];
 let edges: GraphEdge[] = [];
 let forumSlug = '';
+let relationTypes: RelationTypeView[] = [];
+let canManage = false;
 
 if (isMm) {
   try {
@@ -34,7 +50,10 @@ if (isMm) {
     forums = await listForums({ spaceId: viewer.space.id });
     const forum = forums.find((f) => f.slug === forumParam) ?? null;
     forumSlug = forum?.slug ?? '';
-    ({ nodes, edges } = await graph({ spaceId: viewer.space.id, forumId: forum?.id ?? null, status: status || null, lang }));
+    ({ nodes, edges, relationTypes } = await graph({ spaceId: viewer.space.id, forumId: forum?.id ?? null, status: status || null, lang }));
+    // Curators manage the vocabulary: they also see archived types (to restore them).
+    canManage = can(viewer.role, 'manageRelationTypes');
+    if (canManage) relationTypes = await listRelationTypes({ spaceId: viewer.space.id, includeArchived: true });
     // Until the typed rendering lands (relation modeler, graph tasks) this page draws asserted relations only.
     edges = edges.filter((e) => !e.inferred);
   } catch (err) {
@@ -44,7 +63,18 @@ if (isMm) {
 } else Astro.response.status = 404;
 if (state === 'unavailable') Astro.response.status = 503;
 
-const relLabel = (type: string) => t(lang, `mm.relationTypes.${type}` as MessageKey);
+const typeBySlug = new Map(relationTypes.map((rt) => [rt.slug, rt]));
+// Label of a type slug in the reader's language (built-ins fall back to the old dictionary keys).
+const relLabel = (type: string) => {
+  const rt = typeBySlug.get(type);
+  return rt ? typeLabel(rt, lang).text : t(lang, `mm.relationTypes.${type}` as MessageKey);
+};
+const strings = clientStrings(lang);
+const typeJson = (rt: RelationTypeView) => JSON.stringify({
+  slug: rt.slug, label: rt.label, labelNb: rt.labelNb, inverseLabel: rt.inverseLabel, inverseLabelNb: rt.inverseLabelNb, render: rt.render,
+  stroke: rt.stroke, arrow: rt.arrow, color: rt.color, symmetric: rt.symmetric, transitive: rt.transitive, hierarchical: rt.hierarchical,
+  skos: rt.skos, wikidata: rt.wikidata,
+});
 const labelOf = new Map(nodes.map((n) => [n.id, conceptLabel(n, lang)]));
 const graphData = JSON.stringify({
   nodes: nodes.map((n) => ({ id: n.id, label: labelOf.get(n.id)!.text, lang: labelOf.get(n.id)!.lang, status: n.status, statusLabel: t(lang, `mm.status.${n.status}` as MessageKey), href: conceptPath(n.id), excerpt: n.excerpt, excerptLang: n.excerptLang })),
@@ -111,7 +141,97 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
           <p class="mm-help" id="mm-g-keys">{t(lang, 'mm.graph.keys')}</p>
           <p class="mm-visually-hidden" aria-live="polite" data-mm-graph-status></p>
         </div>
+      </>
+    ) : (
+      <p class="mm-note">{t(lang, 'mm.graph.empty')}</p>
+    )}
 
+    <section class="mm-rt" id="mm-rt" aria-labelledby="mm-rt-heading" data-mm-i18n={strings}>
+      <h2 id="mm-rt-heading">{t(lang, 'mm.modeler.title')}</h2>
+      <p class="mm-help">{t(lang, 'mm.modeler.lead')}</p>
+      <p class="mm-alert" data-mm-flash role="alert" hidden></p>
+      {canManage && (
+        <p><button type="button" class="mm-button mm-button-small" data-mm-rt-add aria-controls="mm-rt-panel" aria-expanded="false">{t(lang, 'mm.modeler.add')}</button></p>
+      )}
+      {relationTypes.length ? (
+        <div class="mm-table-wrap">
+          <table class="mm-table mm-rt-table" data-mm-rt-table
+            data-shown-template={t(lang, 'mm.modeler.shownStatus')} data-order-saved={t(lang, 'mm.modeler.orderSaved')}>
+            <caption class="mm-visually-hidden">{t(lang, 'mm.modeler.caption')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t(lang, 'mm.modeler.colSample')}</th>
+                <th scope="col">{t(lang, 'mm.modeler.colLabel')}</th>
+                <th scope="col">{t(lang, 'mm.modeler.colProperties')}</th>
+                <th scope="col" class="mm-num">{t(lang, 'mm.modeler.colCount')}</th>
+                <th scope="col">{t(lang, 'mm.modeler.colShow')}</th>
+                {canManage && <th scope="col">{t(lang, 'mm.modeler.colActions')}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {relationTypes.map((rt) => {
+                const l = typeLabel(rt, lang);
+                const inv = typeInverse(rt, lang);
+                const props = propertyNames(lang, rt);
+                const boxId = `mm-rt-show-${rt.slug}`;
+                return (
+                  <tr id={`mm-rt-row-${rt.slug}`} data-slug={rt.slug} class={rt.isArchived ? 'is-archived' : undefined}>
+                    <td><MmRelationSample type={rt} label={sampleDescription(lang, rt)} /></td>
+                    <th scope="row">
+                      <a class="mm-rt-name" href={typePath(rt.slug)} lang={l.lang}>{l.text}</a>
+                      {inv && <span class="mm-rt-inverse">{t(lang, 'mm.modeler.inverse', { label: '' })}<span lang={inv.lang}>{inv.text}</span></span>}
+                      {(rt.isBuiltin || rt.isArchived) && (
+                        <span class="mm-rt-flags">
+                          {rt.isBuiltin && <span class="mm-badge mm-badge-quiet">{t(lang, 'mm.modeler.builtin')}</span>}
+                          {rt.isArchived && <span class="mm-badge mm-badge-quiet">{t(lang, 'mm.modeler.archived')}</span>}
+                        </span>
+                      )}
+                    </th>
+                    <td>
+                      {props.length ? (
+                        <ul class="mm-chips">{props.map((p) => <li class="mm-chip" title={p.help}>{p.name}</li>)}</ul>
+                      ) : (
+                        <span class="mm-muted">{t(lang, 'mm.modeler.noProperties')}</span>
+                      )}
+                    </td>
+                    <td class="mm-num">{rt.relationCount}</td>
+                    <td>
+                      <span class="mm-rt-show">
+                        <input type="checkbox" id={boxId} data-mm-rt-show data-slug={rt.slug} checked />
+                        <label for={boxId}><span class="mm-visually-hidden">{t(lang, 'mm.modeler.show', { label: l.text })}</span></label>
+                      </span>
+                    </td>
+                    {canManage && (
+                      <td>
+                        <span class="mm-rt-actions">
+                          <button type="button" class="mm-textbutton" data-mm-rt-edit data-type={typeJson(rt)} aria-controls="mm-rt-panel" aria-expanded="false"
+                            aria-label={t(lang, 'mm.modeler.editLabel', { label: l.text })}>{t(lang, 'mm.modeler.edit')}</button>
+                          {!rt.isBuiltin && (rt.isArchived ? (
+                            <button type="button" class="mm-textbutton" data-mm-rt-archive="false" aria-label={t(lang, 'mm.modeler.restoreLabel', { label: l.text })}>{t(lang, 'mm.modeler.restore')}</button>
+                          ) : (
+                            <button type="button" class="mm-textbutton" data-mm-rt-archive="true" aria-label={t(lang, 'mm.modeler.archiveLabel', { label: l.text })}>{t(lang, 'mm.modeler.archive')}</button>
+                          ))}
+                          <button type="button" class="mm-button mm-button-small mm-button-quiet mm-rt-move" data-mm-rt-move="-1" aria-label={t(lang, 'mm.modeler.moveUp', { label: l.text })}><span aria-hidden="true">↑</span></button>
+                          <button type="button" class="mm-button mm-button-small mm-button-quiet mm-rt-move" data-mm-rt-move="1" aria-label={t(lang, 'mm.modeler.moveDown', { label: l.text })}><span aria-hidden="true">↓</span></button>
+                        </span>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p class="mm-muted">{t(lang, 'mm.modeler.empty')}</p>
+      )}
+      <p class="mm-visually-hidden" aria-live="polite" data-mm-rt-filter-status></p>
+      <p class="mm-help" aria-live="polite" data-mm-rt-status></p>
+      {canManage && <MmRelationTypeForm lang={lang} hidden />}
+    </section>
+
+    {nodes.length > 0 && (
+      <>
         <section aria-labelledby="mm-g-list">
           <h2 id="mm-g-list">{t(lang, 'mm.graph.listTitle')}</h2>
           {byStatus.map((g) => (
@@ -144,9 +264,9 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
                     const s = labelOf.get(e.source);
                     const tt = labelOf.get(e.target);
                     return (
-                      <tr>
+                      <tr data-mm-rel-type={e.type}>
                         <td><a href={conceptPath(e.source)} lang={s?.lang}>{s?.text ?? e.source}</a></td>
-                        <td>{relLabel(e.type)}</td>
+                        <td><a href={typePath(e.type)}>{relLabel(e.type)}</a></td>
                         <td><a href={conceptPath(e.target)} lang={tt?.lang}>{tt?.text ?? e.target}</a></td>
                       </tr>
                     );
@@ -159,12 +279,11 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
           )}
         </section>
       </>
-    ) : (
-      <p class="mm-note">{t(lang, 'mm.graph.empty')}</p>
     )}
   </MmLayout>
 )}
 
 <script>
   import '../../scripts/mm/graph.ts';
+  import '../../scripts/mm/relation-types.ts';
 </script>

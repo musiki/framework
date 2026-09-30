@@ -27,6 +27,19 @@ import { select } from 'd3-selection';
 import { drag } from 'd3-drag';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import { truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock, type Box } from '../../lib/mm/graph-layout';
+import { RELATION_FILTER_EVENT, type RelationFilterDetail } from '../../lib/mm/relation-type-ui';
+
+// Type filter from the relation modeler table (relation-types.ts): the slugs
+// whose relations are shown; null = all. Kept at module level so a state sent
+// before the graph is drawn still applies.
+let visibleTypes: Set<string> | null = null;
+const filterListeners = new Set<() => void>();
+document.addEventListener(RELATION_FILTER_EVENT, (event) => {
+  const visible = (event as CustomEvent<RelationFilterDetail>).detail?.visible;
+  visibleTypes = Array.isArray(visible) ? new Set(visible.map(String)) : null;
+  filterListeners.forEach((fn) => fn());
+});
+const typeHidden = (type: string) => visibleTypes !== null && !visibleTypes.has(type);
 
 type Node = {
   id: string; label: string; lang?: string; status: string; statusLabel?: string; href: string;
@@ -193,6 +206,7 @@ function draw(holder: HTMLElement): void {
     const forced = new Set<number>();
     const boxes: Box[] = [];
     links.forEach((l, i) => {
+      if (typeHidden(l.type)) return;
       const lit = isLit(l, focusId) || isLit(l, hoverId);
       if (!lit && !lod.edgeLabels) return;
       if (lit) forced.add(shown.length);
@@ -484,6 +498,13 @@ function draw(holder: HTMLElement): void {
     }).restart();
   }
   paintFocus();
+
+  const applyTypeFilter = () => {
+    link.attr('display', (d) => (typeHidden(d.type) ? 'none' : null));
+    render();
+  };
+  filterListeners.add(applyTypeFilter);
+  applyTypeFilter();
 
   node.call(
     drag<HTMLAnchorElement | SVGAElement, Node>()
