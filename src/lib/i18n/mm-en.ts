@@ -285,6 +285,8 @@ export const mmEn = {
     source: 'Concept',
     relation: 'Relation',
     target: 'Related concept',
+    agreement: 'Agreement',
+    inferredFlag: 'inferred',
     controls: 'Graph controls',
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',

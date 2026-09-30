@@ -288,6 +288,8 @@ export const nb: Pick<Dict, 'mm'> = {
       source: 'Begrep',
       relation: 'Relasjon',
       target: 'Relatert begrep',
+      agreement: 'Enighet',
+      inferredFlag: 'utledet',
       controls: 'Grafkontroller',
       zoomIn: 'Zoom inn',
       zoomOut: 'Zoom ut',

@@ -140,18 +140,27 @@
 .mm-graph .cm-node text, .mm-graph text.cm-node-probe { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 13px; fill: var(--mm-ink); pointer-events: none; }
 .mm-graph .cm-node:hover rect { stroke-width: 3px; }
 .mm-graph .cm-node.is-focus rect { stroke-width: 4px; }
-.mm-graph .cm-link { stroke: var(--mm-ink-40); stroke-width: 1.5px; }
-.mm-graph .cm-link.cm-contrasts { stroke-dasharray: 6 4; }
-.mm-graph .cm-link.cm-reformulates { stroke-dasharray: 2 3; }
-.mm-graph .cm-link.is-on, .mm-graph .cm-link.is-hover { stroke: var(--mm-ink); stroke-width: 2px; }
+/* Typed relations: colour, pattern, width and arrow come from the type (graph.ts sets them per line). */
+.mm-graph .cm-line { fill: none; stroke-linecap: butt; pointer-events: none; }
+.mm-graph .cm-hit { stroke: transparent; stroke-linecap: butt; pointer-events: stroke; cursor: pointer; }
+.mm-graph .cm-edge.is-sel .cm-hit, .mm-graph .cm-edge.is-hover .cm-hit { stroke: var(--mm-yellow); stroke-opacity: 0.55; }
+.mm-graph .cm-inferred { opacity: 0.4; }
+.mm-graph .cm-edge.cm-inferred .cm-line { stroke-width: 1px; }
+.mm-graph .cm-contest { fill: var(--mm-white); stroke-width: 1.5px; pointer-events: none; }
+.mm-graph .cm-hull { stroke-width: 2px; stroke-linejoin: miter; fill-opacity: 0.55; pointer-events: none; }
+.mm-graph .cm-hull-inner { stroke-width: 1px; }
+.mm-graph .cm-area-tab { stroke-width: 1px; pointer-events: none; }
+.mm-graph .cm-area-label, .mm-graph text.cm-area-label { font-family: var(--mm-font-body); font-size: 11px; font-weight: 700; fill: var(--mm-ink); pointer-events: none; }
 .mm-graph .cm-edge-label {
   font-family: var(--mm-font-body); font-size: 10px; fill: var(--mm-ink-70); pointer-events: none;
   paint-order: stroke; stroke: var(--mm-white); stroke-width: 4px; stroke-linejoin: round;
 }
 .mm-graph .cm-edge-label.is-on { fill: var(--mm-ink); font-weight: 700; }
-.mm-graph svg.has-focus .cm-node:not(.is-on), .mm-graph svg.has-focus .cm-link:not(.is-on) { opacity: 0.22; }
+.mm-graph svg.has-focus .cm-node:not(.is-on), .mm-graph svg.has-focus .cm-edge:not(.is-on):not(.is-sel) { opacity: 0.22; }
+.mm-graph svg.has-focus .cm-edge.cm-inferred:not(.is-on):not(.is-sel) { opacity: 0.12; }
+.mm-graph svg.has-focus .cm-area:not(.is-on) { opacity: 0.45; }
 .mm-graph svg.has-focus .cm-edge-label:not(.is-on) { opacity: 0.35; }
-.mm-graph .cm-node, .mm-graph .cm-link { transition: opacity 0.15s; }
+.mm-graph .cm-node, .mm-graph .cm-edge, .mm-graph .cm-area { transition: opacity 0.15s; }
 @media (prefers-reduced-motion: reduce) { .mm-graph svg * { transition: none !important; } }
 @media (max-width: 40rem) { .mm-graph svg { height: 420px; } }
 /* Hover / selection card: flat, ink rule, white, square bullet on the link. */
@@ -171,6 +180,26 @@
 .mm-graph-card.is-docked { left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 62%; border-width: 2px 0 0; }
 @media (prefers-reduced-motion: no-preference) { .mm-graph-card { animation: mm-card-in 0.12s ease-out; } }
 @keyframes mm-card-in { from { opacity: 0; } to { opacity: 1; } }
+/* Relation card: the sentence, the type's sample, totals, stance buttons, names after the reveal. */
+.mm-graph-relcard { padding-top: 0.5rem; }
+.mm-graph-relcard .mm-graph-card-close { float: right; margin: 0 0 0.25rem 0.5rem; min-height: 2.75rem; }
+.mm-graph-relcard-verb { font-family: var(--mm-font-body); font-weight: 700; font-size: 0.95rem; }
+.mm-graph-relcard-type { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem !important; font-size: 0.85rem; clear: both; }
+.mm-graph .mm-graph-relcard-type a { color: var(--mm-ink); text-decoration: underline; text-underline-offset: 0.2em; }
+.mm-graph-relcard-body > * + * { margin-top: 0.45rem !important; }
+.mm-graph-relcard-body { margin-top: 0.5rem; font-size: 0.9rem; line-height: 1.4; }
+.mm-graph-relcard-flags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.mm-graph-relcard-totals { font-weight: 700; }
+.mm-graph-relcard-stance { border-top: var(--mm-rule); padding-top: 0.45rem; }
+.mm-graph-relcard-buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem !important; }
+.mm-graph-relcard-buttons .mm-button { min-height: 2.75rem; }
+.mm-graph-relcard-buttons .mm-button[aria-pressed='true'] { background: var(--mm-ink); color: var(--mm-white); }
+.mm-graph-relcard .mm-help { font-size: 0.8rem; margin-top: 0.35rem; }
+.mm-graph-relcard-names-title { font-weight: 700; border-top: var(--mm-rule); padding-top: 0.45rem; }
+.mm-graph-relcard-names { margin: 0.25rem 0 0; padding-left: 1.1rem; list-style: square; }
+.mm-graph-relcard-settle { border-top: var(--mm-rule); padding-top: 0.45rem; }
+.mm-graph-relcard-live:empty { display: none; }
+.mm-graph-relcard-live { margin-top: 0.45rem !important; font-size: 0.85rem; font-weight: 700; }
 .mm-filters { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: end; margin: 1rem 0; }
 .mm-filters .mm-form-row { gap: 0.2rem; }
 .mm-filters select { font: inherit; border: var(--mm-rule); border-radius: 0; padding: 0.4rem 0.5rem; background: var(--mm-white); color: var(--mm-ink); }

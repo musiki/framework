@@ -13,6 +13,13 @@
 // sends 'mm:relation-filter'; graph.ts hides the other types' edges).
 // Curators/admins also get "Add relation +", Edit, Archive/Restore and
 // reorder, and see archived types; the form is MmRelationTypeForm.
+//
+// Typed rendering (graph.ts): each edge carries its relation id (null when
+// inferred), type, agreement totals, settled flag and reveal date (a date,
+// never names); the types' encodings go along so the lines match the key.
+// Members get Agree/Disagree/Withdraw on the relation card, curators Settle;
+// the card reads names from GET /api/mm/relations/<id>, which returns them
+// only after the reveal and only to members.
 import MmLayout from '../../layouts/MmLayout.astro';
 import MmStatus from '../../components/mm/MmStatus.astro';
 import MmRelationSample from '../../components/mm/MmRelationSample.astro';
@@ -43,6 +50,8 @@ let edges: GraphEdge[] = [];
 let forumSlug = '';
 let relationTypes: RelationTypeView[] = [];
 let canManage = false;
+let canStance = false;
+let canSettle = false;
 
 if (isMm) {
   try {
@@ -53,9 +62,9 @@ if (isMm) {
     ({ nodes, edges, relationTypes } = await graph({ spaceId: viewer.space.id, forumId: forum?.id ?? null, status: status || null, lang }));
     // Curators manage the vocabulary: they also see archived types (to restore them).
     canManage = can(viewer.role, 'manageRelationTypes');
+    canStance = can(viewer.role, 'stance');
+    canSettle = can(viewer.role, 'settleRelation');
     if (canManage) relationTypes = await listRelationTypes({ spaceId: viewer.space.id, includeArchived: true });
-    // Until the typed rendering lands (relation modeler, graph tasks) this page draws asserted relations only.
-    edges = edges.filter((e) => !e.inferred);
   } catch (err) {
     logPageError('graph', err);
     state = 'unavailable';
@@ -69,7 +78,13 @@ const relLabel = (type: string) => {
   const rt = typeBySlug.get(type);
   return rt ? typeLabel(rt, lang).text : t(lang, `mm.relationTypes.${type}` as MessageKey);
 };
-const strings = clientStrings(lang);
+const REL_STRING_KEYS = [
+  'card', 'selected', 'noRelations', 'proposedBy', 'formerMember', 'unnamed', 'fromPost', 'totals', 'contested', 'settled', 'inferred',
+  'yourStance', 'noStance', 'stanceAgree', 'stanceDisagree', 'agree', 'disagree', 'withdraw', 'blind', 'hiddenUntil', 'revealedPublic',
+  'namesTitle', 'noNames', 'afterReveal', 'nameAgrees', 'nameDisagrees', 'membersOnly', 'settle', 'settleHelp', 'settledNow', 'saved',
+  'withdrawn', 'slowDown', 'loading', 'close', 'typeLink',
+] as const;
+const strings = clientStrings(lang, Object.fromEntries(REL_STRING_KEYS.map((k) => [`rel.${k}`, t(lang, `mm.graph.rel.${k}` as MessageKey)])));
 const typeJson = (rt: RelationTypeView) => JSON.stringify({
   slug: rt.slug, label: rt.label, labelNb: rt.labelNb, inverseLabel: rt.inverseLabel, inverseLabelNb: rt.inverseLabelNb, render: rt.render,
   stroke: rt.stroke, arrow: rt.arrow, color: rt.color, symmetric: rt.symmetric, transitive: rt.transitive, hierarchical: rt.hierarchical,
@@ -78,7 +93,15 @@ const typeJson = (rt: RelationTypeView) => JSON.stringify({
 const labelOf = new Map(nodes.map((n) => [n.id, conceptLabel(n, lang)]));
 const graphData = JSON.stringify({
   nodes: nodes.map((n) => ({ id: n.id, label: labelOf.get(n.id)!.text, lang: labelOf.get(n.id)!.lang, status: n.status, statusLabel: t(lang, `mm.status.${n.status}` as MessageKey), href: conceptPath(n.id), excerpt: n.excerpt, excerptLang: n.excerptLang })),
-  links: edges.map((e) => ({ source: e.source, target: e.target, type: e.type, label: relLabel(e.type) })),
+  links: edges.map((e) => ({
+    id: e.id, source: e.source, target: e.target, type: e.type, label: relLabel(e.type), inferred: e.inferred,
+    agree: e.agree, disagree: e.disagree, settled: e.settled, revealAt: e.revealAt,
+  })),
+  // The encodings the lines, areas and card samples are drawn with (the same helpers as the key above).
+  types: relationTypes.map((rt) => ({
+    slug: rt.slug, label: rt.label, labelNb: rt.labelNb, inverseLabel: rt.inverseLabel, inverseLabelNb: rt.inverseLabelNb,
+    render: rt.render, stroke: rt.stroke, arrow: rt.arrow, color: rt.color, symmetric: rt.symmetric, transitive: rt.transitive, hierarchical: rt.hierarchical,
+  })),
 });
 const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((n) => n.status === s) })).filter((g) => g.nodes.length);
 ---
@@ -134,6 +157,9 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
             data-selected-template={t(lang, 'mm.graph.selected')}
             data-open-label={t(lang, 'mm.graph.open')}
             data-no-definition={t(lang, 'mm.graph.noDefinition')}
+            data-lang={lang}
+            data-can-stance={canStance ? 'true' : undefined}
+            data-can-settle={canSettle ? 'true' : undefined}
             role="group"
             aria-label={t(lang, 'mm.graph.canvas')}
             aria-describedby="mm-g-keys"
@@ -257,6 +283,7 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
                     <th scope="col">{t(lang, 'mm.graph.source')}</th>
                     <th scope="col">{t(lang, 'mm.graph.relation')}</th>
                     <th scope="col">{t(lang, 'mm.graph.target')}</th>
+                    <th scope="col" class="mm-num">{t(lang, 'mm.graph.agreement')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -264,10 +291,15 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
                     const s = labelOf.get(e.source);
                     const tt = labelOf.get(e.target);
                     return (
-                      <tr data-mm-rel-type={e.type}>
+                      <tr data-mm-rel-type={e.type} class={e.inferred ? 'is-inferred' : undefined}>
                         <td><a href={conceptPath(e.source)} lang={s?.lang}>{s?.text ?? e.source}</a></td>
-                        <td><a href={typePath(e.type)}>{relLabel(e.type)}</a></td>
+                        <td>
+                          <a href={typePath(e.type)}>{relLabel(e.type)}</a>
+                          {e.inferred && <span class="mm-badge mm-badge-quiet">{t(lang, 'mm.graph.inferredFlag')}</span>}
+                          {e.settled && <span class="mm-badge mm-badge-quiet">{t(lang, 'mm.graph.rel.settled')}</span>}
+                        </td>
                         <td><a href={conceptPath(e.target)} lang={tt?.lang}>{tt?.text ?? e.target}</a></td>
+                        <td class="mm-num">{e.inferred ? '—' : t(lang, 'mm.graph.rel.totals', { agree: e.agree, disagree: e.disagree })}</td>
                       </tr>
                     );
                   })}
