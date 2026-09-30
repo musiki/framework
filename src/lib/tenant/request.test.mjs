@@ -62,7 +62,7 @@ test('so-dev host: prerendered routes obey allowlist', () => {
 
 test('mm host: public pages are rewritten to the internal mount, with internal target', () => {
   const cases = [['/', '/mm-app/'], ['/f/stiegler', '/mm-app/f/stiegler'], ['/c/x', '/mm-app/c/x'],
-    ['/graph', '/mm-app/graph'], ['/about', '/mm-app/about'], ['/join', '/mm-app/join'], ['/admin', '/mm-app/admin']];
+    ['/r/contains', '/mm-app/r/contains'], ['/r/%2561', '/mm-app/r/%2561'], ['/graph', '/mm-app/graph'], ['/about', '/mm-app/about'], ['/join', '/mm-app/join'], ['/admin', '/mm-app/admin']];
   for (const [p, target] of cases) {
     const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: p });
     assert.equal(d.tenant.id, 'mm');

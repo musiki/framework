@@ -40,6 +40,15 @@ test('so api:public excludes the mm public api', () => {
 test('mapMmPath keeps raw encoding', () => {
   assert.equal(mapMmPath('/f/%25'), '/mm-app/f/%25');
   assert.equal(mapMmPath('/f/%2561'), '/mm-app/f/%2561');
+  assert.equal(mapMmPath('/r/%25'), '/mm-app/r/%25');
+  assert.equal(mapMmPath('/r/%2561'), '/mm-app/r/%2561');
+  assert.equal(mapMmPath('/r/is%20part%20of'), '/mm-app/r/is%20part%20of');
+});
+
+test('mapMmPath: /r never escapes the mount and /rx is not /r', () => {
+  assert.equal(mapMmPath('/r/../../cursos'), null);
+  assert.equal(mapMmPath('/r/%2e%2e/%2E%2E/cursos'), null);
+  for (const p of ['/rx', '/relations', '/r-types']) assert.equal(mapMmPath(p), null, p);
 });
 
 test('mm (no api:public family) is refused /api/public/instruments and so data', () => {
@@ -48,13 +57,13 @@ test('mm (no api:public family) is refused /api/public/instruments and so data',
 });
 
 test('mm allows / exactly, its page prefixes, its apis and auth', () => {
-  for (const p of ['/', '/f', '/f/stiegler', '/c', '/c/tertiary-retention', '/graph', '/about', '/join',
+  for (const p of ['/', '/f', '/f/stiegler', '/c', '/c/tertiary-retention', '/r', '/r/contains', '/graph', '/about', '/join',
     '/admin', '/admin/invites', '/api/mm', '/api/mm/concepts', '/api/public/mm', '/api/public/mm/concepts.json',
     '/api/auth/session', '/api/auth/signin/logto-mm', '/lily/0123456789abcdef0123456789abcdef.svg']) {
     assert.equal(isRouteAllowed(mm, p), true, p);
   }
   for (const p of ['//', '/x', '/cursos', '/foro', '/dashboard', '/login', '/studio', '/studio/login', '/api/studio/me',
-    '/api/public', '/api/public/mmx', '/api/mmx', '/fx', '/cx', '/graphs', '/aboutx', '/joinx', '/adminx',
+    '/api/public', '/api/public/mmx', '/api/mmx', '/fx', '/cx', '/rx', '/relations', '/graphs', '/aboutx', '/joinx', '/adminx',
     '/search.json', '/public-search.json', '/slides/x', '/mm-app', '/mm-app/', '/api/graph-data', '/lilyx', '/api/lily/render']) {
     assert.equal(isRouteAllowed(mm, p), false, p);
   }
@@ -75,6 +84,8 @@ test('mapMmPath maps public mm pages to the internal mount', () => {
   assert.equal(mapMmPath('/f/stiegler'), '/mm-app/f/stiegler');
   assert.equal(mapMmPath('/c/tertiary-retention'), '/mm-app/c/tertiary-retention');
   assert.equal(mapMmPath('/graph'), '/mm-app/graph');
+  assert.equal(mapMmPath('/r'), '/mm-app/r');
+  assert.equal(mapMmPath('/r/contains'), '/mm-app/r/contains');
   assert.equal(mapMmPath('/about'), '/mm-app/about');
   assert.equal(mapMmPath('/join'), '/mm-app/join');
   assert.equal(mapMmPath('/admin/members'), '/mm-app/admin/members');

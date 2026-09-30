@@ -5,7 +5,7 @@ export const ROUTE_FAMILY_PREFIXES: Record<RouteFamily, string[]> = {
   'api:studio': ['/api/studio'],
   'api:public': ['/api/public'],
   auth: ['/api/auth'],
-  mm: ['/f', '/c', '/graph', '/about', '/join', '/admin'],
+  mm: ['/f', '/c', '/r', '/graph', '/about', '/join', '/admin'],
   'api:mm': ['/api/mm'],
   'api:public-mm': ['/api/public/mm'],
   // Rendered LilyPond assets (src/pages/lily/[file].ts: content-hash names only).

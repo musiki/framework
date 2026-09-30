@@ -51,8 +51,8 @@ export const TENANTS: Record<TenantId, Tenant> = {
     authProviders: ['logto-so'],
     homePath: '/studio',
   },
-  // MishMash Concept Machine. Public URLs (/, /f, /c, /graph, /about, /join,
-  // /admin) are rewritten by middleware to internal /mm-app/* pages
+  // MishMash Concept Machine. Public URLs (/, /f, /c, /r, /graph, /about,
+  // /join, /admin) are rewritten by middleware to internal /mm-app/* pages
   // (see mapMmPath in routes.ts). Never shows musiki branding. 'lily' serves
   // rendered LilyPond scores (/lily/<hash>.svg) from the asset store.
   mm: {
