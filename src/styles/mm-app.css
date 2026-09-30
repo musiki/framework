@@ -213,3 +213,10 @@ h3 .mm-dot { margin-right: 0.45rem; }
 .mm-post-body :is(h1, h2, h3, h4, h5, h6) { font-size: 1.05rem; line-height: 1.3; margin: 1.1rem 0 0.4rem; letter-spacing: 0; }
 .mm-post-body :is(h1, h2) { font-size: 1.15rem; }
 .mm-admin-channels .mm-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Own posts: inline edit form, "edited" marker, adopted note. */
+.mm-post-edit { margin: 0.75rem 0 0; padding: 0.9rem 1rem; border: var(--mm-rule); background: var(--mm-ink-5); }
+.mm-post-edit[hidden], .mm-post-body[hidden] { display: none; }
+.mm-post-edit textarea { min-height: 10rem; width: 100%; }
+.mm-post-edited { font-style: italic; }
+.mm-adopted-note { margin: 0 0 0.6rem; }
