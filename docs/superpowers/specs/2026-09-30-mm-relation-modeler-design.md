@@ -22,7 +22,11 @@ MishMash identity is flat: no gradients, no shadows, no rounded corners; ink rul
 
 ### Relation (instance)
 - As today (source, target, type → now FK to RelationType), plus provenance: `createdBy`, optional `fromPostId` (the post where it was argued).
-- **Agreement**: members (not guests) mark `agree` / `disagree` on a relation, one stance per user, changeable. Public shows counts only (no names; names visible to the member themselves and curators).
+- **Agreement — blind, then revealed** (user decision 2026-09-30): members (not guests) mark `agree` / `disagree` on a relation, one stance per user, changeable.
+  - While the relation is **open** (under discussion): stances are blind — everyone sees only the totals; nobody (not even curators or admins, not through any API) sees who voted what; a member sees only their own stance.
+  - **Reveal**: a curator closes the discussion of a relation ("settle"), or it closes automatically after the space's `stanceRevealDays` (default 14) since the relation was created. From then on members see the names behind each stance (public still sees totals only). Later stances/changes are signed immediately and marked "after reveal".
+  - Transparency: the vote control always states "Your name is hidden now and shown to members when this discussion closes (on <date>)". A member may withdraw their stance before the reveal; withdrawn stances are never revealed.
+  - Deleting an account deletes its stances (FK cascade); merge re-points them (dedupe).
 - `area` relations: a container concept and its members; rendered as a hull.
 
 ### Inference (read-only, computed)
@@ -50,7 +54,7 @@ MishMash identity is flat: no gradients, no shadows, no rounded corners; ink rul
 ## API (all via mmRoute; tenant mm; CSRF; rate limits)
 
 - `GET /api/mm/relation-types` (public), `POST` (curator), `PATCH /api/mm/relation-types/[slug]` (curator), `PUT /api/mm/relation-types` order.
-- `POST /api/mm/relations` accepts `typeSlug` (+ optional `fromPostId`); `POST /api/mm/relations/[id]/stance` `{stance: 'agree'|'disagree'|null}` (member+).
+- `POST /api/mm/relations` accepts `typeSlug` (+ optional `fromPostId`); `POST /api/mm/relations/[id]/stance` `{stance: 'agree'|'disagree'|null}` (member+); `POST /api/mm/relations/[id]/settle` (curator) reveals; `GET /api/mm/relations/[id]` returns totals, own stance, reveal date, and names only after reveal and only to members.
 - `GET /api/mm/graph` adds `relationTypes`, per-edge `type`, `inferred`, `agree`, `disagree`, `createdAt`; per-node `createdAt`.
 - Public export `/api/public/mm/concepts.json` adds `relation_types` (label, label_nb, inverse, properties, mappings, definition) and keeps names-only credits; optional `?format=jsonld` later.
 
@@ -59,12 +63,12 @@ MishMash identity is flat: no gradients, no shadows, no rounded corners; ink rul
 - `RelationType`(id, spaceId, conceptId → Concept (kind relation-type), slug, label, labelNb, inverseLabel, inverseLabelNb, render, stroke, arrow, color, symmetric, transitive, hierarchical, skos, wikidata, position, isBuiltin, isArchived, createdBy, timestamps); unique (spaceId, slug); CHECKs on enums and palette slots.
 - `Concept.kind` text default 'concept' CHECK in ('concept','relation-type'); relation-type concepts excluded from concept lists/graph nodes.
 - `ConceptRelation.typeId` FK → RelationType (backfill from the existing `type` strings; keep `type` column in sync for one release, then drop later); `fromPostId` FK ForumPost ON DELETE SET NULL.
-- `ConceptRelationStance`(relationId, userId, stance CHECK, timestamps, PK (relationId,userId)), FKs ON DELETE CASCADE.
+- `ConceptRelationStance`(relationId, userId, stance CHECK, afterReveal boolean, timestamps, PK (relationId,userId)), FKs ON DELETE CASCADE. `ConceptRelation.settledAt` timestamptz NULL, `settledBy`; reveal time = settledAt or createdAt + space.settings.stanceRevealDays (default 14). Names are selected ONLY when now >= reveal time (enforced in SQL, not in the client).
 - Owner `app` guard as in previous mm migrations; idempotent; seed built-in types per existing commons space.
 
 ## Testing
 
-Pure cores with fakeQuery: type CRUD + permissions, palette/enum validation, built-ins not deletable, relation creation by typeSlug, hierarchical cycle rejection, inference (transitive closure bounded, cycles, symmetric), stance rules (one per user, guests denied, counts only), graph payload shape (no user ids), export shape, timeline filtering helper. Rendering helpers (hull with padding, stroke pattern map, agreement → width) unit-tested. Browser check with the harness: add type "contains" as area, create relations, vote, inferred edges, slider.
+Pure cores with fakeQuery: type CRUD + permissions, palette/enum validation, built-ins not deletable, relation creation by typeSlug, hierarchical cycle rejection, inference (transitive closure bounded, cycles, symmetric), stance rules (one per user, guests denied, blind before reveal for every role incl. admin, names after reveal to members only, withdraw before reveal leaves no trace, auto-reveal by date, afterReveal flag), graph payload shape (no user ids), export shape, timeline filtering helper. Rendering helpers (hull with padding, stroke pattern map, agreement → width) unit-tested. Browser check with the harness: add type "contains" as area, create relations, vote, inferred edges, slider.
 
 ## Out of scope (stage 2)
 
