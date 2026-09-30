@@ -364,3 +364,78 @@ export function cycleIndex(n: number, current: number, dir: 1 | -1 = 1): number 
   if (current < 0 || current >= n) return dir > 0 ? 0 : n - 1;
   return (current + dir + n) % n;
 }
+
+// --- timeline (emergence of the graph) ---------------------------------------
+
+export const DAY_MS = 86_400_000;
+/** UTC day number of a time. */
+const dayOf = (ms: number) => Math.floor(ms / DAY_MS);
+/** The last millisecond of UTC day `day` (the slider's threshold for that day). */
+export const dayEnd = (day: number): number => (day + 1) * DAY_MS - 1;
+/** Creation time of an item; missing or unreadable dates count as "always there". */
+const timeOf = (iso: string | null | undefined): number => {
+  const ms = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(ms) ? -Infinity : ms;
+};
+
+export type TimelineItems = {
+  nodes: { id: string; createdAt?: string | null }[];
+  /** Asserted and inferred relations; an inferred one carries the date of the last relation it rests on (graph payload). */
+  edges: { source: string; target: string; type?: string; createdAt?: string | null }[];
+  areas?: AreaGroup[];
+};
+export type VisibleAt = {
+  nodes: Set<string>;
+  /** Indices into `items.edges`. */
+  edges: Set<number>;
+  /** Area key → members shown at that date (only areas with a shown container and at least one member). */
+  areas: Map<string, string[]>;
+};
+
+/**
+ * What of the graph exists at time `at` (ms, inclusive): concepts created by
+ * then; relations created by then whose two ends exist (an inferred relation
+ * therefore appears with the last relation it rests on); areas follow their
+ * relations (container → member of the area's type), in the order given.
+ * Status and agreement are always the current ones (no history in stage 1).
+ */
+export function visibleAt(items: TimelineItems, at: number): VisibleAt {
+  const nodes = new Set(items.nodes.filter((n) => timeOf(n.createdAt) <= at).map((n) => n.id));
+  const edges = new Set<number>();
+  const contained = new Set<string>(); // `type|container|member` of the shown relations
+  items.edges.forEach((e, i) => {
+    if (timeOf(e.createdAt) > at || !nodes.has(e.source) || !nodes.has(e.target)) return;
+    edges.add(i);
+    contained.add(`${e.type ?? ''}|${e.source}|${e.target}`);
+  });
+  const areas = new Map<string, string[]>();
+  for (const g of items.areas ?? []) {
+    if (!nodes.has(g.container)) continue;
+    const members = g.members.filter((m) => contained.has(`${g.type}|${g.container}|${m}`));
+    if (members.length) areas.set(g.key, members);
+  }
+  return { nodes, edges, areas };
+}
+
+/**
+ * The slider's range in UTC days, from the first creation to `now`, and the
+ * steps Play walks through: every day on which something was created, then
+ * today. Dates after `now` (clock skew) count as today.
+ */
+export function timelineDays(items: TimelineItems, now: number): { first: number; last: number; steps: number[] } {
+  const last = dayOf(now);
+  const days = new Set<number>([last]);
+  for (const x of [...items.nodes, ...items.edges]) {
+    const ms = timeOf(x.createdAt);
+    if (Number.isFinite(ms)) days.add(Math.min(last, dayOf(ms)));
+  }
+  const steps = [...days].sort((a, b) => a - b);
+  return { first: steps[0], last, steps };
+}
+
+/** The next (dir 1) or previous (dir -1) step after `day`, or null at the end. */
+export function stepDay(steps: number[], day: number, dir: 1 | -1): number | null {
+  if (dir > 0) return steps.find((s) => s > day) ?? null;
+  for (let i = steps.length - 1; i >= 0; i--) if (steps[i] < day) return steps[i];
+  return null;
+}

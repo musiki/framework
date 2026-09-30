@@ -290,3 +290,81 @@ test('cycleIndex', () => {
   assert.equal(cycleIndex(3, 0, -1), 2);
   assert.equal(cycleIndex(0, 0), -1);
 });
+
+// --- timeline -------------------------------------------------------------
+import { visibleAt, timelineDays, stepDay, dayEnd, DAY_MS } from './graph-layout.ts';
+
+const D = (s) => Date.parse(`${s}T12:00:00Z`);
+const tl = {
+  nodes: [
+    { id: 'technics', createdAt: '2026-01-01T09:00:00Z' },
+    { id: 'memory', createdAt: '2026-01-03T09:00:00Z' },
+    { id: 'pharmakon', createdAt: '2026-01-05T09:00:00Z' },
+    { id: 'legacy', createdAt: '' }, // unknown date: there from the start
+  ],
+  edges: [
+    { source: 'technics', target: 'memory', type: 'contains', createdAt: '2026-01-04T10:00:00Z' },
+    { source: 'memory', target: 'pharmakon', type: 'contains', createdAt: '2026-01-06T10:00:00Z' },
+    { source: 'technics', target: 'pharmakon', type: 'contains', inferred: true, createdAt: '2026-01-06T10:00:00Z' },
+    { source: 'pharmakon', target: 'technics', type: 'derives', createdAt: '2026-01-02T10:00:00Z' }, // older than an end (bad data)
+    { source: 'legacy', target: 'technics', type: 'derives', createdAt: null },
+  ],
+  areas: [
+    { key: 'contains|technics', type: 'contains', container: 'technics', members: ['memory', 'pharmakon'], level: 1 },
+    { key: 'contains|memory', type: 'contains', container: 'memory', members: ['pharmakon'], level: 0 },
+  ],
+};
+
+test('visibleAt: concepts by createdAt; a relation only when it and both ends exist', () => {
+  const a = visibleAt(tl, D('2026-01-02'));
+  assert.deepEqual([...a.nodes].sort(), ['legacy', 'technics']);
+  assert.deepEqual([...a.edges], [4]); // the pharmakon→technics line waits for pharmakon
+  assert.equal(a.areas.size, 0);
+  const b = visibleAt(tl, D('2026-01-04'));
+  assert.deepEqual([...b.nodes].sort(), ['legacy', 'memory', 'technics']);
+  assert.deepEqual([...b.edges].sort(), [0, 4]);
+  assert.deepEqual([...b.areas], [['contains|technics', ['memory']]]); // areas follow their relations
+  const c = visibleAt(tl, D('2026-01-05'));
+  assert.deepEqual([...c.edges].sort(), [0, 3, 4]);
+  assert.deepEqual([...c.areas], [['contains|technics', ['memory']]]); // pharmakon exists, its area relation not yet
+});
+
+test('visibleAt: an inferred relation appears with the last relation it rests on', () => {
+  const before = visibleAt(tl, Date.parse('2026-01-06T09:59:59Z'));
+  assert.ok(!before.edges.has(2) && !before.edges.has(1));
+  const after = visibleAt(tl, Date.parse('2026-01-06T10:00:00Z')); // inclusive
+  assert.ok(after.edges.has(1) && after.edges.has(2));
+  assert.deepEqual([...after.areas], [['contains|technics', ['memory', 'pharmakon']], ['contains|memory', ['pharmakon']]]);
+  // Now: everything.
+  const now = visibleAt(tl, Infinity);
+  assert.equal(now.nodes.size, 4);
+  assert.equal(now.edges.size, 5);
+  // Without areas the map is empty.
+  assert.equal(visibleAt({ nodes: tl.nodes, edges: tl.edges }, Infinity).areas.size, 0);
+});
+
+test('timelineDays: first creation day to today, stepping through distinct creation days', () => {
+  const now = D('2026-01-10');
+  const t = timelineDays(tl, now);
+  const day = (s) => Math.floor(D(s) / DAY_MS);
+  assert.equal(t.first, day('2026-01-01'));
+  assert.equal(t.last, day('2026-01-10'));
+  assert.deepEqual(t.steps, ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04', '2026-01-05', '2026-01-06', '2026-01-10'].map(day));
+  // Future dates (clock skew) are clamped to today; no dates at all → one day.
+  const skew = timelineDays({ nodes: [{ id: 'x', createdAt: '2027-01-01T00:00:00Z' }], edges: [] }, now);
+  assert.deepEqual(skew, { first: day('2026-01-10'), last: day('2026-01-10'), steps: [day('2026-01-10')] });
+  assert.deepEqual(timelineDays({ nodes: [], edges: [] }, now).steps, [day('2026-01-10')]);
+  // dayEnd is the last millisecond of the UTC day.
+  assert.equal(dayEnd(day('2026-01-04')), Date.parse('2026-01-04T23:59:59.999Z'));
+});
+
+test('stepDay: next / previous creation day, null at the ends', () => {
+  const steps = [10, 12, 15, 20];
+  assert.equal(stepDay(steps, 10, 1), 12);
+  assert.equal(stepDay(steps, 11, 1), 12);
+  assert.equal(stepDay(steps, 13, -1), 12);
+  assert.equal(stepDay(steps, 12, -1), 10);
+  assert.equal(stepDay(steps, 20, 1), null);
+  assert.equal(stepDay(steps, 10, -1), null);
+  assert.equal(stepDay([], 3, 1), null);
+});
