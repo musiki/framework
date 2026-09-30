@@ -76,7 +76,7 @@ function toThrowable(error: unknown): Error {
 }
 
 /** Runs a statement and throws on a reported error (never "zero rows" on failure). */
-async function run(q: QueryFn, text: string, params: unknown[] = []): Promise<any[]> {
+export async function run(q: QueryFn, text: string, params: unknown[] = []): Promise<any[]> {
   const { data, error } = await q(text, params);
   if (error) throw toThrowable(error);
   return data ?? [];
@@ -118,30 +118,30 @@ export function shouldDestroyClient(err: unknown, rollbackFailed: boolean): bool
   return !(domain && err instanceof Error && Number.isFinite(status) && status < 500);
 }
 
-const isUniqueViolation = (err: unknown) => (err as { code?: unknown })?.code === '23505';
+export const isUniqueViolation = (err: unknown) => (err as { code?: unknown })?.code === '23505';
 
 /** Public user reference: display name only (never one that looks like an e-mail), or deleted. */
-const userRef = (id: string | null | undefined, name: string | null | undefined): UserRef =>
+export const userRef = (id: string | null | undefined, name: string | null | undefined): UserRef =>
   id ? { name: publicName(name), deleted: false } : { name: null, deleted: true };
 
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
-function cleanLabel(raw: unknown, field = 'label'): string {
+export function cleanLabel(raw: unknown, field = 'label'): string {
   const label = typeof raw === 'string' ? raw.trim() : '';
   if (!label) throw new ConceptError(400, `${field} required`);
   if (label.length > MAX_LABEL) throw new ConceptError(400, `${field} too long`);
   return label;
 }
 
-function cleanOptionalLabel(raw: unknown, field: string): string | null {
+export function cleanOptionalLabel(raw: unknown, field: string): string | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw === 'string' && raw.trim() === '') return null;
   return cleanLabel(raw, field);
 }
 
-function cleanDefinition(raw: unknown): string {
+export function cleanDefinition(raw: unknown): string {
   const def = typeof raw === 'string' ? raw.trim() : '';
   if (!def) throw new ConceptError(400, 'definition required');
   if (def.length > MAX_DEFINITION) throw new ConceptError(400, 'definition too long');
@@ -165,7 +165,7 @@ export function cleanSources(raw: unknown): Source[] {
   return out;
 }
 
-function requireUuid(value: unknown, what: string): string {
+export function requireUuid(value: unknown, what: string): string {
   if (typeof value !== 'string' || !isUuid(value)) throw new ConceptError(404, `${what} not found`);
   return value;
 }
@@ -208,7 +208,7 @@ export async function getCommonsRole(q: QueryFn, spaceId: string, userId: string
   return isCommonsRole(role) ? role : null;
 }
 
-async function authorize(
+export async function authorize(
   q: QueryFn,
   spaceId: string,
   actorUserId: string | null,
@@ -258,7 +258,7 @@ async function touchConcept(q: QueryFn, conceptId: string) {
   await run(q, `UPDATE "Concept" SET "updatedAt" = now() WHERE id = $1::uuid`, [conceptId]);
 }
 
-async function insertVersion(
+export async function insertVersion(
   q: QueryFn,
   v: {
     conceptId: string;
