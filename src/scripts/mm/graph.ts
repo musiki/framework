@@ -7,10 +7,12 @@
 // Layout: nodes collide on their (folded) label box; every edge label is a
 // small simulated node pulled to its link's midpoint and pushed away from the
 // other labels and the concept boxes; labels that still overlap are hidden.
-// Zoom is semantic: positions scale, boxes and text keep their size, so
-// zooming in makes room for full labels. Level of detail: folded node labels
+// Zoom is semantic above 1: positions scale, boxes and text keep their size,
+// so zooming in makes room for full labels; below 1 everything shrinks
+// together, so zooming out never makes boxes collide. Level of detail: folded node labels
 // and no edge labels at low zoom; full labels on hover, on selection, at high
-// zoom, or with the "show all labels" toggle.
+// zoom, or with the "show all labels" toggle (which lifts the zoom thresholds;
+// edge labels that would sit on top of something are still left out).
 //
 // Accessibility: the SVG is decorative for assistive technology
 // (aria-hidden, nothing focusable inside); the canvas element itself is one
@@ -141,6 +143,7 @@ function draw(holder: HTMLElement): void {
   const isLit = (l: Link, id: string | null) => id !== null && (end(l.source).id === id || end(l.target).id === id);
   const render = () => {
     const lod = levelOfDetail(t.k, showAll);
+    const s = Math.min(1, t.k); // glyph scale
     node.each(function (d) {
       const full = lod.fullLabels || d.id === focusId || d.id === hoverId;
       if (d.full !== full) {
@@ -150,30 +153,32 @@ function draw(holder: HTMLElement): void {
         g.select('text').text(full ? d.label : d.fold);
         g.select('rect').attr('x', -w / 2).attr('width', w);
       }
-    }).attr('transform', (d) => `translate(${t.applyX(d.x ?? 0)},${t.applyY(d.y ?? 0)})`);
+    }).attr('transform', (d) => `translate(${t.applyX(d.x ?? 0)},${t.applyY(d.y ?? 0)}) scale(${s})`);
     link
       .attr('x1', (d) => t.applyX(end(d.source).x ?? 0)).attr('y1', (d) => t.applyY(end(d.source).y ?? 0))
       .attr('x2', (d) => t.applyX(end(d.target).x ?? 0)).attr('y2', (d) => t.applyY(end(d.target).y ?? 0));
 
     // Edge labels: the offset found by the label simulation is kept in screen pixels.
-    const nodeBoxes: Box[] = nodes.map((d) => ({ x: t.applyX(d.x ?? 0), y: t.applyY(d.y ?? 0), w: d.full ? d.wFull : d.wFold, h: NODE_H }));
+    const nodeBoxes: Box[] = nodes.map((d) => ({ x: t.applyX(d.x ?? 0), y: t.applyY(d.y ?? 0), w: (d.full ? d.wFull : d.wFold) * s, h: NODE_H * s }));
     const shown: number[] = [];
     const forced = new Set<number>();
     const boxes: Box[] = [];
     links.forEach((l, i) => {
       const lit = isLit(l, focusId) || isLit(l, hoverId);
       if (!lit && !lod.edgeLabels) return;
-      if (lit || showAll) forced.add(shown.length);
+      if (lit) forced.add(shown.length);
       shown.push(i);
-      boxes.push({ x: t.applyX(l.tag.mx) + (l.tag.x - l.tag.mx), y: t.applyY(l.tag.my) + (l.tag.y - l.tag.my), w: l.w, h: EDGE_H });
+      boxes.push({ x: t.applyX(l.tag.mx) + (l.tag.x - l.tag.mx) * s, y: t.applyY(l.tag.my) + (l.tag.y - l.tag.my) * s, w: l.w * s, h: EDGE_H * s });
     });
     const hidden = hiddenByOverlap(boxes, nodeBoxes, forced);
     const at = new Map<number, Box>();
     shown.forEach((i, j) => { if (!hidden.has(j)) at.set(i, boxes[j]); });
     edgeLabel
       .attr('display', (_d, i) => (at.has(i) ? null : 'none'))
-      .attr('x', (_d, i) => at.get(i)?.x ?? 0)
-      .attr('y', (_d, i) => at.get(i)?.y ?? 0);
+      .attr('transform', (_d, i) => {
+        const b = at.get(i);
+        return b ? `translate(${b.x},${b.y}) scale(${s})` : null;
+      });
   };
 
   const paintFocus = () => {
@@ -187,6 +192,7 @@ function draw(holder: HTMLElement): void {
   // --- zoom / pan ---------------------------------------------------------
   const zoomer = zoom<SVGSVGElement, unknown>()
     .scaleExtent(SCALE)
+    .clickDistance(4)
     // Plain wheel scrolls the page unless the graph has focus; pinch (ctrl+wheel) always zooms.
     .filter((e: Event) => {
       const ev = e as WheelEvent;
@@ -219,7 +225,10 @@ function draw(holder: HTMLElement): void {
   const points = () => nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 }));
   const fitTarget = () => {
     const widest = Math.max(...nodes.map((n) => (showAll ? n.wFull : n.wFold)));
-    return fitTransform(points(), width, height, { x: Math.min(widest / 2 + 12, width / 3), y: NODE_H / 2 + 14 }, SCALE);
+    const margin = (s: number) => ({ x: Math.min((widest / 2) * s + 12, width / 3), y: (NODE_H / 2) * s + 14 });
+    const first = fitTransform(points(), width, height, margin(1), SCALE);
+    // Boxes shrink with the view below 1, which leaves more room: fit again with the smaller margin.
+    return first.k < 1 ? fitTransform(points(), width, height, margin(first.k), SCALE) : first;
   };
   const zoomBy = (factor: number) => {
     auto = false;
@@ -235,10 +244,21 @@ function draw(holder: HTMLElement): void {
   };
 
   // --- selection ----------------------------------------------------------
+  // Bringing a box to the front re-appends it, and a browser drops the click
+  // of an element that was re-appended around its mousedown. So a hovered box
+  // is only raised after a short rest, and never while a button is down.
+  const toFront = (el: Element) => {
+    if (el.nextSibling) el.parentNode?.appendChild(el);
+  };
+  let raiseTimer = 0;
+  let pressed = false;
+  svgEl.addEventListener('pointerdown', () => { pressed = true; window.clearTimeout(raiseTimer); }, true);
+  window.addEventListener('pointerup', () => { pressed = false; });
+  window.addEventListener('pointercancel', () => { pressed = false; });
   const setFocus = (id: string | null, reveal = false) => {
     focusId = id;
     const d = id ? byId.get(id) : null;
-    if (d) node.filter((n) => n.id === id).raise();
+    if (d) node.filter((n) => n.id === id).each(function () { toFront(this); });
     paintFocus();
     render();
     if (status) {
@@ -267,11 +287,13 @@ function draw(holder: HTMLElement): void {
     .on('pointerenter', function (event: PointerEvent, d) {
       if (event.pointerType === 'touch') return;
       hoverId = d.id;
-      select(this).raise();
+      window.clearTimeout(raiseTimer);
+      raiseTimer = window.setTimeout(() => { if (!pressed && hoverId === d.id) toFront(this); }, 150);
       paintFocus();
       render();
     })
     .on('pointerleave', () => {
+      window.clearTimeout(raiseTimer);
       if (hoverId === null) return;
       hoverId = null;
       paintFocus();
@@ -282,6 +304,10 @@ function draw(holder: HTMLElement): void {
   });
 
   holder.tabIndex = 0;
+  // Nothing inside the aria-hidden SVG keeps focus: a clicked concept hands it to the canvas.
+  holder.addEventListener('focusin', (event) => {
+    if (event.target !== holder) holder.focus({ preventScroll: true });
+  });
   holder.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const step = (dir: number) => {
@@ -341,7 +367,8 @@ function draw(holder: HTMLElement): void {
   paintFocus();
 
   node.call(
-    drag<SVGAElement, Node>()
+    drag<HTMLAnchorElement | SVGAElement, Node>()
+      .clickDistance(4)
       .subject((_event, d) => ({ x: t.applyX(d.x ?? 0), y: t.applyY(d.y ?? 0) }))
       .on('start', (event, d) => {
         auto = false;

@@ -56,9 +56,9 @@ export function boundsOf(boxes: Box[]): Bounds | null {
 
 /** Transform (screen = world * k + [x, y]) that fits `points` (world
  * coordinates of node centres) into a view of `width` x `height`. Node boxes
- * keep their screen size at every zoom (semantic zoom), so `margin` is the
- * screen-space room kept around the centres (half the widest box plus
- * padding): the zoom only has to fit the spread of the centres. */
+ * do not grow with the zoom (semantic zoom), so `margin` is the screen-space
+ * room kept around the centres (half the widest box plus padding): the zoom
+ * only has to fit the spread of the centres. */
 export function fitTransform(
   points: { x: number; y: number }[],
   width: number,
@@ -85,7 +85,7 @@ export function linkDistance(sourceW: number, targetW: number, labelW: number, m
 }
 
 /** Level of detail at zoom k. `showAll` (the toolbar toggle) wins. */
-export function levelOfDetail(k: number, showAll: boolean, fullLabelsAt = 1.5, edgeLabelsAt = 0.85): { fullLabels: boolean; edgeLabels: boolean } {
+export function levelOfDetail(k: number, showAll: boolean, fullLabelsAt = 1.5, edgeLabelsAt = 0.75): { fullLabels: boolean; edgeLabels: boolean } {
   if (showAll) return { fullLabels: true, edgeLabels: true };
   return { fullLabels: k >= fullLabelsAt, edgeLabels: k >= edgeLabelsAt };
 }
