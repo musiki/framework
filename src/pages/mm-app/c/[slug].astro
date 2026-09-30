@@ -15,8 +15,10 @@ import MmStatus from '../../../components/mm/MmStatus.astro';
 import { t, type MessageKey } from '../../../lib/i18n';
 import { applyMmLang, langSwitchHref } from '../../../lib/mm/ui-lang';
 import {
-  CONCEPT_STATUSES, RELATION_TYPES, getConcept, listConcepts, type ConceptListItem, type ConceptView,
+  CONCEPT_STATUSES, getConcept, listConcepts, type ConceptListItem, type ConceptView,
 } from '../../../lib/mm/concepts';
+import { listRelationTypes, type RelationTypeView } from '../../../lib/mm/relation-types';
+import { typeInverse, typeLabel, typePath } from '../../../lib/mm/relation-type-ui';
 import { can } from '../../../lib/mm/policy';
 import { isConceptAuthor, loadMmViewer, logPageError, type MmViewer } from '../../../lib/mm/page-data';
 import { clientStrings } from '../../../lib/mm/page-strings';
@@ -33,6 +35,7 @@ let viewer: MmViewer | null = null;
 let concept: ConceptView | null = null;
 let others: ConceptListItem[] = [];
 let isAuthor = false;
+let relationTypes: RelationTypeView[] = [];
 
 if (!isMm || !slug || slug.length > 200) state = 'notFound';
 else {
@@ -42,9 +45,11 @@ else {
     if (!concept) state = 'notFound';
     else {
       const role = viewer.role;
-      [isAuthor, others] = await Promise.all([
+      [isAuthor, others, relationTypes] = await Promise.all([
         role === 'member' ? isConceptAuthor(concept.id, viewer.userId) : Promise.resolve(false),
         can(role, 'createRelation') ? listConcepts({ spaceId: viewer.space.id }) : Promise.resolve([]),
+        // Archived types too: existing relations may still use them (labels); the picker offers only live ones.
+        listRelationTypes({ spaceId: viewer.space.id, includeArchived: true }),
       ]);
       others = others.filter((c) => c.slug !== concept!.slug);
     }
@@ -73,7 +78,19 @@ const discussion = concept?.threadId && concept.origin && !concept.originArchive
   : null;
 const langName = (l: string | null) =>
   l === 'nb' ? t(lang, 'mm.common.langNb') : l === 'nn' ? t(lang, 'mm.common.langNn') : t(lang, 'mm.common.langEn');
-const relLabel = (type: string) => t(lang, `mm.relationTypes.${type}` as MessageKey);
+const typeBySlug = new Map(relationTypes.map((rt) => [rt.slug, rt]));
+// A relation type's label in the reader's language (unknown slugs: the old dictionary keys).
+const relLabel = (type: string): { text: string; lang: string } => {
+  const rt = typeBySlug.get(type);
+  if (!rt) return { text: t(lang, `mm.relationTypes.${type}` as MessageKey), lang };
+  return typeLabel(rt, lang);
+};
+const pickerTypes = relationTypes.filter((rt) => !rt.isArchived);
+const optionText = (rt: RelationTypeView) => {
+  const l = typeLabel(rt, lang).text;
+  const inv = typeInverse(rt, lang);
+  return inv ? t(lang, 'mm.concept.relationOption', { label: l, inverse: inv.text }) : l;
+};
 const strings = clientStrings(lang);
 const selfPath = concept ? conceptPath(concept.slug) : '/';
 const postLink = (postId: string | null) => (postId && discussion ? `${discussion}#post-${postId}` : null);
@@ -183,7 +200,7 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
                   return (
                     <tr>
                       <td>{r.direction === 'out' ? selfCell : otherCell}</td>
-                      <td>{relLabel(r.type)}</td>
+                      <td><a href={typePath(r.type)} lang={relLabel(r.type).lang}>{relLabel(r.type).text}</a></td>
                       <td>{r.direction === 'out' ? otherCell : selfCell}</td>
                       <td>
                         {can(role, 'deleteRelation', { isOwnRelation: r.own }) && (
@@ -210,9 +227,10 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
                 <p class="mm-form-row"><span>{t(lang, 'mm.concept.relationThis')}</span><strong lang={label.lang}>{label.text}</strong></p>
                 <div class="mm-form-row">
                   <label for="mm-rel-type">{t(lang, 'mm.concept.relationType')}</label>
-                  <select id="mm-rel-type" name="type" required>
-                    {RELATION_TYPES.map((r) => <option value={r}>{relLabel(r)}</option>)}
+                  <select id="mm-rel-type" name="typeSlug" required aria-describedby="mm-rel-type-help">
+                    {pickerTypes.map((rt) => <option value={rt.slug}>{optionText(rt)}</option>)}
                   </select>
+                  <p class="mm-help" id="mm-rel-type-help"><a href="/graph#mm-rt">{t(lang, 'mm.concept.relationTypesLink')}</a></p>
                 </div>
                 <div class="mm-form-row">
                   <label for="mm-rel-target">{t(lang, 'mm.concept.relationOther')}</label>
