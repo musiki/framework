@@ -1,0 +1,192 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  TYPE_COLORS, TYPE_STROKES, TYPE_RENDERS, typeLabel, typeInverse, typeProperties, typePath, strokeColor, tintColor,
+  dashArray, sampleSpec, formRules, buildTypeBody, moveSlug, visibleSlugs,
+} from './relation-type-ui.ts';
+import { RELATION_COLORS, RELATION_STROKES, RELATION_RENDERS, cleanRelationTypeFields } from './relation-types-core.ts';
+
+const contains = {
+  slug: 'contains', label: 'contains', labelNb: 'inneholder', inverseLabel: 'is contained in', inverseLabelNb: null,
+  render: 'area', stroke: 'solid', arrow: true, color: 'purple', symmetric: false, transitive: true, hierarchical: true,
+};
+
+test('enum lists mirror the core', () => {
+  assert.deepEqual([...TYPE_COLORS], [...RELATION_COLORS]);
+  assert.deepEqual([...TYPE_STROKES], [...RELATION_STROKES]);
+  assert.deepEqual([...TYPE_RENDERS], [...RELATION_RENDERS]);
+});
+
+test('typeLabel: hand-written Bokmål for nb/nn, English otherwise', () => {
+  assert.deepEqual(typeLabel(contains, 'en'), { text: 'contains', lang: 'en' });
+  assert.deepEqual(typeLabel(contains, 'nb'), { text: 'inneholder', lang: 'nb' });
+  assert.deepEqual(typeLabel(contains, 'nn'), { text: 'inneholder', lang: 'nb' });
+  assert.deepEqual(typeLabel({ label: 'derives from', labelNb: '  ' }, 'nb'), { text: 'derives from', lang: 'en' });
+  assert.deepEqual(typeLabel({ label: 'x', labelNb: null }, 'nb'), { text: 'x', lang: 'en' });
+});
+
+test('typeInverse: nb when present, English stands in, none for symmetric or missing', () => {
+  assert.deepEqual(typeInverse(contains, 'en'), { text: 'is contained in', lang: 'en' });
+  assert.deepEqual(typeInverse(contains, 'nb'), { text: 'is contained in', lang: 'en' });
+  assert.deepEqual(typeInverse({ ...contains, inverseLabelNb: 'er inneholdt i' }, 'nb'), { text: 'er inneholdt i', lang: 'nb' });
+  assert.equal(typeInverse({ ...contains, symmetric: true }, 'en'), null);
+  assert.equal(typeInverse({ inverseLabel: null, inverseLabelNb: null, symmetric: false }, 'en'), null);
+  assert.equal(typeInverse({ inverseLabel: '', inverseLabelNb: null, symmetric: false }, 'nb'), null);
+});
+
+test('typeProperties in fixed order; typePath encodes', () => {
+  assert.deepEqual(typeProperties(contains), ['transitive', 'hierarchical']);
+  assert.deepEqual(typeProperties({ symmetric: true, transitive: false, hierarchical: false }), ['symmetric']);
+  assert.equal(typePath('contains'), '/r/contains');
+  assert.equal(typePath('a b/c'), '/r/a%20b%2Fc');
+});
+
+test('colours come only from brand tokens', () => {
+  for (const c of TYPE_COLORS) {
+    assert.match(strokeColor(c), /^var\(--mm-[a-z-]+\)$/);
+    assert.match(tintColor(c), /^var\(--mm-[a-z0-9-]+\)$/);
+  }
+  assert.equal(strokeColor('purple'), 'var(--mm-purple-text)');
+  assert.equal(strokeColor('green'), 'var(--mm-green)');
+  assert.equal(strokeColor('#ff0000'), 'var(--mm-ink)');
+  assert.equal(strokeColor('url(x)'), 'var(--mm-ink)');
+  assert.equal(tintColor('purple'), 'var(--mm-purple-tint)');
+  assert.equal(tintColor('red'), 'var(--mm-pink-tint)');
+  assert.equal(tintColor('ink'), 'var(--mm-ink-5)');
+  assert.equal(tintColor('nope'), 'var(--mm-ink-5)');
+});
+
+test('dashArray per stroke pattern', () => {
+  assert.equal(dashArray('solid'), null);
+  assert.equal(dashArray('double'), null);
+  assert.equal(dashArray('dashed'), '6 4');
+  assert.equal(dashArray('dotted'), '2 3');
+});
+
+const tags = (spec) => spec.shapes.map((s) => s.tag);
+
+test('sampleSpec: solid directed line = one line + arrowhead in the slot colour', () => {
+  const s = sampleSpec({ render: 'line', stroke: 'solid', arrow: true, color: 'green', symmetric: false });
+  assert.equal(s.width, 64);
+  assert.equal(s.height, 24);
+  assert.deepEqual(tags(s), ['line', 'path']);
+  assert.equal(s.shapes[0].attrs.stroke, 'var(--mm-green)');
+  assert.equal(s.shapes[0].attrs['stroke-dasharray'], undefined);
+  assert.equal(s.shapes[0].attrs['stroke-linecap'], 'butt');
+  assert.equal(s.shapes[1].attrs.fill, 'var(--mm-green)');
+  assert.ok(s.shapes[0].attrs.x2 < 60, 'the line stops before the arrowhead');
+});
+
+test('sampleSpec: dashed / dotted carry the dash; symmetric never has an arrow', () => {
+  const d = sampleSpec({ render: 'line', stroke: 'dashed', arrow: true, color: 'blue', symmetric: true });
+  assert.deepEqual(tags(d), ['line']);
+  assert.equal(d.shapes[0].attrs['stroke-dasharray'], '6 4');
+  const o = sampleSpec({ render: 'line', stroke: 'dotted', arrow: false, color: 'ink', symmetric: false });
+  assert.deepEqual(tags(o), ['line']);
+  assert.equal(o.shapes[0].attrs['stroke-dasharray'], '2 3');
+});
+
+test('sampleSpec: double = two parallel strokes', () => {
+  const s = sampleSpec({ render: 'line', stroke: 'double', arrow: false, color: 'red', symmetric: false });
+  assert.deepEqual(tags(s), ['line', 'line']);
+  assert.notEqual(s.shapes[0].attrs.y1, s.shapes[1].attrs.y1);
+  assert.equal(s.shapes[0].attrs.y1, s.shapes[0].attrs.y2);
+});
+
+test('sampleSpec: area = tint square + slot-coloured border, no radius', () => {
+  const s = sampleSpec(contains);
+  assert.deepEqual(tags(s), ['rect', 'rect']);
+  assert.equal(s.shapes[0].attrs.fill, 'var(--mm-purple-tint)');
+  assert.equal(s.shapes[0].attrs.width, s.shapes[0].attrs.height);
+  assert.equal(s.shapes[1].attrs.stroke, 'var(--mm-purple-text)');
+  assert.equal(s.shapes[1].attrs.fill, 'none');
+  for (const sh of s.shapes) {
+    assert.equal(sh.attrs.rx, undefined);
+    assert.equal(sh.attrs.ry, undefined);
+  }
+  const dashed = sampleSpec({ ...contains, stroke: 'dashed' });
+  assert.equal(dashed.shapes[1].attrs['stroke-dasharray'], '6 4');
+  assert.deepEqual(tags(sampleSpec({ ...contains, stroke: 'double' })), ['rect', 'rect', 'rect']);
+});
+
+test('sampleSpec: unknown values fall back safely', () => {
+  const s = sampleSpec({ render: 'line', stroke: 'wavy', arrow: false, color: 'javascript:x', symmetric: false });
+  assert.deepEqual(tags(s), ['line']);
+  assert.equal(s.shapes[0].attrs.stroke, 'var(--mm-ink)');
+});
+
+test('formRules: area locks hierarchical on and symmetric off; symmetric and hierarchical exclude each other', () => {
+  assert.deepEqual(formRules({ render: 'line', symmetric: false, hierarchical: false }), {
+    disabled: { symmetric: false, hierarchical: false, area: false }, forceHierarchical: false,
+  });
+  assert.deepEqual(formRules({ render: 'area', symmetric: false, hierarchical: false }), {
+    disabled: { symmetric: true, hierarchical: true, area: false }, forceHierarchical: true,
+  });
+  assert.deepEqual(formRules({ render: 'line', symmetric: true, hierarchical: false }), {
+    disabled: { symmetric: false, hierarchical: true, area: true }, forceHierarchical: false,
+  });
+  assert.deepEqual(formRules({ render: 'line', symmetric: false, hierarchical: true }), {
+    disabled: { symmetric: true, hierarchical: false, area: false }, forceHierarchical: false,
+  });
+});
+
+const good = {
+  label: ' contains ', labelNb: 'inneholder', inverseLabel: 'is contained in', inverseLabelNb: '', render: 'area', stroke: 'solid',
+  arrow: true, color: 'purple', symmetric: false, transitive: true, hierarchical: true, skos: 'skos:narrower', wikidata: 'P527',
+  definition: 'A contains B when B is part of A.\r\n',
+};
+
+test('buildTypeBody create: flat body, JSON booleans, empty optional fields left out, definition required', () => {
+  const r = buildTypeBody(good, 'create');
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.body, {
+    label: 'contains', labelNb: 'inneholder', inverseLabel: 'is contained in', render: 'area', stroke: 'solid', arrow: true,
+    color: 'purple', symmetric: false, transitive: true, hierarchical: true, skos: 'skos:narrower', wikidata: 'P527',
+    definition: 'A contains B when B is part of A.',
+  });
+  for (const k of ['arrow', 'symmetric', 'transitive', 'hierarchical']) assert.equal(typeof r.body[k], 'boolean', k);
+  // The server accepts what the mirror builds.
+  const { definition, ...fields } = r.body;
+  assert.doesNotThrow(() => cleanRelationTypeFields(fields));
+  const missing = buildTypeBody({ ...good, definition: '   ' }, 'create');
+  assert.deepEqual(missing, { ok: false, errors: [{ field: 'definition', code: 'definitionRequired' }] });
+});
+
+test('buildTypeBody edit: every field, null clears, no definition', () => {
+  const r = buildTypeBody({ ...good, labelNb: '', skos: '' }, 'edit');
+  assert.equal(r.ok, true);
+  assert.equal(r.body.labelNb, null);
+  assert.equal(r.body.inverseLabelNb, null);
+  assert.equal(r.body.skos, null);
+  assert.equal('definition' in r.body, false);
+  assert.doesNotThrow(() => cleanRelationTypeFields(r.body, { ...contains, skos: 'skos:x', wikidata: null }));
+});
+
+test('buildTypeBody mirrors the server rules', () => {
+  const codes = (v, mode = 'edit') => { const r = buildTypeBody(v, mode); return r.ok ? [] : r.errors.map((e) => `${e.field}:${e.code}`); };
+  assert.deepEqual(codes({ ...good, label: '' }), ['label:labelRequired']);
+  assert.deepEqual(codes({ ...good, label: 'x'.repeat(201) }), ['label:tooLong']);
+  assert.deepEqual(codes({ ...good, inverseLabel: 'x'.repeat(201) }), ['inverseLabel:tooLong']);
+  assert.deepEqual(codes({ ...good, hierarchical: false }), ['hierarchical:areaNeedsHierarchical']);
+  assert.deepEqual(codes({ ...good, render: 'line', symmetric: true }), ['symmetric:symmetricHierarchical']);
+  assert.deepEqual(codes({ ...good, color: '#123456' }), ['color:invalidChoice']);
+  assert.deepEqual(codes({ ...good, stroke: 'wavy' }), ['stroke:invalidChoice']);
+  assert.deepEqual(codes({ ...good, render: 'blob' }), ['render:invalidChoice']);
+  assert.deepEqual(codes({ ...good, skos: 'broader' }), ['skos:invalidSkos']);
+  assert.deepEqual(codes({ ...good, wikidata: 'X1' }), ['wikidata:invalidWikidata']);
+  assert.deepEqual(codes({ ...good, definition: 'x'.repeat(20001) }, 'create'), ['definition:definitionTooLong']);
+  // Every rejection above is also a server rejection.
+  for (const bad of [{ render: 'area', hierarchical: false }, { symmetric: true, hierarchical: true }, { color: '#123456' }, { skos: 'broader' }, { wikidata: 'X1' }]) {
+    assert.throws(() => cleanRelationTypeFields({ label: 'x', ...bad }));
+  }
+});
+
+test('moveSlug and visibleSlugs', () => {
+  const order = ['derives', 'combines', 'contains'];
+  assert.deepEqual(moveSlug(order, 'contains', -1), ['derives', 'contains', 'combines']);
+  assert.deepEqual(moveSlug(order, 'derives', -1), order);
+  assert.deepEqual(moveSlug(order, 'contains', 1), order);
+  assert.deepEqual(moveSlug(order, 'nope', 1), order);
+  assert.deepEqual(order, ['derives', 'combines', 'contains']);
+  assert.deepEqual(visibleSlugs([{ slug: 'a', checked: true }, { slug: 'b', checked: false }, { slug: 'c', checked: true }]), ['a', 'c']);
+});
