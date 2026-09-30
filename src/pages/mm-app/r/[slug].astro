@@ -1,0 +1,245 @@
+---
+// Internal page for mm "/r/<slug>" (middleware rewrite): one relation type of
+// the space's vocabulary. Label / other way, the sample of its encoding,
+// logical properties, mappings, usage count, the definition (ONLY through the
+// core's sanitized `definitionHtml`, same renderer as concepts) with its
+// credited versions, the link to its discussion thread, and the relations of
+// this type (links to the concepts, agreement totals only). Curators/admins:
+// edit the type (MmRelationTypeForm) and write a new definition version
+// (PATCH /api/mm/relation-types/<slug> {definition, lang}). Archived types
+// keep their page (with a note).
+import 'katex/dist/katex.min.css';
+import MmLayout from '../../../layouts/MmLayout.astro';
+import MmStatus from '../../../components/mm/MmStatus.astro';
+import MmRelationSample from '../../../components/mm/MmRelationSample.astro';
+import MmRelationTypeForm from '../../../components/mm/MmRelationTypeForm.astro';
+import { t } from '../../../lib/i18n';
+import { applyMmLang, langSwitchHref } from '../../../lib/mm/ui-lang';
+import { can } from '../../../lib/mm/policy';
+import { loadMmViewer, logPageError, type MmViewer } from '../../../lib/mm/page-data';
+import { clientStrings } from '../../../lib/mm/page-strings';
+import {
+  getRelationType, listRelationsOfType, type RelationTypeDetail, type TypeRelationItem,
+} from '../../../lib/mm/relation-types';
+import { TYPE_RELATIONS_LIMIT } from '../../../lib/mm/relation-types-core';
+import { typeInverse, typeLabel, typePath } from '../../../lib/mm/relation-type-ui';
+import { propertyNames, sampleDescription } from '../../../lib/mm/relation-type-text';
+import {
+  conceptLabel, conceptPath, definitionExcerpt, displayName, formatDate, pickDefinition, threadPath, pageErrorState,
+} from '../../../lib/mm/view';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+const slug = String(Astro.params.slug ?? '');
+
+let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
+let viewer: MmViewer | null = null;
+let type: RelationTypeDetail | null = null;
+let relations: TypeRelationItem[] = [];
+
+if (!isMm || !slug || slug.length > 48) state = 'notFound';
+else {
+  try {
+    viewer = await loadMmViewer(Astro.locals);
+    type = await getRelationType({ spaceId: viewer.space.id, slug, viewerUserId: viewer.userId, lang });
+    if (!type) state = 'notFound';
+    else relations = await listRelationsOfType({ spaceId: viewer.space.id, slug: type.slug });
+  } catch (err) {
+    logPageError('relation-type', err);
+    state = pageErrorState(err);
+  }
+}
+if (state === 'notFound') Astro.response.status = 404;
+if (state === 'unavailable') Astro.response.status = 503;
+
+const role = viewer?.role ?? null;
+const canManage = can(role, 'manageRelationTypes');
+const formerMember = t(lang, 'mm.common.formerMember');
+const memberLabel = t(lang, 'mm.common.member');
+const label = type ? typeLabel(type, lang) : { text: '', lang: 'en' as const };
+const inverse = type ? typeInverse(type, lang) : null;
+const props = type ? propertyNames(lang, type) : [];
+const concept = type?.concept ?? null;
+const pick = concept ? pickDefinition(concept.current, lang) : null;
+const shown = pick?.version ?? null;
+// Not linked when the thread's board is archived (its pages are 404s).
+const discussion = concept?.threadId && concept.origin && !concept.originArchived
+  ? threadPath(concept.origin.groupSlug, concept.threadId, concept.origin.channel?.slug ?? null)
+  : null;
+const langName = (l: string | null) =>
+  l === 'nb' ? t(lang, 'mm.common.langNb') : l === 'nn' ? t(lang, 'mm.common.langNn') : t(lang, 'mm.common.langEn');
+const selfPath = type ? typePath(type.slug) : '/';
+const apiSlug = type ? encodeURIComponent(type.slug) : '';
+const strings = clientStrings(lang);
+const editData = type ? JSON.stringify({
+  slug: type.slug, label: type.label, labelNb: type.labelNb, inverseLabel: type.inverseLabel, inverseLabelNb: type.inverseLabelNb,
+  render: type.render, stroke: type.stroke, arrow: type.arrow, color: type.color, symmetric: type.symmetric,
+  transitive: type.transitive, hierarchical: type.hierarchical, skos: type.skos, wikidata: type.wikidata,
+}) : '';
+---
+{!isMm ? (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
+) : state !== 'ok' || !type ? (
+  <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
+) : (
+  <MmLayout lang={lang} title={label.text} description={shown ? definitionExcerpt(shown.definition, 200) : undefined}>
+    <div class="mm-rt-page" data-mm-i18n={strings}>
+      <p class="mm-meta">
+        <a class="mm-more" href="/graph#mm-rt">{t(lang, 'mm.relationType.backToGraph')}</a>
+      </p>
+      <p class="mm-meta"><span>{t(lang, 'mm.relationType.kicker')}</span></p>
+      <div class="mm-rt-head">
+        <h1 lang={label.lang}>{label.text}</h1>
+        <MmRelationSample type={type} label={sampleDescription(lang, type)} />
+      </div>
+      {inverse && <p class="mm-lead">{t(lang, 'mm.relationType.inverse', { label: '' })}<span lang={inverse.lang}>{inverse.text}</span></p>}
+      {type.symmetric && <p class="mm-lead">{t(lang, 'mm.relationType.symmetricNote')}</p>}
+      <p class="mm-alert" data-mm-flash role="alert" hidden></p>
+      {type.isArchived && <p class="mm-note">{t(lang, 'mm.relationType.archivedNote')}</p>}
+
+      <dl class="mm-rt-facts">
+        <dt>{t(lang, 'mm.relationType.look')}</dt>
+        <dd>{sampleDescription(lang, type)}</dd>
+        <dt>{t(lang, 'mm.relationType.properties')}</dt>
+        <dd>
+          {props.length ? (
+            <ul class="mm-chips">{props.map((p) => <li class="mm-chip">{p.name}</li>)}</ul>
+          ) : t(lang, 'mm.relationType.noProperties')}
+          {props.length > 0 && (
+            <ul class="mm-help mm-rt-rules">{props.map((p) => <li>{p.help}</li>)}</ul>
+          )}
+        </dd>
+        {(type.skos || type.wikidata) && (
+          <>
+            <dt>{t(lang, 'mm.relationType.mappings')}</dt>
+            <dd>
+              {type.skos && <code>{type.skos}</code>}
+              {type.skos && type.wikidata && ' · '}
+              {type.wikidata && <code>{type.wikidata}</code>}
+            </dd>
+          </>
+        )}
+        <dt>{t(lang, 'mm.modeler.colCount')}</dt>
+        <dd>{t(lang, 'mm.relationType.usage', { count: type.relationCount })}</dd>
+      </dl>
+      {type.isBuiltin && <p class="mm-help">{t(lang, 'mm.relationType.builtin')}</p>}
+
+      {canManage && (
+        <p><button type="button" class="mm-button mm-button-small" data-mm-rt-edit data-type={editData} aria-controls="mm-rt-panel" aria-expanded="false">{t(lang, 'mm.relationType.edit')}</button></p>
+      )}
+      {canManage && <MmRelationTypeForm lang={lang} type={type} hidden />}
+
+      <section aria-labelledby="mm-rt-def">
+        <h2 id="mm-rt-def">{t(lang, 'mm.relationType.definitionTitle')}</h2>
+        {pick?.missingTranslation && <p class="mm-note">{t(lang, 'mm.concept.missingNb')}</p>}
+        {shown ? (
+          <>
+            <blockquote class="mm-definition mm-post-body" lang={shown.lang} set:html={shown.definitionHtml} />
+            <p class="mm-meta">
+              <span>{t(lang, 'mm.concept.credit', { name: displayName(shown.credited, formerMember, memberLabel) })}</span>
+              <span>{formatDate(shown.createdAt, lang)}</span>
+            </p>
+          </>
+        ) : (
+          <p class="mm-muted">{t(lang, 'mm.concept.noDefinition')}</p>
+        )}
+        {pick?.alternate === 'nb' && <p><a href={langSwitchHref(selfPath, 'nb')} hreflang="nb" lang="nb">{t(lang, 'mm.concept.readNb')}</a></p>}
+        {pick?.alternate === 'en' && <p><a href={langSwitchHref(selfPath, 'en')} hreflang="en" lang="en">{t(lang, 'mm.concept.readEn')}</a></p>}
+        {discussion && <p><a class="mm-more" href={discussion}>{t(lang, 'mm.relationType.discussionLink')}</a></p>}
+      </section>
+
+      {canManage && concept && (
+        <section aria-labelledby="mm-rt-edit-def" class="mm-panel">
+          <h2 id="mm-rt-edit-def">{t(lang, 'mm.relationType.editDefinitionTitle')}</h2>
+          <p class="mm-help">{t(lang, 'mm.concept.editLead')}</p>
+          <form class="mm-form" data-mm-form data-method="PATCH" data-endpoint={`/api/mm/relation-types/${apiSlug}`} data-then="reload">
+            <div class="mm-form-row">
+              <label for="mm-rt-def-lang">{t(lang, 'mm.concept.editLang')}</label>
+              <select id="mm-rt-def-lang" name="lang">
+                <option value="en" selected={lang === 'en'}>{t(lang, 'mm.common.langEn')}</option>
+                <option value="nb" selected={lang === 'nb'}>{t(lang, 'mm.common.langNb')}</option>
+              </select>
+            </div>
+            <div class="mm-form-row">
+              <label for="mm-rt-def-text">{t(lang, 'mm.concept.editText')}</label>
+              <textarea id="mm-rt-def-text" name="definition" required maxlength="20000" lang={lang}>{(lang === 'nb' ? concept.current.nb?.definition : concept.current.en?.definition) ?? ''}</textarea>
+            </div>
+            <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
+            <div class="mm-form-actions"><button class="mm-button" type="submit">{t(lang, 'mm.concept.saveDefinition')}</button></div>
+          </form>
+        </section>
+      )}
+
+      <section aria-labelledby="mm-rt-rel">
+        <h2 id="mm-rt-rel">{t(lang, 'mm.relationType.relationsTitle')}</h2>
+        {relations.length ? (
+          <>
+            <div class="mm-table-wrap">
+              <table class="mm-table">
+                <caption class="mm-visually-hidden">{t(lang, 'mm.relationType.relationsTitle')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t(lang, 'mm.graph.source')}</th>
+                    <th scope="col">{t(lang, 'mm.graph.relation')}</th>
+                    <th scope="col">{t(lang, 'mm.graph.target')}</th>
+                    <th scope="col">{t(lang, 'mm.relationType.agreementCol')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {relations.map((r) => {
+                    const s = conceptLabel(r.source, lang);
+                    const o = conceptLabel(r.target, lang);
+                    return (
+                      <tr>
+                        <td><a href={conceptPath(r.source.slug)} lang={s.lang}>{s.text}</a></td>
+                        <td lang={label.lang}>{label.text}</td>
+                        <td><a href={conceptPath(r.target.slug)} lang={o.lang}>{o.text}</a></td>
+                        <td>
+                          {t(lang, 'mm.relationType.agreement', { agree: r.agree, disagree: r.disagree })}
+                          {r.settled && <> · {t(lang, 'mm.relationType.settled')}</>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {relations.length >= TYPE_RELATIONS_LIMIT && <p class="mm-help">{t(lang, 'mm.relationType.relationsLimited', { count: TYPE_RELATIONS_LIMIT })}</p>}
+          </>
+        ) : (
+          <p class="mm-muted">{t(lang, 'mm.relationType.relationsEmpty')}</p>
+        )}
+      </section>
+
+      {concept && concept.history.length > 0 && (
+        <section aria-labelledby="mm-rt-history">
+          <h2 id="mm-rt-history">{t(lang, 'mm.relationType.historyTitle')}</h2>
+          <p class="mm-help">{t(lang, 'mm.relationType.historyLead')}</p>
+          <ol class="mm-history" reversed>
+            {concept.history.map((v) => {
+              const credited = displayName(v.credited, formerMember, memberLabel);
+              const editor = displayName(v.editedBy, formerMember, memberLabel);
+              return (
+                <li>
+                  <p class="mm-meta">
+                    <span><strong>{langName(v.lang)}</strong></span>
+                    <span>{formatDate(v.createdAt, lang)}</span>
+                    <span>{t(lang, 'mm.concept.credit', { name: credited })}</span>
+                    {editor !== credited && <span>{t(lang, 'mm.concept.editedBy', { name: editor })}</span>}
+                  </p>
+                  <blockquote class="mm-post-body" lang={v.lang} set:html={v.definitionHtml} />
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+    </div>
+  </MmLayout>
+)}
+
+<script>
+  import '../../../scripts/mm/forms.ts';
+  import '../../../scripts/mm/relation-types.ts';
+</script>

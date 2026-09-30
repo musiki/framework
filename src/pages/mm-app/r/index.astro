@@ -1,0 +1,8 @@
+---
+// Internal page for mm "/r": the relation types live in the modeler table on
+// the graph page; this bare path sends readers there (mm tenant only).
+export const prerender = false;
+if (Astro.locals.tenant?.id !== 'mm') Astro.response.status = 404;
+else return Astro.redirect('/graph#mm-rt', 302);
+---
+<html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
