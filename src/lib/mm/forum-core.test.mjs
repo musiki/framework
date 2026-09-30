@@ -18,6 +18,9 @@ import {
   createPost,
   vote,
   moderatePost,
+  editPost,
+  deleteOwnPost,
+  isEdited,
   authorizeOwnerLibraries,
   getForumByPath,
   getForumRef,
@@ -971,4 +974,173 @@ test('reorderChannels: curators set positions 1..n for every channel of the grou
   await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.curator, order: 'x' }), 400);
   await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: CH_WELCOME, actorUserId: U.curator, order: [] }), 400);
   await rejectsStatus(reorderChannels(db().q, { spaceId: SPACE, groupId: GROUP, actorUserId: U.member, order: channelIds }), 403);
+});
+
+// ---------------------------------------------------------------------------
+// Author edit / delete
+// ---------------------------------------------------------------------------
+
+const ownPost = (over = {}) => ({
+  id: POST, threadId: THREAD, status: 'published', threadArchived: null, forumArchived: false,
+  authorUserId: U.member, adoptedAsVersionId: null, isLocked: false, ...over,
+});
+const editDb = (over = {}, updated = true) => fakeQuery([
+  memberRoute,
+  postByIdRoute({ [POST]: ownPost(over) }),
+  ['UPDATE "ForumPost"', (p, text) => (!updated ? [] : text.includes("status = 'deleted'")
+    ? [{ id: POST }]
+    : [{ id: POST, body: p[0], move: p[1] ? 'proposes' : p[2], updatedAt: 't9', editedAt: 't9' }])],
+]);
+const edit = (db, over = {}) => editPost(db.q, { spaceId: SPACE, postId: POST, actorUserId: U.member, body: ' New text ', ...over });
+const del = (db, over = {}) => deleteOwnPost(db.q, { spaceId: SPACE, postId: POST, actorUserId: U.member, ...over });
+
+test('editPost: the author edits the body; move kept when omitted; stamps editedAt + updatedAt', async () => {
+  const db = editDb();
+  assert.deepEqual(await edit(db), { postId: POST, body: 'New text', move: 'proposes', updatedAt: 't9', editedAt: 't9' });
+  const upd = db.calls.at(-1);
+  assert.deepEqual(upd.params, ['New text', true, null, POST, U.member, SPACE]);
+  assert.match(upd.text, /"editedAt" = now\(\), "updatedAt" = now\(\)/);
+  assert.match(upd.text, /p\."authorUserId" = \$5::uuid AND p\.status = 'published'/);
+  assert.match(upd.text, /et\."spaceId" = \$6::uuid AND et\."isLocked" IS NOT TRUE/);
+  assert.match(upd.text, /et\."archivedAt" IS NULL AND eb\."isArchived" IS NOT TRUE AND epb\."isArchived" IS NOT TRUE/);
+});
+
+test('editPost: move validated against the CHECK list; null/"" clears it', async () => {
+  const db = editDb();
+  assert.equal((await edit(db, { move: 'contrasts' })).move, 'contrasts');
+  assert.deepEqual(db.calls.at(-1).params.slice(0, 3), ['New text', false, 'contrasts']);
+  for (const m of POST_MOVES) assert.equal((await edit(editDb(), { move: m })).move, m);
+  assert.equal((await edit(editDb(), { move: null })).move, null);
+  assert.equal((await edit(editDb(), { move: '' })).move, null);
+  const bad = editDb();
+  await rejectsStatus(edit(bad, { move: 'agrees' }), 400);
+  await rejectsStatus(edit(bad, { move: 7 }), 400);
+  assert.ok(!bad.calls.some((c) => c.text.includes('UPDATE')));
+});
+
+test('editPost: body limits as createPost', async () => {
+  const db = editDb();
+  await rejectsStatus(edit(db, { body: '   ' }), 400);
+  await rejectsStatus(edit(db, { body: 5 }), 400);
+  await rejectsStatus(edit(db, { body: 'x'.repeat(20001) }), 400);
+  assert.ok(!db.calls.some((c) => c.text.includes('UPDATE')));
+  assert.equal((await edit(editDb(), { body: 'x'.repeat(20000) })).body.length, 20000);
+});
+
+test('editPost: author only — other members, curators and admins 403; anonymous 401; guests/removed members 403', async () => {
+  for (const actor of [U.curator, U.admin]) {
+    const db = editDb();
+    await rejectsStatus(edit(db, { actorUserId: actor }), 403);
+    assert.ok(!db.calls.some((c) => c.text.includes('UPDATE')));
+  }
+  await rejectsStatus(edit(editDb({ authorUserId: U.curator })), 403); // another member's post
+  await rejectsStatus(edit(editDb(), { actorUserId: null }), 401);
+  // the author lost membership (removed/blocked: no role) or is only a guest now: role checked per request
+  await rejectsStatus(edit(editDb({ authorUserId: U.stranger }), { actorUserId: U.stranger }), 403);
+  await rejectsStatus(edit(editDb({ authorUserId: U.guest }), { actorUserId: U.guest }), 403);
+  await rejectsStatus(del(editDb({ authorUserId: U.stranger }), { actorUserId: U.stranger }), 403);
+  // a curator may edit a post they wrote themselves
+  assert.equal((await edit(editDb({ authorUserId: U.curator }), { actorUserId: U.curator })).postId, POST);
+});
+
+test('curators cannot edit but moderation of the same post still works', async () => {
+  const db = editDb();
+  await rejectsStatus(edit(db, { actorUserId: U.curator }), 403);
+  await rejectsStatus(del(db, { actorUserId: U.curator }), 403);
+  assert.deepEqual(
+    await moderatePost(modDb().q, { spaceId: SPACE, postId: POST, actorUserId: U.curator, action: 'hide' }),
+    { postId: POST, status: 'hidden' },
+  );
+});
+
+test('editPost / deleteOwnPost: locked thread, archived thread or forum → 409; other space 404', async () => {
+  for (const over of [{ isLocked: true }, { threadArchived: 't8' }, { forumArchived: true }]) {
+    const db = editDb(over);
+    await rejectsStatus(edit(db), 409);
+    await rejectsStatus(del(db), 409);
+    assert.ok(!db.calls.some((c) => c.text.includes('UPDATE')), JSON.stringify(over));
+  }
+  await rejectsStatus(edit(editDb(), { postId: id(77) }), 404);
+  await rejectsStatus(edit(editDb(), { postId: 'nope' }), 404);
+  await rejectsStatus(del(editDb(), { postId: id(77) }), 404);
+});
+
+test('editPost: hidden/deleted posts 409; a concurrent change 409', async () => {
+  await rejectsStatus(edit(editDb({ status: 'hidden' })), 409);
+  await rejectsStatus(edit(editDb({ status: 'deleted' })), 409);
+  await rejectsStatus(edit(editDb({}, false)), 409);
+});
+
+test('deleteOwnPost: soft delete marked as by the author; hidden ok; deleted 409', async () => {
+  const db = editDb();
+  assert.deepEqual(await del(db), { postId: POST, status: 'deleted', deletedByAuthor: true });
+  const upd = db.calls.at(-1);
+  assert.match(upd.text, /SET status = 'deleted', body = '', "deletedByAuthor" = true, "updatedAt" = now\(\)/);
+  assert.match(upd.text, /p\."authorUserId" = \$2::uuid AND p\.status IN \('published', 'hidden'\)/);
+  assert.deepEqual(upd.params, [POST, U.member, SPACE]);
+  assert.ok(!db.calls.some((c) => /DELETE FROM/.test(c.text)), 'never a hard delete: replies keep their parent');
+  assert.equal((await del(editDb({ status: 'hidden' }))).status, 'deleted');
+  await rejectsStatus(del(editDb({ status: 'deleted' })), 409);
+  await rejectsStatus(del(editDb({}, false)), 409);
+  await rejectsStatus(del(editDb(), { actorUserId: null }), 401);
+});
+
+test('adopted post: edit and delete never touch ConceptVersion / Concept', async () => {
+  for (const fn of [edit, del]) {
+    const db = editDb({ adoptedAsVersionId: id(60) });
+    await fn(db);
+    const writes = db.calls.filter((c) => /^\s*(UPDATE|INSERT|DELETE)/.test(c.text));
+    assert.equal(writes.length, 1);
+    assert.match(writes[0].text, /^\s*UPDATE "ForumPost" p SET/);
+    for (const c of db.calls) assert.ok(!/"ConceptVersion"|"Concept"/.test(c.text), c.text);
+    assert.ok(!/adoptedAsVersionId/.test(writes[0].text), 'the adoption marker is kept');
+  }
+});
+
+test('isEdited: only after the 60s grace window', () => {
+  const t0 = '2026-09-30T10:00:00.000Z';
+  assert.equal(isEdited(t0, null), false);
+  assert.equal(isEdited(t0, undefined), false);
+  assert.equal(isEdited(t0, '2026-09-30T10:00:59.000Z'), false);
+  assert.equal(isEdited(t0, '2026-09-30T10:01:00.000Z'), false);
+  assert.equal(isEdited(t0, '2026-09-30T10:01:01.000Z'), true);
+  assert.equal(isEdited(new Date(t0), new Date('2026-09-30T11:00:00Z')), true);
+  assert.equal(isEdited(t0, 'garbage'), false);
+});
+
+test('listPosts: edited marker, author tombstone, per-post canEdit/canDelete', async () => {
+  const rows = [
+    { id: POST, parentPostId: null, authorUserId: U.member, body: 'Mine', status: 'published', move: null, adoptedAsVersionId: null,
+      createdAt: '2026-09-30T10:00:00Z', updatedAt: '2026-09-30T12:00:00Z', editedAt: '2026-09-30T12:00:00Z', deletedByAuthor: false, authorName: 'Ada' },
+    { id: POST2, parentPostId: POST, authorUserId: U.curator, body: '', status: 'deleted', move: null, adoptedAsVersionId: null,
+      createdAt: '2026-09-30T10:05:00Z', updatedAt: '2026-09-30T12:00:00Z', editedAt: '2026-09-30T11:00:00Z', deletedByAuthor: true, authorName: 'Bo' },
+    { id: id(42), parentPostId: POST2, authorUserId: U.member, body: '', status: 'deleted', move: null, adoptedAsVersionId: null,
+      createdAt: '2026-09-30T10:06:00Z', updatedAt: '2026-09-30T12:00:00Z', editedAt: null, deletedByAuthor: false, authorName: 'Ada' },
+    { id: id(43), parentPostId: null, authorUserId: U.member, body: 'Hid', status: 'hidden', move: null, adoptedAsVersionId: null,
+      // moderation bumps updatedAt only: not "edited"
+      createdAt: '2026-09-30T10:07:00Z', updatedAt: '2026-09-30T12:00:00Z', editedAt: null, deletedByAuthor: false, authorName: 'Ada' },
+  ];
+  const db = (over = {}) => fakeQuery([
+    memberRoute,
+    [/FROM "ForumThread" t\s+LEFT JOIN "User"/, () => [threadRow(over)]],
+    ['FROM "ForumPost" p\n     LEFT JOIN "User"', () => rows],
+  ]);
+  const flags = (v) => v.posts.map((p) => [p.edited, p.deletedByAuthor, p.canEdit, p.canDelete]);
+  const mine = await listPosts(db().q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.member });
+  assert.deepEqual(flags(mine), [
+    [true, false, true, true],
+    [false, true, false, false],   // tombstone by the author; reply structure kept
+    [false, false, false, false],  // moderator tombstone
+    [false, false, false, true],   // own hidden post: delete only
+  ]);
+  assert.equal(mine.posts[1].body, null);
+  assert.equal(mine.posts[2].parentPostId, POST2);
+  // curators get no edit rights on others' posts; locked threads freeze own posts; anonymous nothing
+  const cur = await listPosts(db().q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.curator });
+  assert.deepEqual(cur.posts.map((p) => p.canEdit || p.canDelete), [false, false, false, false]);
+  const locked = await listPosts(db({ isLocked: true }).q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.member });
+  assert.deepEqual(locked.posts.map((p) => p.canEdit || p.canDelete), [false, false, false, false]);
+  const anon = await listPosts(db().q, { spaceId: SPACE, threadId: THREAD });
+  assert.deepEqual(anon.posts.map((p) => p.canEdit || p.canDelete), [false, false, false, false]);
+  assert.equal(anon.posts[0].edited, true);
 });
