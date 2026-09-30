@@ -56,6 +56,7 @@ import {
   RELATION_FILTER_EVENT, dashArray, sampleSpec, strokeColor, svgAttrs, tintColor, typeLabel, typePath,
   type RelationFilterDetail, type TypeLike,
 } from '../../lib/mm/relation-type-ui';
+import { threadPath } from '../../lib/mm/view';
 import { ApiFailure, errorText, mmApi, pageStrings } from './api';
 
 // Type filter from the relation modeler table (relation-types.ts): the slugs
@@ -105,6 +106,8 @@ const SLOT_GAP = 7; // px between side-by-side relations of one pair
 const SCALE: [number, number] = [0.2, 4];
 const CARD_DELAY = 150; // hover rest before the card opens (ms)
 const CARD_GRACE = 250; // time to travel from the node to the card (ms)
+const VIEW_FRESH = 30_000; // a hovered relation reuses its loaded view for this long (ms)
+const VIEW_RECENT = 2_000; // pinning right after a load does not load again (ms)
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function strings(): (key: string, vars?: Record<string, string | number>) => string {
@@ -307,6 +310,7 @@ function draw(holder: HTMLElement): void {
   let relToken = 0;
   let relBusy = false;
   const views = new Map<string, RelationView>();
+  const viewAt = new Map<string, number>(); // when each view was loaded (performance.now())
 
   // --- state --------------------------------------------------------------
   let t: ZoomTransform = zoomIdentity;
@@ -571,11 +575,8 @@ function draw(holder: HTMLElement): void {
     }
     return s;
   };
-  const postHref = (p: NonNullable<RelationView['fromPost']>) => {
-    if (!p.groupSlug) return null;
-    const board = `/f/${encodeURIComponent(p.groupSlug)}${p.channelSlug ? `/${encodeURIComponent(p.channelSlug)}` : ''}`;
-    return `${board}/t/${encodeURIComponent(p.threadId)}#post-${encodeURIComponent(p.id)}`;
-  };
+  const postHref = (p: NonNullable<RelationView['fromPost']>) =>
+    p.groupSlug ? `${threadPath(p.groupSlug, p.threadId, p.channelSlug)}#post-${encodeURIComponent(p.id)}` : null;
   const button = (text: string, act: string, onClick: () => void, pressed?: boolean) => {
     const b = el('button', 'mm-button mm-button-small', text);
     b.type = 'button';
@@ -711,6 +712,7 @@ function draw(holder: HTMLElement): void {
       const r = await mmApi<{ relation: RelationView }>(`/api/mm/relations/${encodeURIComponent(l.id)}`);
       if (!r?.relation) return;
       views.set(l.id, r.relation);
+      viewAt.set(l.id, performance.now());
       syncTotals(l, r.relation);
     } catch (err) {
       if (token === relToken && relLink === l) say(errorText(err));
@@ -734,6 +736,7 @@ function draw(holder: HTMLElement): void {
       const r = await mmApi<{ relation?: RelationView }>(`/api/mm/relations/${encodeURIComponent(l.id)}/stance`, { method: 'POST', body: { stance } });
       if (r?.relation) {
         views.set(l.id, r.relation);
+        viewAt.set(l.id, performance.now());
         syncTotals(l, r.relation);
       }
       say(stance === null ? S('rel.withdrawn') : S('rel.saved'));
@@ -752,8 +755,7 @@ function draw(holder: HTMLElement): void {
     try {
       await mmApi(`/api/mm/relations/${encodeURIComponent(l.id)}/settle`, { method: 'POST' });
       l.settled = true;
-      relBusy = false;
-      await loadView(l);
+      await loadView(l); // still busy: no vote can slip in before the revealed view is shown
       say(S('rel.settledNow'));
       if (relLink === l) rel.querySelector<HTMLElement>('[data-act="agree"]')?.focus({ preventScroll: true });
     } catch (err) {
@@ -765,11 +767,17 @@ function draw(holder: HTMLElement): void {
     }
   };
 
-  /** Opens the relation card for `l` (pinned: stays until closed; otherwise follows the hover). */
+  /**
+   * Opens the relation card for `l` (pinned: stays until closed; otherwise follows the hover).
+   * A hovered line shows its cached view at once and loads only when it has none or it is older
+   * than VIEW_FRESH (sweeping the pointer over lines sends no burst of requests); pinning
+   * (click, E) loads afresh unless the view has just been loaded.
+   */
   const openRel = (l: Link, pinned: boolean) => {
     window.clearTimeout(showTimer);
     window.clearTimeout(hideTimer);
     const same = relLink === l && !rel.hidden;
+    const pinning = pinned && !(same && relPinned);
     relLink = l;
     relPinned = pinned || (same && relPinned);
     edge.classed('is-sel', (d) => d === l);
@@ -780,8 +788,9 @@ function draw(holder: HTMLElement): void {
       rel.hidden = false;
       rel.classList.toggle('is-docked', shouldDock(width));
       fillRel(l);
-      void loadView(l);
     }
+    const age = l.id && viewAt.has(l.id) ? performance.now() - viewAt.get(l.id)! : Infinity;
+    if (l.id && (pinning ? age > VIEW_RECENT : age > VIEW_FRESH) && (!same || pinning)) void loadView(l);
     describe();
     render();
   };
