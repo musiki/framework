@@ -410,6 +410,7 @@ export const mmEn = {
       render: 'Drawn as',
       renderLine: 'Line between two concepts',
       renderArea: 'Area around the concepts it contains',
+      renderAreaHelp: 'An area reads from container to member: the first concept contains the second, e.g. Technics contains Memory. Put “is part of” in the other-way label.',
       stroke: 'Stroke',
       arrow: 'Arrowhead (shows the direction)',
       palette: 'Colour',

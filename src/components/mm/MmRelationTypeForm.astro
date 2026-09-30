@@ -104,12 +104,13 @@ const mappingFields = [
 
     <fieldset>
       <legend>{f('look')}</legend>
-      <fieldset class="mm-form-row" aria-describedby={`${id}-render-err`}>
+      <fieldset class="mm-form-row" aria-describedby={`${id}-render-help ${id}-render-err`}>
         <legend>{f('render')}</legend>
         <div class="mm-radios">
           <label><input type="radio" name="render" value="line" checked={v.render !== 'area'} /> {f('renderLine')}</label>
           <label><input type="radio" name="render" value="area" checked={v.render === 'area'} disabled={rules.disabled.area} /> {f('renderArea')}</label>
         </div>
+        <p class="mm-help" id={`${id}-render-help`}>{f('renderAreaHelp')}</p>
         <p class="mm-field-error" id={`${id}-render-err`} data-for="render" hidden></p>
       </fieldset>
       <fieldset class="mm-form-row" aria-describedby={`${id}-stroke-err`}>

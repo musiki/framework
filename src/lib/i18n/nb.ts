@@ -413,6 +413,7 @@ export const nb: Pick<Dict, 'mm'> = {
         render: 'Tegnes som',
         renderLine: 'Linje mellom to begreper',
         renderArea: 'Område rundt begrepene den inneholder',
+        renderAreaHelp: 'Et område leses fra beholder til medlem: det første begrepet inneholder det andre, f.eks. Teknikk inneholder Minne. Skriv «er en del av» i etiketten for motsatt vei.',
         stroke: 'Strek',
         arrow: 'Pilspiss (viser retningen)',
         palette: 'Farge',
