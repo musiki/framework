@@ -1,5 +1,5 @@
 // DB-bound wrapper for the mm relation stances core (see concepts.ts for the
-// conventions). createRelation / deleteRelation / graph stay exported from
+// conventions). createRelation / deleteRelation / graph are bound in
 // concepts.ts; this file adds agreement: blind, then revealed (stances-core).
 
 import { query } from '../db/pool';

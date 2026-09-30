@@ -23,6 +23,7 @@ import {
 } from './concepts-core.ts';
 import { isUuid } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
+import { hasCycle } from './inference.ts';
 
 /** Palette slots (brand tokens --mm-<slot>); never a free colour. */
 export const RELATION_COLORS = ['green', 'purple', 'blue', 'pink', 'yellow', 'red', 'ink'] as const;
@@ -31,6 +32,14 @@ export const RELATION_STROKES = ['solid', 'dashed', 'dotted', 'double'] as const
 export type RelationStroke = (typeof RELATION_STROKES)[number];
 export const RELATION_RENDERS = ['line', 'area'] as const;
 export type RelationRender = (typeof RELATION_RENDERS)[number];
+
+/**
+ * Advisory lock key (pg_advisory_xact_lock(hashtext(key))) that serializes
+ * everything that depends on the set of relations of one type: creating a
+ * relation (duplicate / hierarchy-cycle checks) and changing the type's logical
+ * properties (which are checked against those relations).
+ */
+export const relationsLockKey = (typeId: string) => `mm-relations:${typeId}`;
 
 /** Slug of the definition Concept of relation type `slug` (the colon cannot come out of slugify). */
 export const relationTypeConceptSlug = (slug: string) => `rel:${slug}`;
@@ -376,9 +385,12 @@ export async function createRelationType(
  * changes; built-ins are editable). The definition concept's labels and its
  * thread title follow the English label. One transaction; `q` one client.
  *
- * `checkProperties(type, next)` lets the caller veto a property change against
- * the relations that already use the type (relations-core: a type cannot become
- * hierarchical while its relations contain a cycle).
+ * The relations that already use the type veto property changes they
+ * contradict (409): a type cannot become hierarchical while its relations
+ * contain a cycle, nor symmetric while two concepts are related in both
+ * directions (they would become duplicates). The check runs under the type's
+ * relations lock (the one createRelation takes), acquired BEFORE the row lock,
+ * so no relation can slip in between the check and the commit.
  */
 export async function updateRelationType(
   q: QueryFn,
@@ -387,7 +399,6 @@ export async function updateRelationType(
     slug: string;
     actorUserId: string | null;
     patch: unknown;
-    checkProperties?: (type: { id: string; slug: string }, next: RelationTypeFields, prev: RelationTypeFields) => Promise<void>;
   },
 ): Promise<RelationTypeFields & { slug: string }> {
   const spaceId = requireUuid(input.spaceId, 'space');
@@ -396,11 +407,29 @@ export async function updateRelationType(
   if (patch && typeof patch === 'object' && 'slug' in patch && patch.slug !== undefined && patch.slug !== input.slug) {
     throw new ConceptError(400, 'a relation type slug cannot change');
   }
+  const { id: typeId } = await loadTypeRow(q, spaceId, input.slug);
   return withTransaction(q, async () => {
+    // Advisory lock first, row lock second — the order createRelation implies
+    // (its INSERT key-share-locks the type row while holding the advisory lock).
+    await run(q, 'SELECT pg_advisory_xact_lock(hashtext($1))', [relationsLockKey(typeId)]);
     const row = await loadTypeRow(q, spaceId, input.slug, true);
     const prev = Object.fromEntries(FIELD_KEYS.map((k) => [k, (row as any)[k] ?? null])) as unknown as RelationTypeFields;
     const next = cleanRelationTypeFields(input.patch, prev);
-    if (input.checkProperties) await input.checkProperties({ id: row.id, slug: row.slug }, next, prev);
+    const becomesHierarchical = next.hierarchical && !prev.hierarchical;
+    const becomesSymmetric = next.symmetric && !prev.symmetric;
+    if (becomesHierarchical || becomesSymmetric) {
+      const rels = await run(q, `SELECT "sourceId", "targetId" FROM "ConceptRelation" WHERE "typeId" = $1::uuid`, [row.id]);
+      const edges = rels.map((r: any) => ({ source: String(r.sourceId), target: String(r.targetId) }));
+      if (becomesHierarchical && hasCycle(edges)) {
+        throw new ConceptError(409, 'relations of this type contain a cycle: it cannot become hierarchical');
+      }
+      if (becomesSymmetric) {
+        const seen = new Set(edges.map((e) => `${e.source}>${e.target}`));
+        if (edges.some((e) => seen.has(`${e.target}>${e.source}`))) {
+          throw new ConceptError(409, 'some concepts are related in both directions: the type cannot become symmetric');
+        }
+      }
+    }
     const updated = await run(
       q,
       `UPDATE "RelationType" SET label = $3, "labelNb" = $4, "inverseLabel" = $5, "inverseLabelNb" = $6, render = $7,

@@ -7,15 +7,16 @@
 
 import { query, getClient } from '../db/pool';
 import * as core from './concepts-core.ts';
+import * as relations from './relations-core.ts';
 import { mmDefinitionRenderCache, mmRendererFor } from './render.ts';
 import type { MmLang } from './ui-lang.ts';
 import type { QueryFn } from './concepts-core.ts';
 
 export { ConceptError, CONCEPT_LANGS, CONCEPT_STATUSES, RELATION_TYPES } from './concepts-core.ts';
 export type {
-  ConceptView, ConceptVersionView, ConceptRelationView, ConceptListItem, GraphNode, GraphEdge, GraphPayload, ConceptLang,
-  ConceptStatus, RelationType,
+  ConceptView, ConceptVersionView, ConceptRelationView, ConceptListItem, ConceptLang, ConceptStatus, RelationType,
 } from './concepts-core.ts';
+export type { GraphNode, GraphEdge, GraphPayload } from './relations-core.ts';
 
 const poolQ: QueryFn = (text, params) => query(text, params as any[]);
 
@@ -58,7 +59,7 @@ export const getCommonsRole = (spaceId: string, userId: string | null) => core.g
 export const getConcept = ({ lang = 'en', ...args }: Omit<Parameters<typeof core.getConcept>[1], 'render'> & { lang?: MmLang }) =>
   core.getConcept(poolQ, { ...args, render: mmRendererFor(mmDefinitionRenderCache, lang) });
 export const listConcepts = (args: Parameters<typeof core.listConcepts>[1]) => core.listConcepts(poolQ, args);
-export const graph = (args: Parameters<typeof core.graph>[1]) => core.graph(poolQ, args);
+export const graph = (args: Parameters<typeof relations.graph>[1]) => relations.graph(poolQ, args);
 
 export const createConcept = (args: Parameters<typeof core.createConcept>[1]) =>
   onClient((q) => core.createConcept(q, args));
@@ -68,6 +69,6 @@ export const adoptPost = (args: Parameters<typeof core.adoptPost>[1]) => onClien
 export const setStatus = (args: Parameters<typeof core.setStatus>[1]) => core.setStatus(poolQ, args);
 export const setLabels = (args: Parameters<typeof core.setLabels>[1]) => onClient((q) => core.setLabels(q, args));
 // Transactional: the duplicate / hierarchy-cycle checks and the insert share one client.
-export const createRelation = (args: Parameters<typeof core.createRelation>[1]) =>
-  onClient((q) => core.createRelation(q, args));
-export const deleteRelation = (args: Parameters<typeof core.deleteRelation>[1]) => core.deleteRelation(poolQ, args);
+export const createRelation = (args: Parameters<typeof relations.createRelation>[1]) =>
+  onClient((q) => relations.createRelation(q, args));
+export const deleteRelation = (args: Parameters<typeof relations.deleteRelation>[1]) => relations.deleteRelation(poolQ, args);

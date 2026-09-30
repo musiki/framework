@@ -3,9 +3,11 @@
 // docs/superpowers/specs/2026-09-30-mm-relation-modeler-design.md, "Relation
 // (instance)", "Inference", "Timeline").
 //
-// Pure module: no astro/db imports; `q` first. concepts-core re-exports
-// createRelation / deleteRelation / graph from here (the import cycle is safe
-// as long as nothing in this file uses a concepts-core binding at load time).
+// Pure module: no astro/db imports; `q` first. Imports concepts-core and
+// relation-types-core (one direction: neither imports this file).
+//
+// Every write is pinned to the caller's space (`spaceId` is required): a
+// concept or relation id of another space is a 404.
 //
 // Relations are written with "typeId" (FK RelationType) and the type's slug in
 // the legacy "type" column; a DB trigger keeps the two in step and rejects a
@@ -20,8 +22,8 @@ import {
   isConceptLang, RELATION_TYPE_KIND,
   type QueryFn, type ConceptLang, type ConceptStatus,
 } from './concepts-core.ts';
-import { listRelationTypes, type RelationTypeView, type RelationTypeFields } from './relation-types-core.ts';
-import { inferRelations, wouldCloseCycle, hasCycle, MAX_INFERENCE_DEPTH } from './inference.ts';
+import { listRelationTypes, relationsLockKey, type RelationTypeView } from './relation-types-core.ts';
+import { inferRelations, wouldCloseCycle, MAX_INFERENCE_DEPTH } from './inference.ts';
 import { definitionExcerpt, pickDefinition, type ViewLang } from './view.ts';
 
 const TYPE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -41,11 +43,16 @@ const TYPE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  *  - hierarchical types stay acyclic: a relation that closes a cycle → 409.
  *
  * One transaction (`q` must be one client): an advisory lock per type makes
- * the duplicate and cycle checks hold under concurrent writes.
+ * the duplicate and cycle checks hold under concurrent writes, and the type's
+ * properties (symmetric / hierarchical / archived) are re-read INSIDE the
+ * transaction after the lock, so a concurrent updateRelationType (which takes
+ * the same lock) cannot be missed.
  */
 export async function createRelation(
   q: QueryFn,
   input: {
+    /** The caller's space: both concepts, the type and the post must be in it. */
+    spaceId: string;
     sourceId: string;
     targetId: string;
     typeSlug?: unknown;
@@ -55,27 +62,22 @@ export async function createRelation(
     actorUserId: string | null;
   },
 ): Promise<{ id: string }> {
+  const spaceId = requireUuid(input.spaceId, 'concept');
   const source = await loadConceptById(q, input.sourceId);
-  if (source.kind === RELATION_TYPE_KIND) throw new ConceptError(404, 'concept not found');
-  await authorize(q, source.spaceId, input.actorUserId, 'createRelation');
+  if (source.spaceId !== spaceId || source.kind === RELATION_TYPE_KIND) throw new ConceptError(404, 'concept not found');
+  await authorize(q, spaceId, input.actorUserId, 'createRelation');
   const slug = input.typeSlug ?? input.type;
   if (typeof slug !== 'string' || slug.length > 48 || !TYPE_SLUG_RE.test(slug)) throw new ConceptError(400, 'invalid relation type');
   const targetId = requireUuid(input.targetId, 'target concept');
   if (targetId === source.id) throw new ConceptError(400, 'a concept cannot relate to itself');
   const target = await loadConceptById(q, targetId);
   if (target.kind === RELATION_TYPE_KIND) throw new ConceptError(404, 'target concept not found');
-  if (target.spaceId !== source.spaceId) throw new ConceptError(400, 'concepts belong to different spaces');
-  const spaceId = source.spaceId;
+  if (target.spaceId !== spaceId) throw new ConceptError(404, 'target concept not found');
 
-  const types = await run(
-    q,
-    `SELECT t.id, t.slug, t."symmetric", t.hierarchical, t."isArchived"
-     FROM "RelationType" t WHERE t."spaceId" = $1::uuid AND t.slug = $2 LIMIT 1`,
-    [spaceId, slug],
-  );
-  const type = types[0];
-  if (!type) throw new ConceptError(400, 'invalid relation type');
-  if (type.isArchived === true) throw new ConceptError(409, 'relation type is archived');
+  // Only the id is taken from this read (for the lock key); the properties are re-read under the lock.
+  const types = await run(q, `SELECT t.id FROM "RelationType" t WHERE t."spaceId" = $1::uuid AND t.slug = $2 LIMIT 1`, [spaceId, slug]);
+  const typeId: string | undefined = types[0]?.id;
+  if (!typeId) throw new ConceptError(400, 'invalid relation type');
 
   let fromPostId: string | null = null;
   if (input.fromPostId !== undefined && input.fromPostId !== null && input.fromPostId !== '') {
@@ -91,7 +93,16 @@ export async function createRelation(
 
   try {
     return await withTransaction(q, async () => {
-      await run(q, 'SELECT pg_advisory_xact_lock(hashtext($1))', [`mm-relations:${type.id}`]);
+      await run(q, 'SELECT pg_advisory_xact_lock(hashtext($1))', [relationsLockKey(typeId)]);
+      const locked = await run(
+        q,
+        `SELECT t.id, t.slug, t."symmetric", t.hierarchical, t."isArchived"
+         FROM "RelationType" t WHERE t.id = $1::uuid AND t."spaceId" = $2::uuid LIMIT 1`,
+        [typeId, spaceId],
+      );
+      const type = locked[0];
+      if (!type) throw new ConceptError(400, 'invalid relation type');
+      if (type.isArchived === true) throw new ConceptError(409, 'relation type is archived');
       const existing = await run(
         q,
         `SELECT id FROM "ConceptRelation"
@@ -124,51 +135,41 @@ export async function createRelation(
   }
 }
 
-/** Members delete their own relations; curators/admins any. Its stances go with it (FK cascade). */
+/**
+ * Curators/admins delete any relation of the space. A member deletes their own
+ * relation only while it is still theirs alone: unsettled and with no stance
+ * by anyone else (409 otherwise — others' agreement is not the proposer's to
+ * erase). Its stances go with it (FK cascade).
+ */
 export async function deleteRelation(
   q: QueryFn,
-  input: { relationId: string; actorUserId: string | null },
+  input: { relationId: string; spaceId: string; actorUserId: string | null },
 ): Promise<{ deleted: true }> {
   const id = requireUuid(input.relationId, 'relation');
+  const spaceId = requireUuid(input.spaceId, 'relation');
   const rows = await run(
     q,
-    `SELECT id, "spaceId", "createdBy" FROM "ConceptRelation" WHERE id = $1::uuid LIMIT 1`,
-    [id],
+    // Only a yes/no on "someone else took a stance" is read — never who.
+    `SELECT r.id, r."spaceId", r."createdBy", (r."settledAt" IS NOT NULL) AS settled,
+            EXISTS (SELECT 1 FROM "ConceptRelationStance" s
+                    WHERE s."relationId" = r.id AND s."userId" IS DISTINCT FROM $3::uuid) AS "othersHaveStances"
+     FROM "ConceptRelation" r WHERE r.id = $1::uuid AND r."spaceId" = $2::uuid LIMIT 1`,
+    [id, spaceId, input.actorUserId ?? null],
   );
   const rel = rows[0];
   if (!rel) throw new ConceptError(404, 'relation not found');
-  await authorize(q, rel.spaceId, input.actorUserId, 'deleteRelation', () => ({
+  const role = await authorize(q, spaceId, input.actorUserId, 'deleteRelation', () => ({
     isOwnRelation: !!rel.createdBy && rel.createdBy === input.actorUserId,
   }));
-  await run(q, `DELETE FROM "ConceptRelation" WHERE id = $1::uuid`, [id]);
+  if (role !== 'curator' && role !== 'admin') {
+    if (rel.settled === true) throw new ConceptError(409, 'a settled relation can only be deleted by a curator');
+    if (rel.othersHaveStances === true) {
+      throw new ConceptError(409, 'others have taken a stance on this relation: only a curator can delete it');
+    }
+  }
+  await run(q, `DELETE FROM "ConceptRelation" WHERE id = $1::uuid AND "spaceId" = $2::uuid`, [id, spaceId]);
   return { deleted: true };
 }
-
-/**
- * `checkProperties` for relation-types-core.updateRelationType: the relations
- * that already use a type veto property changes they contradict — a type
- * cannot become hierarchical while its relations contain a cycle, nor
- * symmetric while a pair is related in both directions (they would become
- * duplicates). 409.
- */
-export const relationTypePropertyCheck =
-  (q: QueryFn) =>
-  async (type: { id: string }, next: RelationTypeFields, prev: RelationTypeFields): Promise<void> => {
-    const becomesHierarchical = next.hierarchical && !prev.hierarchical;
-    const becomesSymmetric = next.symmetric && !prev.symmetric;
-    if (!becomesHierarchical && !becomesSymmetric) return;
-    const rows = await run(q, `SELECT "sourceId", "targetId" FROM "ConceptRelation" WHERE "typeId" = $1::uuid`, [type.id]);
-    const edges = rows.map((r: any) => ({ source: String(r.sourceId), target: String(r.targetId) }));
-    if (becomesHierarchical && hasCycle(edges)) {
-      throw new ConceptError(409, 'relations of this type contain a cycle: it cannot become hierarchical');
-    }
-    if (becomesSymmetric) {
-      const seen = new Set(edges.map((e) => `${e.source}>${e.target}`));
-      if (edges.some((e) => seen.has(`${e.target}>${e.source}`))) {
-        throw new ConceptError(409, 'some concepts are related in both directions: the type cannot become symmetric');
-      }
-    }
-  };
 
 // ---------------------------------------------------------------------------
 // Graph (public read; no user fields)

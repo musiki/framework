@@ -11,10 +11,7 @@ import {
   editDefinition,
   adoptPost,
   setStatus,
-  createRelation,
-  deleteRelation,
   listConcepts,
-  graph,
   setLabels,
   getCommonsRole,
   shouldDestroyClient,
@@ -508,13 +505,6 @@ test('listConcepts: passes filters and maps rows', async () => {
   assert.deepEqual(await listConcepts(fx.q, { spaceId: 'nope' }), []);
 });
 
-test('createRelation / deleteRelation / graph are still exported here (implemented in relations-core)', async () => {
-  const rel = await import('./relations-core.ts');
-  assert.equal(createRelation, rel.createRelation);
-  assert.equal(deleteRelation, rel.deleteRelation);
-  assert.equal(graph, rel.graph);
-});
-
 // ---------------------------------------------------------------------------
 // Commons-only roles
 // ---------------------------------------------------------------------------
@@ -586,14 +576,10 @@ test('shouldDestroyClient: domain errors keep the connection, db errors / failed
 const RT = id(23);
 const relTypeConcept = () => conceptRow({ id: RT, slug: 'rel:derives', label: 'derives from', kind: 'relation-type', threadId: null, createdBy: null });
 
-test('relation-type concepts are excluded from lists, graph nodes and getConcept by default', async () => {
+test('relation-type concepts are excluded from lists (hence graph nodes) and getConcept by default', async () => {
   const fx = fakeQuery([['FROM "Concept" c', () => listRows]]);
   await listConcepts(fx.q, { spaceId: SPACE });
   assert.match(fx.calls[0].text, /c\.kind = 'concept'/);
-
-  const g = fakeQuery([['FROM "Concept" c', () => listRows]]);
-  await graph(g.q, { spaceId: SPACE });
-  assert.match(g.calls.find((c) => c.text.includes('FROM "Concept" c')).text, /c\.kind = 'concept'/);
 
   const one = fakeQuery([]);
   assert.equal(await getConcept(one.q, { spaceId: SPACE, slug: 'rel:derives' }), null);
@@ -604,17 +590,12 @@ test('relation-type concepts are excluded from lists, graph nodes and getConcept
   assert.deepEqual(asType.calls[0].params, [SPACE, 'rel:derives', 'relation-type']);
 });
 
-test('relation-type concepts: never a relation endpoint, no status/labels; definition edits need manageRelationTypes', async () => {
+test('relation-type concepts: no status/labels; definition edits need manageRelationTypes', async () => {
   const mk = () => fakeQuery([
     memberRoute,
     conceptByIdRoute({ [C1]: conceptRow(), [RT]: relTypeConcept() }),
     ['INSERT INTO "ConceptVersion"', () => [{ id: 'v9', createdAt: 't' }]],
-    ['INSERT INTO "ConceptRelation"', () => [{ id: REL }]],
   ]);
-  await rejectsStatus(createRelation(mk().q, { sourceId: RT, targetId: C1, type: 'derives', actorUserId: U.curator }), 404);
-  const fx = mk();
-  await rejectsStatus(createRelation(fx.q, { sourceId: C1, targetId: RT, type: 'derives', actorUserId: U.curator }), 404);
-  assert.ok(!fx.calls.some((c) => c.text.includes('INSERT INTO')));
   await rejectsStatus(setStatus(mk().q, { conceptId: RT, actorUserId: U.admin, status: 'assimilated' }), 404);
   await rejectsStatus(setLabels(mk().q, { conceptId: RT, actorUserId: U.admin, label: 'x' }), 404);
   await rejectsStatus(editDefinition(mk().q, { conceptId: RT, actorUserId: U.member, lang: 'en', definition: 'd' }), 403);

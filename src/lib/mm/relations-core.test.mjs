@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConceptError } from './concepts-core.ts';
-import { createRelation, deleteRelation, graph, relationTypePropertyCheck } from './relations-core.ts';
+import { createRelation, deleteRelation, graph } from './relations-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const SPACE = id(1);
@@ -59,11 +59,20 @@ async function rejectsStatus(promise, status) {
 }
 
 /** `relations`: existing rows [{typeId, sourceId, targetId}] the duplicate / cycle statements are answered from. */
-function relFixture({ relations = [], insertError = null, relCreatedBy = U.member, postOk = true } = {}) {
+function relFixture({
+  relations = [], insertError = null, relCreatedBy = U.member, postOk = true, settled = false, stanceHolders = [], lockedType = null,
+} = {}) {
   return fakeQuery([
     memberRoute,
     [/FROM "Concept" WHERE id = \$1/, ([cid]) => (CONCEPTS[cid] ? [CONCEPTS[cid]] : [])],
-    ['FROM "RelationType" t WHERE', ([spaceId, slug]) => (spaceId === SPACE && TYPE_ROWS[slug] ? [TYPE_ROWS[slug]] : [])],
+    // First read: only the id, by (space, slug).
+    ['FROM "RelationType" t WHERE t."spaceId" = $1::uuid AND t.slug = $2', ([spaceId, slug]) =>
+      (spaceId === SPACE && TYPE_ROWS[slug] ? [{ id: TYPE_ROWS[slug].id }] : [])],
+    // Second read, under the lock: the properties, by (id, space). `lockedType` simulates a concurrent change.
+    ['FROM "RelationType" t WHERE t.id = $1::uuid AND t."spaceId" = $2::uuid', ([typeId, spaceId]) => {
+      const row = Object.values(TYPE_ROWS).find((t) => t.id === typeId);
+      return spaceId === SPACE && row ? [{ ...row, ...(lockedType ?? {}) }] : [];
+    }],
     ['FROM "ForumPost" p JOIN "ForumThread" t', ([pid, spaceId], text) =>
       (postOk && pid === POST && spaceId === SPACE && /p\.status = 'published'/.test(text) ? [{ id: POST }] : [])],
     [/SELECT id FROM "ConceptRelation"\s+WHERE "typeId"/, ([typeId, s, t, symmetric]) =>
@@ -71,12 +80,14 @@ function relFixture({ relations = [], insertError = null, relCreatedBy = U.membe
         .map(() => ({ id: REL }))],
     [/SELECT "sourceId", "targetId" FROM "ConceptRelation" WHERE "typeId"/, ([typeId]) => relations.filter((r) => r.typeId === typeId)],
     ['INSERT INTO "ConceptRelation"', () => (insertError ? { error: insertError } : [{ id: REL }])],
-    [/SELECT id, "spaceId", "createdBy" FROM "ConceptRelation"/, ([rid]) =>
-      (rid === REL ? [{ id: REL, spaceId: SPACE, createdBy: relCreatedBy }] : [])],
+    [/SELECT r\.id, r\."spaceId", r\."createdBy"/, ([rid, spaceId, actor]) =>
+      (rid === REL && spaceId === SPACE
+        ? [{ id: REL, spaceId: SPACE, createdBy: relCreatedBy, settled, othersHaveStances: stanceHolders.some((u) => u !== actor) }]
+        : [])],
     ['DELETE FROM "ConceptRelation"', () => []],
   ]);
 }
-const args = (over = {}) => ({ sourceId: C1, targetId: C2, typeSlug: 'derives', actorUserId: U.member, ...over });
+const args = (over = {}) => ({ spaceId: SPACE, sourceId: C1, targetId: C2, typeSlug: 'derives', actorUserId: U.member, ...over });
 
 // ---------------------------------------------------------------------------
 // createRelation
@@ -88,8 +99,8 @@ test('createRelation: member creates by typeSlug; typeId + slug + creator writte
   const ins = fx.find('INSERT INTO "ConceptRelation"');
   assert.match(ins.text, /\("spaceId", "sourceId", "targetId", "typeId", type, "fromPostId", "createdBy"\)/);
   assert.deepEqual(ins.params, [SPACE, C1, C2, T.derives, 'derives', null, U.member]);
-  assert.deepEqual(fx.find('FROM "RelationType" t WHERE').params, [SPACE, 'derives']);
-  assert.match(fx.find('FROM "RelationType" t WHERE').text, /t\."symmetric"/);
+  assert.deepEqual(fx.find('FROM "RelationType" t WHERE t."spaceId"').params, [SPACE, 'derives']);
+  assert.match(fx.find('FROM "RelationType" t WHERE t.id').text, /t\."symmetric"/);
   const t = fx.texts();
   assert.ok(t.indexOf('BEGIN') < t.indexOf('INSERT INTO "ConceptRelation"') && t.includes('COMMIT') && !t.includes('ROLLBACK'));
   assert.deepEqual(fx.find('pg_advisory_xact_lock').params, [`mm-relations:${T.derives}`]);
@@ -97,7 +108,7 @@ test('createRelation: member creates by typeSlug; typeId + slug + creator writte
 
 test('createRelation: the legacy `type` field still names the type', async () => {
   const fx = relFixture();
-  await createRelation(fx.q, { sourceId: C1, targetId: C2, type: 'combines', actorUserId: U.member });
+  await createRelation(fx.q, { spaceId: SPACE, sourceId: C1, targetId: C2, type: 'combines', actorUserId: U.member });
   assert.equal(fx.find('INSERT INTO "ConceptRelation"').params[3], T.combines);
 });
 
@@ -118,7 +129,7 @@ test('createRelation: provenance — fromPostId must be a published post of the 
   assert.equal(none.find('INSERT INTO "ConceptRelation"').params[5], null);
 });
 
-test('createRelation: self 400, unknown/invalid type 400, archived type 409, cross-space 400, relation-type concept 404', async () => {
+test('createRelation: self 400, unknown/invalid type 400, archived type 409, relation-type concept 404', async () => {
   await rejectsStatus(createRelation(relFixture().q, args({ targetId: C1 })), 400);
   for (const typeSlug of ['loves', "x' OR 1=1", '', undefined, 7, 'x'.repeat(60)]) {
     const fx = relFixture();
@@ -126,10 +137,42 @@ test('createRelation: self 400, unknown/invalid type 400, archived type 409, cro
     assert.ok(!fx.find('INSERT INTO'));
   }
   await rejectsStatus(createRelation(relFixture().q, args({ typeSlug: 'old' })), 409);
-  await rejectsStatus(createRelation(relFixture().q, args({ targetId: C4 })), 400);
   await rejectsStatus(createRelation(relFixture().q, args({ targetId: RT_CONCEPT })), 404);
   await rejectsStatus(createRelation(relFixture().q, args({ sourceId: RT_CONCEPT, actorUserId: U.curator })), 404);
   await rejectsStatus(createRelation(relFixture().q, args({ targetId: id(999) })), 404);
+});
+
+test('createRelation: pinned to the caller\'s space — concepts of another space are 404, spaceId is required', async () => {
+  for (const over of [{ targetId: C4 }, { sourceId: C4 }, { spaceId: OTHER_SPACE }, { spaceId: undefined }, { spaceId: 'nope' }]) {
+    const fx = relFixture();
+    await rejectsStatus(createRelation(fx.q, args({ actorUserId: U.admin, ...over })), 404);
+    assert.ok(!fx.calls.some((c) => /INSERT|BEGIN/.test(c.text)), JSON.stringify(over));
+  }
+});
+
+test('createRelation: the type is re-read inside the transaction, after the advisory lock (concurrent property changes are seen)', async () => {
+  const order = (fx) => {
+    const at = (s) => fx.calls.findIndex((c) => c.text.includes(s));
+    return [at('BEGIN'), at('pg_advisory_xact_lock'), at('FROM "RelationType" t WHERE t.id'), at('SELECT id FROM "ConceptRelation"')];
+  };
+  const ok = relFixture();
+  await createRelation(ok.q, args());
+  const o = order(ok);
+  assert.ok(o.every((i) => i >= 0) && o.join() === [...o].sort((a, b) => a - b).join(), `order ${o}`);
+  assert.deepEqual(ok.find('FROM "RelationType" t WHERE t.id').params, [T.derives, SPACE]);
+  assert.doesNotMatch(ok.find('FROM "RelationType" t WHERE t."spaceId"').text, /symmetric|hierarchical|isArchived/, 'nothing but the id is trusted from the first read');
+
+  // Archived meanwhile → 409, rolled back.
+  let fx = relFixture({ lockedType: { isArchived: true } });
+  await rejectsStatus(createRelation(fx.q, args()), 409);
+  assert.ok(fx.texts().includes('ROLLBACK') && !fx.find('INSERT INTO'));
+  // Became symmetric meanwhile → the mirrored pair is a duplicate.
+  fx = relFixture({ lockedType: { symmetric: true }, relations: [{ typeId: T.derives, sourceId: C2, targetId: C1 }] });
+  await rejectsStatus(createRelation(fx.q, args()), 409);
+  // Became hierarchical meanwhile → the cycle check runs.
+  fx = relFixture({ lockedType: { hierarchical: true }, relations: [{ typeId: T.derives, sourceId: C2, targetId: C3 }, { typeId: T.derives, sourceId: C3, targetId: C1 }] });
+  await rejectsStatus(createRelation(fx.q, args()), 409);
+  assert.ok(!fx.find('INSERT INTO'));
 });
 
 test('createRelation: guests, strangers and anonymous are denied', async () => {
@@ -177,33 +220,51 @@ test('createRelation: a hierarchical type rejects a relation that closes a cycle
   assert.ok(!fx.calls.some((c) => /SELECT "sourceId", "targetId" FROM "ConceptRelation" WHERE "typeId"/.test(c.text)));
 });
 
+const del = (over = {}) => ({ relationId: REL, spaceId: SPACE, actorUserId: U.member, ...over });
+
 test('deleteRelation: own member ok, other member 403, curator ok, deleted creator only curator', async () => {
   let fx = relFixture();
-  assert.deepEqual(await deleteRelation(fx.q, { relationId: REL, actorUserId: U.member }), { deleted: true });
-  assert.ok(fx.find('DELETE FROM "ConceptRelation"'));
+  assert.deepEqual(await deleteRelation(fx.q, del()), { deleted: true });
+  assert.deepEqual(fx.find('DELETE FROM "ConceptRelation"').params, [REL, SPACE]);
 
   fx = relFixture();
-  await rejectsStatus(deleteRelation(fx.q, { relationId: REL, actorUserId: U.author }), 403);
+  await rejectsStatus(deleteRelation(fx.q, del({ actorUserId: U.author })), 403);
   assert.ok(!fx.find('DELETE FROM'));
 
-  assert.deepEqual(await deleteRelation(relFixture().q, { relationId: REL, actorUserId: U.curator }), { deleted: true });
-  await rejectsStatus(deleteRelation(relFixture({ relCreatedBy: null }).q, { relationId: REL, actorUserId: U.member }), 403);
-  await rejectsStatus(deleteRelation(relFixture().q, { relationId: id(999), actorUserId: U.curator }), 404);
+  assert.deepEqual(await deleteRelation(relFixture().q, del({ actorUserId: U.curator })), { deleted: true });
+  await rejectsStatus(deleteRelation(relFixture({ relCreatedBy: null }).q, del()), 403);
+  await rejectsStatus(deleteRelation(relFixture().q, del({ relationId: id(999), actorUserId: U.curator })), 404);
 });
 
-test('relationTypePropertyCheck: no hierarchical over a cycle, no symmetric over mirrored pairs; other changes are free', async () => {
-  const base = { symmetric: false, transitive: false, hierarchical: false };
-  const mk = (relations) => fakeQuery([['FROM "ConceptRelation" WHERE "typeId"', () => relations]]);
-  const cyc = [{ sourceId: C1, targetId: C2 }, { sourceId: C2, targetId: C1 }];
-  await rejectsStatus(relationTypePropertyCheck(mk(cyc).q)({ id: T.derives }, { ...base, hierarchical: true }, base), 409);
-  await rejectsStatus(relationTypePropertyCheck(mk(cyc).q)({ id: T.derives }, { ...base, symmetric: true }, base), 409);
-  const tree = [{ sourceId: C1, targetId: C2 }, { sourceId: C1, targetId: C3 }];
-  await relationTypePropertyCheck(mk(tree).q)({ id: T.derives }, { ...base, hierarchical: true }, base);
-  await relationTypePropertyCheck(mk(tree).q)({ id: T.derives }, { ...base, symmetric: true }, base);
-  const idle = mk(cyc);
-  await relationTypePropertyCheck(idle.q)({ id: T.derives }, { ...base, transitive: true }, base);
-  await relationTypePropertyCheck(idle.q)({ id: T.derives }, { ...base, hierarchical: true }, { ...base, hierarchical: true });
-  assert.equal(idle.calls.length, 0);
+test('deleteRelation: pinned to the space — a relation id from another space is 404 even for an admin', async () => {
+  for (const over of [{ spaceId: OTHER_SPACE }, { spaceId: undefined }]) {
+    const fx = relFixture();
+    await rejectsStatus(deleteRelation(fx.q, del({ actorUserId: U.admin, ...over })), 404);
+    assert.ok(!fx.find('DELETE FROM'));
+  }
+  const fx = relFixture();
+  await deleteRelation(fx.q, del());
+  assert.match(fx.find('SELECT r.id, r."spaceId", r."createdBy"').text, /WHERE r\.id = \$1::uuid AND r\."spaceId" = \$2::uuid/);
+});
+
+test('deleteRelation: the owner cannot erase others\' stances or a settled relation (409); curators always can', async () => {
+  // Someone else took a stance.
+  let fx = relFixture({ stanceHolders: [U.author] });
+  await rejectsStatus(deleteRelation(fx.q, del()), 409);
+  assert.ok(!fx.find('DELETE FROM'));
+  // Only the owner's own stance: still theirs alone.
+  assert.deepEqual(await deleteRelation(relFixture({ stanceHolders: [U.member] }).q, del()), { deleted: true });
+  // Settled.
+  await rejectsStatus(deleteRelation(relFixture({ settled: true }).q, del()), 409);
+  for (const actor of [U.curator, U.admin]) {
+    assert.deepEqual(await deleteRelation(relFixture({ settled: true, stanceHolders: [U.author, U.member] }).q, del({ actorUserId: actor })), { deleted: true });
+  }
+  // The check reads a yes/no only — never who holds a stance.
+  fx = relFixture();
+  await deleteRelation(fx.q, del());
+  const sel = fx.find('SELECT r.id, r."spaceId", r."createdBy"');
+  assert.match(sel.text, /EXISTS \(SELECT 1 FROM "ConceptRelationStance" s\s+WHERE s\."relationId" = r\.id AND s\."userId" IS DISTINCT FROM \$3::uuid\) AS "othersHaveStances"/);
+  assert.deepEqual(sel.params, [REL, SPACE, U.member]);
 });
 
 // ---------------------------------------------------------------------------

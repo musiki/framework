@@ -4,7 +4,6 @@
 
 import { query } from '../db/pool';
 import * as core from './relation-types-core.ts';
-import { relationTypePropertyCheck } from './relations-core.ts';
 import { onClient } from './concepts';
 import { mmDefinitionRenderCache, mmRendererFor } from './render.ts';
 import type { MmLang } from './ui-lang.ts';
@@ -26,8 +25,8 @@ export const getRelationType = ({ lang = 'en', ...args }: Omit<Parameters<typeof
 export const createRelationType = (args: Parameters<typeof core.createRelationType>[1]) =>
   onClient((q) => core.createRelationType(q, args));
 /** Property changes are checked against the relations already using the type (cycles, mirrored pairs → 409). */
-export const updateRelationType = (args: Omit<Parameters<typeof core.updateRelationType>[1], 'checkProperties'>) =>
-  onClient((q) => core.updateRelationType(q, { ...args, checkProperties: relationTypePropertyCheck(q) }));
+export const updateRelationType = (args: Parameters<typeof core.updateRelationType>[1]) =>
+  onClient((q) => core.updateRelationType(q, args));
 export const archiveRelationType = (args: Parameters<typeof core.archiveRelationType>[1]) => core.archiveRelationType(poolQ, args);
 export const reorderRelationTypes = (args: Parameters<typeof core.reorderRelationTypes>[1]) =>
   onClient((q) => core.reorderRelationTypes(q, args));

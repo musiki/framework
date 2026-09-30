@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConceptError } from './concepts-core.ts';
 import {
-  RELATION_COLORS, cleanRelationTypeFields, relationTypeSlug, relationTypeConceptSlug,
+  RELATION_COLORS, cleanRelationTypeFields, relationTypeSlug, relationTypeConceptSlug, relationsLockKey,
   listRelationTypes, getRelationType, createRelationType, updateRelationType, archiveRelationType, reorderRelationTypes,
 } from './relation-types-core.ts';
 
@@ -256,9 +256,10 @@ test('createRelationType: validation 400 (palette, area without hierarchical, no
 // update / archive / reorder
 // ---------------------------------------------------------------------------
 
-function typeFixture(row = typeRow()) {
+function typeFixture(row = typeRow(), relations = []) {
   return fakeQuery([
     memberRoute,
+    ['FROM "ConceptRelation" WHERE "typeId"', () => relations],
     [/SELECT t\.id, t\.slug, t\."conceptId"/, ([, slug]) => (slug === row.slug ? [row] : [])],
     ['UPDATE "RelationType" SET label', () => [{ id: row.id }]],
     ['UPDATE "RelationType" SET "isArchived"', ([, , archived], text) =>
@@ -271,7 +272,7 @@ test('updateRelationType: built-ins are editable; merged with current state; con
   const fx = typeFixture();
   const out = await updateRelationType(fx.q, { spaceId: SPACE, slug: 'derives', actorUserId: U.curator, patch: { label: 'stems from', color: 'blue', stroke: 'double' } });
   assert.deepEqual([out.slug, out.label, out.color, out.stroke, out.transitive, out.inverseLabel], ['derives', 'stems from', 'blue', 'double', true, 'gives rise to']);
-  assert.match(fx.find('SELECT t.id, t.slug').text, /FOR UPDATE OF t/);
+  assert.ok(fx.calls.some((c) => c.text.includes('SELECT t.id, t.slug') && /FOR UPDATE OF t/.test(c.text)));
   const upd = fx.find('UPDATE "RelationType" SET label');
   assert.deepEqual(upd.params, [TYPE, SPACE, 'stems from', 'avledes fra', 'gives rise to', null, 'line', 'double', true, 'blue', false, true, false, null, null]);
   assert.deepEqual(fx.find('UPDATE "Concept" SET label').params, ['stems from', 'avledes fra', CONCEPT, SPACE]);
@@ -283,7 +284,7 @@ test('updateRelationType: built-ins are editable; merged with current state; con
   assert.ok(!same.find('UPDATE "Concept"') && !same.find('UPDATE "ForumThread"'));
 });
 
-test('updateRelationType: permissions, unknown type, invalid merge, slug change, property veto roll back', async () => {
+test('updateRelationType: permissions, unknown type, invalid merge, slug change', async () => {
   const patch = { color: 'red' };
   await rejectsStatus(updateRelationType(typeFixture().q, { spaceId: SPACE, slug: 'derives', actorUserId: U.member, patch }), 403);
   await rejectsStatus(updateRelationType(typeFixture().q, { spaceId: SPACE, slug: 'derives', actorUserId: null, patch }), 401);
@@ -293,14 +294,42 @@ test('updateRelationType: permissions, unknown type, invalid merge, slug change,
   await rejectsStatus(updateRelationType(fx.q, { spaceId: SPACE, slug: 'derives', actorUserId: U.curator, patch: { render: 'area' } }), 400);
   assert.ok(fx.texts().includes('ROLLBACK') && !fx.find('UPDATE "RelationType"'));
 
-  fx = typeFixture();
-  const seen = [];
-  await rejectsStatus(updateRelationType(fx.q, {
-    spaceId: SPACE, slug: 'derives', actorUserId: U.curator, patch: { hierarchical: true },
-    checkProperties: async (type, next, prev) => { seen.push([type, next.hierarchical, prev.hierarchical]); throw new ConceptError(409, 'cycle'); },
-  }), 409);
-  assert.deepEqual(seen, [[{ id: TYPE, slug: 'derives' }, true, false]]);
-  assert.ok(fx.texts().includes('ROLLBACK') && !fx.find('UPDATE "RelationType"'));
+});
+
+test('updateRelationType: relations in use veto hierarchical-over-a-cycle and symmetric-over-mirrored-pairs (409), under the relations lock', async () => {
+  const A = id(21), B = id(22), C = id(23);
+  const cyc = [{ sourceId: A, targetId: B }, { sourceId: B, targetId: A }];
+  const tree = [{ sourceId: A, targetId: B }, { sourceId: A, targetId: C }];
+  const upd = (relations, patch, row) => {
+    const fx = typeFixture(row, relations);
+    return [fx, updateRelationType(fx.q, { spaceId: SPACE, slug: 'derives', actorUserId: U.curator, patch })];
+  };
+  for (const patch of [{ hierarchical: true }, { symmetric: true, arrow: false }]) {
+    const [fx, p] = upd(cyc, patch);
+    await rejectsStatus(p, 409);
+    assert.ok(fx.texts().includes('ROLLBACK') && !fx.find('UPDATE "RelationType"'), JSON.stringify(patch));
+  }
+  for (const patch of [{ hierarchical: true }, { symmetric: true }]) {
+    const [fx, p] = upd(tree, patch);
+    await p;
+    assert.ok(fx.find('UPDATE "RelationType" SET label') && fx.texts().includes('COMMIT'));
+  }
+  // Order: advisory lock (same key as createRelation) → row lock → relations read → update.
+  const [fx, p] = upd(tree, { hierarchical: true });
+  await p;
+  const at = (s) => fx.calls.findIndex((c) => c.text.includes(s));
+  const order = [at('BEGIN'), at('pg_advisory_xact_lock'), at('FOR UPDATE OF t'), at('FROM "ConceptRelation" WHERE "typeId"'), at('UPDATE "RelationType" SET label')];
+  assert.ok(order.every((i) => i >= 0) && order.join() === [...order].sort((a, b) => a - b).join(), `order ${order}`);
+  assert.deepEqual(fx.find('pg_advisory_xact_lock').params, [relationsLockKey(TYPE)]);
+  assert.equal(relationsLockKey(TYPE), `mm-relations:${TYPE}`);
+  assert.deepEqual(fx.find('FROM "ConceptRelation" WHERE "typeId"').params, [TYPE]);
+  // Other changes, or a property that does not newly turn on, read no relations.
+  const [idle, q1] = upd(cyc, { transitive: false, color: 'red' });
+  await q1;
+  assert.ok(!idle.find('FROM "ConceptRelation" WHERE "typeId"'));
+  const [already, q2] = upd(cyc, { label: 'x' }, typeRow({ hierarchical: true }));
+  await q2;
+  assert.ok(!already.find('FROM "ConceptRelation" WHERE "typeId"'));
 });
 
 test('archiveRelationType: built-ins refused (409, also in SQL); custom types archive and restore; curator only', async () => {

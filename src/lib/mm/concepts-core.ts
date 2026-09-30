@@ -771,14 +771,8 @@ export async function setLabels(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Relations and graph: relations-core.ts (typed relations, provenance,
-// inference, agreement totals). Re-exported so existing imports keep working.
-// The import cycle is safe: neither module touches the other at load time.
-// ---------------------------------------------------------------------------
-
-export { createRelation, deleteRelation, graph, GRAPH_EXCERPT_CHARS } from './relations-core.ts';
-export type { GraphNode, GraphEdge, GraphPayload } from './relations-core.ts';
+// Relations (create/delete) and the concept graph live in relations-core.ts,
+// which imports this module (one direction only: no import cycle).
 
 // ---------------------------------------------------------------------------
 // Listing (public read; no user fields)

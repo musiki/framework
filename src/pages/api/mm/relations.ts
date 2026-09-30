@@ -9,5 +9,5 @@ export const POST = mmRoute({ mutation: true, tag: 'mm:relations' }, async ({ re
   const body = await readJsonObject(request);
   const sourceId = await findConceptId(q, space.id, body.source);
   const targetId = await findConceptId(q, space.id, body.target);
-  return json(await createRelation({ sourceId, targetId, type: body.type, actorUserId: userId }), 201);
+  return json(await createRelation({ spaceId: space.id, sourceId, targetId, typeSlug: body.typeSlug ?? body.type, fromPostId: body.fromPostId, actorUserId: userId }), 201);
 });
