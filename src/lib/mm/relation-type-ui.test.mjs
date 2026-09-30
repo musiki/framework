@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TYPE_COLORS, TYPE_STROKES, TYPE_RENDERS, typeLabel, typeInverse, typeProperties, typePath, strokeColor, tintColor,
-  dashArray, sampleSpec, svgAttrs, formRules, buildTypeBody, moveSlug, visibleSlugs,
+  dashArray, needsInkUnderlay, sampleSpec, svgAttrs, formRules, buildTypeBody, moveSlug, visibleSlugs,
 } from './relation-type-ui.ts';
 import { RELATION_COLORS, RELATION_STROKES, RELATION_RENDERS, cleanRelationTypeFields } from './relation-types-core.ts';
 
@@ -69,16 +69,16 @@ test('sampleSpec: solid directed line = one line + arrowhead in the slot colour'
   const s = sampleSpec({ render: 'line', stroke: 'solid', arrow: true, color: 'green', symmetric: false });
   assert.equal(s.width, 64);
   assert.equal(s.height, 24);
-  assert.deepEqual(tags(s), ['line', 'path']);
-  assert.equal(s.shapes[0].attrs.stroke, 'var(--mm-green)');
-  assert.equal(s.shapes[0].attrs['stroke-dasharray'], undefined);
-  assert.equal(s.shapes[0].attrs['stroke-linecap'], 'butt');
-  assert.equal(s.shapes[1].attrs.fill, 'var(--mm-green)');
-  assert.ok(s.shapes[0].attrs.x2 < 60, 'the line stops before the arrowhead');
+  assert.deepEqual(tags(s), ['line', 'line', 'path']);
+  assert.equal(s.shapes[1].attrs.stroke, 'var(--mm-green)');
+  assert.equal(s.shapes[1].attrs['stroke-dasharray'], undefined);
+  assert.equal(s.shapes[1].attrs['stroke-linecap'], 'butt');
+  assert.equal(s.shapes[2].attrs.fill, 'var(--mm-green)');
+  assert.ok(s.shapes[1].attrs.x2 < 60, 'the line stops before the arrowhead');
 });
 
 test('sampleSpec: dashed / dotted carry the dash; symmetric never has an arrow', () => {
-  const d = sampleSpec({ render: 'line', stroke: 'dashed', arrow: true, color: 'blue', symmetric: true });
+  const d = sampleSpec({ render: 'line', stroke: 'dashed', arrow: true, color: 'purple', symmetric: true });
   assert.deepEqual(tags(d), ['line']);
   assert.equal(d.shapes[0].attrs['stroke-dasharray'], '6 4');
   const o = sampleSpec({ render: 'line', stroke: 'dotted', arrow: false, color: 'ink', symmetric: false });
@@ -110,12 +110,12 @@ test('sampleSpec: area = tint square + slot-coloured border, no radius', () => {
 });
 
 test('svgAttrs: colours move into style, geometry stays attributes', () => {
-  const s = sampleSpec({ render: 'line', stroke: 'dashed', arrow: true, color: 'green', symmetric: false });
+  const s = sampleSpec({ render: 'line', stroke: 'dashed', arrow: true, color: 'red', symmetric: false });
   assert.deepEqual(svgAttrs(s.shapes[0]), {
     'stroke-width': '2', 'stroke-linecap': 'butt', 'stroke-linejoin': 'miter', 'stroke-dasharray': '6 4',
-    x1: '4', y1: '12', x2: '52', y2: '12', style: 'stroke:var(--mm-green);fill:none',
+    x1: '4', y1: '12', x2: '52', y2: '12', style: 'stroke:var(--mm-red);fill:none',
   });
-  assert.equal(svgAttrs(s.shapes[1]).style, 'fill:var(--mm-green);stroke:none');
+  assert.equal(svgAttrs(s.shapes[1]).style, 'fill:var(--mm-red);stroke:none');
 });
 
 test('sampleSpec: unknown values fall back safely', () => {
@@ -198,4 +198,41 @@ test('moveSlug and visibleSlugs', () => {
   assert.deepEqual(moveSlug(order, 'nope', 1), order);
   assert.deepEqual(order, ['derives', 'combines', 'contains']);
   assert.deepEqual(visibleSlugs([{ slug: 'a', checked: true }, { slug: 'b', checked: false }, { slug: 'c', checked: true }]), ['a', 'c']);
+});
+
+test('needsInkUnderlay: only the four pastel slots', () => {
+  for (const c of ['green', 'yellow', 'blue', 'pink']) assert.equal(needsInkUnderlay(c), true, c);
+  for (const c of ['purple', 'red', 'ink', 'nope', '', undefined, null]) assert.equal(needsInkUnderlay(c), false, String(c));
+});
+
+test('sampleSpec: light-slot line gets an ink underlay 1px wider, same dash, drawn first', () => {
+  const s = sampleSpec({ render: 'line', stroke: 'dashed', arrow: true, color: 'pink', symmetric: false });
+  assert.deepEqual(tags(s), ['line', 'line', 'path']);
+  const [u, c, a] = s.shapes;
+  assert.equal(u.attrs.stroke, 'var(--mm-ink)');
+  assert.equal(c.attrs.stroke, 'var(--mm-pink)');
+  assert.equal(u.attrs['stroke-width'], c.attrs['stroke-width'] + 1);
+  assert.equal(u.attrs['stroke-dasharray'], '6 4');
+  assert.equal(u.attrs['stroke-linecap'], 'butt');
+  assert.equal(a.attrs.fill, 'var(--mm-pink)');
+  assert.equal(a.attrs.stroke, 'var(--mm-ink)');
+});
+
+test('sampleSpec: double light line underlays each of the two strokes', () => {
+  const s = sampleSpec({ render: 'line', stroke: 'double', arrow: false, color: 'yellow', symmetric: false });
+  assert.deepEqual(s.shapes.map((x) => x.attrs.stroke), ['var(--mm-ink)', 'var(--mm-ink)', 'var(--mm-yellow)', 'var(--mm-yellow)']);
+  assert.equal(s.shapes[0].attrs.y1, s.shapes[2].attrs.y1);
+  assert.equal(s.shapes[0].attrs['stroke-width'], 2.5);
+});
+
+test('sampleSpec: light area border gets a 2px-wider ink underlay; dark slots none', () => {
+  const s = sampleSpec({ render: 'area', stroke: 'solid', arrow: false, color: 'blue', symmetric: false });
+  assert.deepEqual(tags(s), ['rect', 'rect', 'rect']);
+  assert.equal(s.shapes[1].attrs.stroke, 'var(--mm-ink)');
+  assert.equal(s.shapes[1].attrs['stroke-width'], 4);
+  assert.equal(s.shapes[2].attrs.stroke, 'var(--mm-blue)');
+  for (const c of ['purple', 'red', 'ink']) {
+    const d = sampleSpec({ render: 'area', stroke: 'solid', arrow: true, color: c, symmetric: false });
+    assert.ok(!d.shapes.some((x) => x.attrs.stroke === 'var(--mm-ink)' && c !== 'ink'), c);
+  }
 });

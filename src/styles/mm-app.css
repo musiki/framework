@@ -146,9 +146,13 @@
 .mm-graph .cm-edge.is-sel .cm-hit, .mm-graph .cm-edge.is-hover .cm-hit { stroke: var(--mm-yellow); stroke-opacity: 0.55; }
 .mm-graph .cm-inferred { opacity: 0.4; }
 .mm-graph .cm-edge.cm-inferred .cm-line { stroke-width: 1px; }
+.mm-graph .cm-edge.cm-inferred .cm-ink { stroke-width: 2px; }
 .mm-graph .cm-contest { fill: var(--mm-white); stroke-width: 1.5px; pointer-events: none; }
 .mm-graph .cm-hull { stroke-width: 2px; stroke-linejoin: miter; fill-opacity: 0.55; pointer-events: none; }
 .mm-graph .cm-hull-inner { stroke-width: 1px; }
+/* Ink underlay of light palette slots (WCAG 1.4.11): 1px of ink each side of the coloured border. */
+.mm-graph .cm-hull-ink { stroke-width: 4px; }
+.mm-graph .cm-hull-ink-inner { stroke-width: 2px; }
 .mm-graph .cm-area-tab { stroke-width: 1px; pointer-events: none; }
 .mm-graph .cm-area-label, .mm-graph text.cm-area-label { font-family: var(--mm-font-body); font-size: 11px; font-weight: 700; fill: var(--mm-ink); pointer-events: none; }
 .mm-graph .cm-edge-label {

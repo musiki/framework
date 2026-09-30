@@ -59,7 +59,7 @@ import {
   type Box, type AreaGroup, type Point, type VisibleAt,
 } from '../../lib/mm/graph-layout';
 import {
-  RELATION_FILTER_EVENT, dashArray, sampleSpec, strokeColor, svgAttrs, tintColor, typeLabel, typePath,
+  RELATION_FILTER_EVENT, dashArray, needsInkUnderlay, sampleSpec, strokeColor, svgAttrs, tintColor, typeLabel, typePath,
   type RelationFilterDetail, type TypeLike,
 } from '../../lib/mm/relation-type-ui';
 import { threadPath } from '../../lib/mm/view';
@@ -212,7 +212,9 @@ function draw(holder: HTMLElement): void {
     markerIds.set(m.id, id);
     defs.append('marker').attr('id', id).attr('viewBox', m.viewBox).attr('refX', 10).attr('refY', 5)
       .attr('markerWidth', m.size).attr('markerHeight', m.size).attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
-      .append('path').attr('d', m.path).style('fill', m.color);
+      .style('overflow', 'visible')
+      .append('path').attr('d', m.path).style('fill', m.color)
+      .style('stroke', needsInkUnderlay(rt.color) ? 'var(--mm-ink)' : 'none').attr('stroke-width', 1).attr('stroke-linejoin', 'miter');
   }
   const markerOf = (rt: TypeLike | null) => {
     const m = rt ? arrowMarker(rt) : null;
@@ -231,6 +233,12 @@ function draw(holder: HTMLElement): void {
     .attr('stroke-dasharray', (g) => dashArray(areaTypeOf(g).stroke));
   areaG.filter((g) => areaTypeOf(g).stroke === 'double').append('path').attr('class', 'cm-hull cm-hull-inner')
     .style('fill', 'none').style('stroke', (g) => strokeColor(areaTypeOf(g).color));
+  // Ink underlay of light slots (WCAG 1.4.11): the same outline, ink, 2px wider (1px ink each side of the coloured border); drawn first.
+  const inked = areaG.filter((g) => needsInkUnderlay(areaTypeOf(g).color));
+  inked.insert('path', '.cm-hull').attr('class', 'cm-hull cm-hull-ink').style('fill', 'none').style('stroke', 'var(--mm-ink)')
+    .attr('stroke-dasharray', (g) => dashArray(areaTypeOf(g).stroke));
+  inked.filter((g) => areaTypeOf(g).stroke === 'double').insert('path', '.cm-hull').attr('class', 'cm-hull cm-hull-ink cm-hull-ink-inner')
+    .style('fill', 'none').style('stroke', 'var(--mm-ink)');
   areaG.append('rect').attr('class', 'cm-area-tab')
     .style('fill', (g) => tintColor(areaTypeOf(g).color)).style('stroke', (g) => strokeColor(areaTypeOf(g).color));
   areaG.append('text').attr('class', 'cm-area-label').attr('text-anchor', 'middle').attr('dy', '0.35em')
@@ -244,6 +252,10 @@ function draw(holder: HTMLElement): void {
     .attr('data-type', (d) => d.type);
   edge.append('line').attr('class', 'cm-hit');
   const lines = edge.filter((d) => !d.area);
+  // Ink underlays of light slots come first (under the coloured strokes).
+  lines.append('line').attr('class', 'cm-line cm-ink cm-ink-main');
+  lines.append('line').attr('class', 'cm-line cm-ink cm-ink-a');
+  lines.append('line').attr('class', 'cm-line cm-ink cm-ink-b');
   lines.append('line').attr('class', 'cm-line cm-line-main');
   lines.append('line').attr('class', 'cm-line cm-line-a');
   lines.append('line').attr('class', 'cm-line cm-line-b');
@@ -278,6 +290,12 @@ function draw(holder: HTMLElement): void {
         .attr('stroke-opacity', double ? 0 : null).attr('marker-end', markerOf(d.rt));
       g.selectAll('.cm-line-a, .cm-line-b').style('stroke', color).attr('stroke-width', Math.max(1, w * 0.6))
         .attr('stroke-dasharray', dash).attr('display', double ? null : 'none');
+      const ink = needsInkUnderlay(d.rt?.color ?? 'ink');
+      const wa = Math.max(1, w * 0.6);
+      g.select('.cm-ink-main').style('stroke', 'var(--mm-ink)').attr('stroke-width', w + 1).attr('stroke-dasharray', dash)
+        .attr('display', ink && !double ? null : 'none');
+      g.selectAll('.cm-ink-a, .cm-ink-b').style('stroke', 'var(--mm-ink)').attr('stroke-width', wa + 1)
+        .attr('stroke-dasharray', dash).attr('display', ink && double ? null : 'none');
       g.select('.cm-contest').style('stroke', color).attr('display', contested ? null : 'none');
       g.select('.cm-hit').attr('stroke-width', Math.max(12, w + 10));
     });
@@ -446,8 +464,8 @@ function draw(holder: HTMLElement): void {
       const pad = areaPadding(g.level) * s;
       const poly = hullPolygon(boxes, pad);
       const d = (p: [number, number][] | null) => (p ? `M${p.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join('L')}Z` : null);
-      sel.select('.cm-hull:not(.cm-hull-inner)').attr('d', d(poly));
-      sel.select('.cm-hull-inner').attr('d', d(hullPolygon(boxes, Math.max(1, pad - 4))));
+      sel.selectAll('.cm-hull:not(.cm-hull-inner):not(.cm-hull-ink-inner)').attr('d', d(poly));
+      sel.selectAll('.cm-hull-inner, .cm-hull-ink-inner').attr('d', d(hullPolygon(boxes, Math.max(1, pad - 4))));
       const at = hullLabelAnchor(poly, areaLabelSide(g.level));
       const tw = (areaTextW.get(g.key) ?? 40) + 10;
       sel.select('.cm-area-tab').attr('display', at ? null : 'none')
@@ -465,17 +483,17 @@ function draw(holder: HTMLElement): void {
       const [p, q] = l.area
         ? [clipToBox(boxOf(l.target, s), boxOf(l.source, s)), clipToBox(boxOf(l.source, s), boxOf(l.target, s))]
         : segmentOf(l, s);
-      const set = (sel: string, a: Point, b: Point) => g.select(sel).attr('x1', a.x).attr('y1', a.y).attr('x2', b.x).attr('y2', b.y);
+      const set = (sel: string, a: Point, b: Point) => g.selectAll(sel).attr('x1', a.x).attr('y1', a.y).attr('x2', b.x).attr('y2', b.y);
       set('.cm-hit', p, q);
       if (l.area) return;
-      set('.cm-line-main', p, q);
+      set('.cm-line-main, .cm-ink-main', p, q);
       if (l.rt?.stroke === 'double') {
         const w = l.inferred ? 1 : agreementWidth(l.agree, l.disagree);
         const off = Math.max(1, w * 0.6) / 2 + 1;
         const [a1, b1] = offsetSegment(p, q, off);
         const [a2, b2] = offsetSegment(p, q, -off);
-        set('.cm-line-a', a1, b1);
-        set('.cm-line-b', a2, b2);
+        set('.cm-line-a, .cm-ink-a', a1, b1);
+        set('.cm-line-b, .cm-ink-b', a2, b2);
       }
       g.select('.cm-contest').attr('x', (p.x + q.x) / 2 - 3).attr('y', (p.y + q.y) / 2 - 3);
     });

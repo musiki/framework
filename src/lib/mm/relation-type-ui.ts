@@ -98,6 +98,16 @@ export function tintColor(color: string): string {
   }
 }
 
+/**
+ * The pastel slots (green, yellow, blue, pink) are 1.3-1.6:1 on white, under
+ * the 3:1 WCAG 1.4.11 asks of graphics. They keep their brand colour but are
+ * drawn over a flat ink underlay (lines: 1px wider; area borders: 1px ink
+ * outline each side; arrowheads: an ink outline). Purple lines already use the
+ * darker text step, red and ink are dark enough.
+ */
+export const INK_UNDERLAY_COLORS = ['green', 'yellow', 'blue', 'pink'] as const;
+export const needsInkUnderlay = (color: unknown): boolean => (INK_UNDERLAY_COLORS as readonly string[]).includes(color as string);
+
 /** SVG stroke-dasharray of a stroke pattern (null = solid; `double` is two solid strokes). */
 export function dashArray(stroke: string): string | null {
   switch (stroke) {
@@ -134,29 +144,32 @@ export function sampleSpec(t: Pick<TypeLike, 'render' | 'stroke' | 'arrow' | 'co
     ...(dash ? { 'stroke-dasharray': dash } : {}), ...extra,
   });
   const shapes: SvgShape[] = [];
+  const ink = needsInkUnderlay(t.color);
+  /** Ink copy of a coloured stroke, drawn first (under it): `grow` px wider, same geometry and dash. */
+  const under = (attrs: Record<string, string | number>, grow: number): SvgShape =>
+    ({ tag: 'width' in attrs ? 'rect' : 'line', attrs: { ...attrs, stroke: 'var(--mm-ink)', 'stroke-width': Number(attrs['stroke-width']) + grow } });
   if (t.render === 'area') {
     // Square area: 20×20 centred, border drawn inside the box.
     const size = 20, x = (SAMPLE_W - size) / 2, y = (SAMPLE_H - size) / 2;
     shapes.push({ tag: 'rect', attrs: { x, y, width: size, height: size, fill: tintColor(t.color) } });
-    if (pattern === 'double') {
-      shapes.push({ tag: 'rect', attrs: base({ x: x + 1, y: y + 1, width: size - 2, height: size - 2, 'stroke-width': 1 }) });
-      shapes.push({ tag: 'rect', attrs: base({ x: x + 4, y: y + 4, width: size - 8, height: size - 8, 'stroke-width': 1 }) });
-    } else {
-      shapes.push({ tag: 'rect', attrs: base({ x: x + 1, y: y + 1, width: size - 2, height: size - 2 }) });
-    }
+    const borders = pattern === 'double'
+      ? [base({ x: x + 1, y: y + 1, width: size - 2, height: size - 2, 'stroke-width': 1 }), base({ x: x + 4, y: y + 4, width: size - 8, height: size - 8, 'stroke-width': 1 })]
+      : [base({ x: x + 1, y: y + 1, width: size - 2, height: size - 2 })];
+    // 1px ink each side of a 2px border; the 1px strokes of `double` get 0.5px each side so the gap between them stays visible.
+    if (ink) for (const b of borders) shapes.push(under(b, pattern === 'double' ? 1 : 2));
+    for (const b of borders) shapes.push({ tag: 'rect', attrs: b });
     return { width: SAMPLE_W, height: SAMPLE_H, shapes };
   }
   const arrow = t.arrow === true && t.symmetric !== true;
   const x1 = 4, x2 = arrow ? SAMPLE_W - 12 : SAMPLE_W - 4, y = SAMPLE_H / 2;
-  if (pattern === 'double') {
-    shapes.push({ tag: 'line', attrs: base({ x1, y1: y - 2, x2, y2: y - 2, 'stroke-width': 1.5 }) });
-    shapes.push({ tag: 'line', attrs: base({ x1, y1: y + 2, x2, y2: y + 2, 'stroke-width': 1.5 }) });
-  } else {
-    shapes.push({ tag: 'line', attrs: base({ x1, y1: y, x2, y2: y }) });
-  }
+  const strokes = pattern === 'double'
+    ? [base({ x1, y1: y - 2, x2, y2: y - 2, 'stroke-width': 1.5 }), base({ x1, y1: y + 2, x2, y2: y + 2, 'stroke-width': 1.5 })]
+    : [base({ x1, y1: y, x2, y2: y })];
+  if (ink) for (const b of strokes) shapes.push(under(b, 1));
+  for (const b of strokes) shapes.push({ tag: 'line', attrs: b });
   if (arrow) {
     const tip = SAMPLE_W - 4;
-    shapes.push({ tag: 'path', attrs: { d: `M${tip - 9},${y - 5} L${tip},${y} L${tip - 9},${y + 5} Z`, fill: stroke, stroke: 'none' } });
+    shapes.push({ tag: 'path', attrs: { d: `M${tip - 9},${y - 5} L${tip},${y} L${tip - 9},${y + 5} Z`, fill: stroke, ...(ink ? { stroke: 'var(--mm-ink)', 'stroke-width': 1, 'stroke-linejoin': 'miter' } : { stroke: 'none' }) } });
   }
   return { width: SAMPLE_W, height: SAMPLE_H, shapes };
 }
