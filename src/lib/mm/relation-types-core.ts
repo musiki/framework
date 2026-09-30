@@ -244,6 +244,56 @@ export async function getRelationType(
   return { ...toView(row), concept };
 }
 
+export type TypeRelationItem = {
+  id: string;
+  source: { slug: string; label: string; labelNb: string | null };
+  target: { slug: string; label: string; labelNb: string | null };
+  createdAt: string;
+  agree: number;
+  disagree: number;
+  settled: boolean;
+};
+
+export const TYPE_RELATIONS_LIMIT = 500;
+
+/**
+ * The asserted relations of one type (its page lists them), oldest first,
+ * at most `limit`. Public: concept slugs/labels, agreement totals, settled
+ * flag — no user fields, no stance rows. Unknown type → [].
+ */
+export async function listRelationsOfType(
+  q: QueryFn,
+  { spaceId, slug, limit = TYPE_RELATIONS_LIMIT }: { spaceId: string; slug: string; limit?: number },
+): Promise<TypeRelationItem[]> {
+  if (typeof spaceId !== 'string' || !isUuid(spaceId) || typeof slug !== 'string' || !TYPE_SLUG_RE.test(slug)) return [];
+  const n = Math.max(1, Math.min(TYPE_RELATIONS_LIMIT, Math.floor(Number(limit)) || TYPE_RELATIONS_LIMIT));
+  const rows = await run(
+    q,
+    `SELECT r.id, r."createdAt", (r."settledAt" IS NOT NULL) AS settled,
+            s.slug AS "sourceSlug", s.label AS "sourceLabel", s."labelNb" AS "sourceLabelNb",
+            o.slug AS "targetSlug", o.label AS "targetLabel", o."labelNb" AS "targetLabelNb",
+            (SELECT count(*) FROM "ConceptRelationStance" x WHERE x."relationId" = r.id AND x.stance = 'agree')::int AS agree,
+            (SELECT count(*) FROM "ConceptRelationStance" x WHERE x."relationId" = r.id AND x.stance = 'disagree')::int AS disagree
+     FROM "ConceptRelation" r
+     JOIN "RelationType" t ON t.id = r."typeId"
+     JOIN "Concept" s ON s.id = r."sourceId"
+     JOIN "Concept" o ON o.id = r."targetId"
+     WHERE t."spaceId" = $1::uuid AND t.slug = $2 AND r."spaceId" = $1::uuid
+     ORDER BY r."createdAt" ASC, r.id ASC
+     LIMIT $3`,
+    [spaceId, slug, n],
+  );
+  return rows.map((r: any) => ({
+    id: String(r.id),
+    source: { slug: r.sourceSlug, label: r.sourceLabel, labelNb: r.sourceLabelNb ?? null },
+    target: { slug: r.targetSlug, label: r.targetLabel, labelNb: r.targetLabelNb ?? null },
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt ?? ''),
+    agree: Number(r.agree) || 0,
+    disagree: Number(r.disagree) || 0,
+    settled: r.settled === true,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Writes (curator, admin)
 // ---------------------------------------------------------------------------

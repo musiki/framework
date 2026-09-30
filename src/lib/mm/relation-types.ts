@@ -11,7 +11,7 @@ import type { QueryFn } from './concepts-core.ts';
 
 export { RELATION_COLORS, RELATION_STROKES, RELATION_RENDERS, relationTypeConceptSlug } from './relation-types-core.ts';
 export type {
-  RelationTypeView, RelationTypeDetail, RelationTypeFields, RelationColor, RelationStroke, RelationRender,
+  RelationTypeView, RelationTypeDetail, TypeRelationItem, RelationTypeFields, RelationColor, RelationStroke, RelationRender,
 } from './relation-types-core.ts';
 
 const poolQ: QueryFn = (text, params) => query(text, params as any[]);
@@ -21,6 +21,9 @@ export const listRelationTypes = (args: Parameters<typeof core.listRelationTypes
 /** Public. The type with its definition concept, rendered by the sanitized mm renderer. */
 export const getRelationType = ({ lang = 'en', ...args }: Omit<Parameters<typeof core.getRelationType>[1], 'render'> & { lang?: MmLang }) =>
   core.getRelationType(poolQ, { ...args, render: mmRendererFor(mmDefinitionRenderCache, lang) });
+
+/** Public. The asserted relations of one type (its page), no user fields. */
+export const listRelationsOfType = (args: Parameters<typeof core.listRelationsOfType>[1]) => core.listRelationsOfType(poolQ, args);
 
 export const createRelationType = (args: Parameters<typeof core.createRelationType>[1]) =>
   onClient((q) => core.createRelationType(q, args));

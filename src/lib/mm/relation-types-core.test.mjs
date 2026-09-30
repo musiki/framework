@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ConceptError } from './concepts-core.ts';
 import {
   RELATION_COLORS, cleanRelationTypeFields, relationTypeSlug, relationTypeConceptSlug, relationsLockKey,
-  listRelationTypes, getRelationType, createRelationType, updateRelationType, archiveRelationType, reorderRelationTypes,
+  listRelationTypes, listRelationsOfType, getRelationType, createRelationType, updateRelationType, archiveRelationType, reorderRelationTypes,
 } from './relation-types-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -367,4 +367,27 @@ test('reorderRelationTypes: given slugs first, the rest keep their order; unknow
     assert.ok(!bad.find('UPDATE "RelationType"'));
   }
   await rejectsStatus(reorderRelationTypes(typeFixture().q, { spaceId: SPACE, actorUserId: U.member, slugs: ['derives'] }), 403);
+});
+
+test('listRelationsOfType: space- and type-pinned, oldest first, bounded, no user fields', async () => {
+  const f = fakeQuery([['FROM "ConceptRelation" r', () => [{
+    id: id(70), createdAt: new Date('2026-09-30T10:00:00Z'), settled: false, sourceSlug: 'a', sourceLabel: 'A', sourceLabelNb: null,
+    targetSlug: 'b', targetLabel: 'B', targetLabelNb: 'Bee', agree: '2', disagree: 0,
+    // Planted: must never reach the view.
+    createdBy: U.member, spaceId: SPACE,
+  }]]]);
+  const out = await listRelationsOfType(f.q, { spaceId: SPACE, slug: 'contains', limit: 10_000 });
+  assert.deepEqual(out, [{
+    id: id(70), source: { slug: 'a', label: 'A', labelNb: null }, target: { slug: 'b', label: 'B', labelNb: 'Bee' },
+    createdAt: '2026-09-30T10:00:00.000Z', agree: 2, disagree: 0, settled: false,
+  }]);
+  const call = f.find('FROM "ConceptRelation" r');
+  assert.deepEqual(call.params, [SPACE, 'contains', 500]);
+  assert.match(call.text, /t\."spaceId" = \$1::uuid AND t\.slug = \$2 AND r\."spaceId" = \$1::uuid/);
+  assert.doesNotMatch(call.text, /"User"|"createdBy"|x\."userId"/);
+  // Bad input never reaches SQL.
+  const g = fakeQuery([]);
+  assert.deepEqual(await listRelationsOfType(g.q, { spaceId: 'x', slug: 'contains' }), []);
+  assert.deepEqual(await listRelationsOfType(g.q, { spaceId: SPACE, slug: 'Bad Slug' }), []);
+  assert.equal(g.calls.length, 0);
 });
