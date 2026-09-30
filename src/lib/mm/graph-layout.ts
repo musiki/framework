@@ -1,6 +1,11 @@
 // Pure layout helpers for the mm concept graph (src/scripts/mm/graph.ts).
-// No DOM, no D3: label folding, boxes, overlap checks and the fit-to-view
-// transform, so they can be unit tested with node --test.
+// No DOM: label folding, boxes, overlap checks, the fit-to-view transform and
+// the typed-relation drawing rules (area hulls, agreement width, contested
+// pattern, arrowheads, the sentence a relation reads as), so they can be unit
+// tested with node --test. d3-polygon (pure maths) computes the hulls.
+
+import { polygonHull } from 'd3-polygon';
+import { dashArray, strokeColor, typeInverse, typeLabel, type Localized, type TypeLike } from './relation-type-ui.ts';
 
 export type Box = { x: number; y: number; w: number; h: number }; // centre x/y, full width/height
 export type Bounds = { x0: number; y0: number; x1: number; y1: number };
@@ -129,4 +134,227 @@ export function placeCard(
   const roomRight = frame.w - (node.x + node.w / 2);
   const roomLeft = node.x - node.w / 2;
   return { x: clamp(roomRight >= roomLeft ? right : left, pad, maxX), y: cy, side: 'clamped' };
+}
+
+// ---------------------------------------------------------------------------
+// Typed relations: areas, agreement, arrows, sentences
+// ---------------------------------------------------------------------------
+
+export type Point = { x: number; y: number };
+/** A node for hulls: centre and (optional) box size. */
+export type HullBox = { x: number; y: number; w?: number; h?: number };
+
+/**
+ * Convex hull (counter-clockwise, as d3-polygon returns it) of the boxes, each
+ * grown by `padding` on every side. Built from box corners, so its sides are
+ * straight and its corners sharp (no rounding: the brand is flat). Null when
+ * there is nothing to wrap.
+ */
+export function hullPolygon(boxes: HullBox[], padding: number): [number, number][] | null {
+  const pts: [number, number][] = [];
+  const p = Math.max(0, padding);
+  for (const b of boxes) {
+    if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) continue;
+    const hw = (b.w ?? 0) / 2 + p, hh = (b.h ?? 0) / 2 + p;
+    pts.push([b.x - hw, b.y - hh], [b.x + hw, b.y - hh], [b.x + hw, b.y + hh], [b.x - hw, b.y + hh]);
+  }
+  if (!pts.length) return null;
+  const hull = polygonHull(pts);
+  if (hull) return hull;
+  // Degenerate (every corner on one line: zero-size boxes, no padding): the extreme points.
+  const sorted = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  return [sorted[0], sorted[sorted.length - 1]];
+}
+
+const r1 = (v: number) => Math.round(v * 10) / 10;
+
+/** SVG path of `hullPolygon(boxes, padding)`: straight segments, closed; '' when empty. */
+export function hullPath(boxes: HullBox[], padding: number): string {
+  const poly = hullPolygon(boxes, padding);
+  if (!poly) return '';
+  return `M${poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join('L')}Z`;
+}
+
+/**
+ * Where an area's label sits: the midpoint of the hull side that lies highest
+ * (smallest mean y; ties: the leftmost), so the label reads along the top edge.
+ */
+export function hullLabelAnchor(poly: [number, number][] | null): Point | null {
+  if (!poly?.length) return null;
+  if (poly.length === 1) return { x: poly[0][0], y: poly[0][1] };
+  let best: Point | null = null;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const m = { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 };
+    if (!best || m.y < best.y - 1e-9 || (Math.abs(m.y - best.y) <= 1e-9 && m.x < best.x)) best = m;
+  }
+  return best;
+}
+
+export type AreaEdge = { source: string; target: string; type: string; inferred?: boolean };
+export type AreaGroup = {
+  /** `type|container` */
+  key: string;
+  type: string;
+  /** The concept that contains (the relation's source: "A contains B"). */
+  container: string;
+  /** Contained concepts (asserted or inferred), sorted, without the container. */
+  members: string[];
+  /** Nesting level: 0 when no other area sits inside, else 1 + the deepest inner area. */
+  level: number;
+};
+
+/**
+ * Area relations grouped into areas: one per (type, container), the container
+ * being the relation's source ("technics contains memory"). Inferred relations
+ * of the type add members, so an area wraps whatever its nested areas hold.
+ * An area whose members include another area's container is one level up
+ * (drawn with more padding, so the inner hull sits inside the outer one).
+ * Cycle-safe. Sorted outermost first (drawing order: inner areas on top).
+ */
+export function areaGroups(edges: AreaEdge[], areaTypes: ReadonlySet<string>): AreaGroup[] {
+  const byKey = new Map<string, { type: string; container: string; members: Set<string> }>();
+  for (const e of edges) {
+    if (!areaTypes.has(e.type) || e.source === e.target) continue;
+    const key = `${e.type}|${e.source}`;
+    const g = byKey.get(key) ?? { type: e.type, container: e.source, members: new Set<string>() };
+    g.members.add(e.target);
+    byKey.set(key, g);
+  }
+  const containers = new Map<string, string[]>(); // concept -> keys of the areas it contains
+  for (const [key, g] of byKey) containers.set(g.container, [...(containers.get(g.container) ?? []), key]);
+  const levels = new Map<string, number>();
+  const levelOf = (key: string, path: Set<string>): number => {
+    const known = levels.get(key);
+    if (known !== undefined) return known;
+    if (path.has(key)) return 0;
+    path.add(key);
+    let level = 0;
+    for (const m of byKey.get(key)!.members) {
+      for (const inner of containers.get(m) ?? []) if (inner !== key) level = Math.max(level, 1 + levelOf(inner, path));
+    }
+    path.delete(key);
+    levels.set(key, level);
+    return level;
+  };
+  const out: AreaGroup[] = [...byKey].map(([key, g]) => ({
+    key, type: g.type, container: g.container, members: [...g.members].filter((m) => m !== g.container).sort(), level: levelOf(key, new Set()),
+  }));
+  return out.sort((a, b) => b.level - a.level || a.key.localeCompare(b.key));
+}
+
+/** Padding of an area hull at nesting `level` (outer areas keep a band around the inner ones). */
+export const areaPadding = (level: number, base = 16, step = 12): number => base + Math.max(0, level) * step;
+
+/** Line width from the net agreement (agree − disagree): 1.5px with no stances, ±0.5px per stance, bounded 1–4px. */
+export function agreementWidth(agree: number, disagree: number): number {
+  const net = (Number(agree) || 0) - (Number(disagree) || 0);
+  return clamp(1.5 + net * 0.5, 1, 4);
+}
+
+/** Contested: at least two stances and no more agreement than disagreement. */
+export function isContested(agree: number, disagree: number): boolean {
+  const a = Number(agree) || 0, d = Number(disagree) || 0;
+  return a + d >= 2 && d >= a;
+}
+
+/**
+ * Stroke pattern of a relation line: the type's own pattern, or, when the
+ * relation is contested, a "broken" version of it (long runs cut by wide
+ * gaps) that stays distinct from every plain pattern. Null = solid.
+ */
+export function edgeDash(stroke: string, contested: boolean): string | null {
+  if (!contested) return dashArray(stroke);
+  switch (stroke) {
+    case 'dashed': return '6 4 6 10';
+    case 'dotted': return '2 3 2 10';
+    default: return '12 7';
+  }
+}
+
+export type ArrowMarker = { id: string; color: string; path: string; viewBox: string; size: number };
+
+/**
+ * The arrowhead of a type's lines, or null (areas, undirected types, and
+ * symmetric types, which read the same both ways). One marker per palette
+ * slot, filled in the slot's stroke colour, drawn in user space so it keeps
+ * its size whatever the line width.
+ */
+export function arrowMarker(t: Pick<TypeLike, 'render' | 'arrow' | 'symmetric' | 'color'>): ArrowMarker | null {
+  if (t.render === 'area' || t.arrow !== true || t.symmetric === true) return null;
+  const slot = /^[a-z]+$/.test(t.color) ? t.color : 'ink';
+  return { id: `mm-arrow-${slot}`, color: strokeColor(t.color), path: 'M0,0L10,5L0,10Z', viewBox: '0 0 10 10', size: 9 };
+}
+
+export type Sentence = { subject: string; verb: Localized; object: string; inverse: boolean };
+
+/**
+ * How a relation reads: "A <label> B"; read from its target (the focused
+ * concept is the target) it turns round with the type's other-way label —
+ * "B <inverse> A" — when the type has one and is not symmetric. Labels are the
+ * concepts' display labels (the caller localizes them).
+ */
+export function relationSentence(
+  e: { source: string; target: string },
+  t: Pick<TypeLike, 'label' | 'labelNb' | 'inverseLabel' | 'inverseLabelNb' | 'symmetric'>,
+  labels: (id: string) => string,
+  focusId: string | null,
+  lang: 'en' | 'nb' | 'nn',
+): Sentence {
+  const inv = focusId !== null && focusId === e.target && focusId !== e.source ? typeInverse(t, lang) : null;
+  if (inv) return { subject: labels(e.target), verb: inv, object: labels(e.source), inverse: true };
+  return { subject: labels(e.source), verb: typeLabel(t, lang), object: labels(e.target), inverse: false };
+}
+
+/**
+ * The point where the ray from a box's centre towards `toward` leaves the box
+ * (grown by `gap`), so a line ends on a concept's border and its arrowhead
+ * shows. The centre itself when `toward` is the centre.
+ */
+export function clipToBox(toward: Point, box: Box, gap = 0): Point {
+  const dx = toward.x - box.x, dy = toward.y - box.y;
+  if (!dx && !dy) return { x: box.x, y: box.y };
+  const hw = box.w / 2 + gap, hh = box.h / 2 + gap;
+  const s = Math.min(dx ? hw / Math.abs(dx) : Infinity, dy ? hh / Math.abs(dy) : Infinity);
+  if (s >= 1) return { x: box.x, y: box.y }; // `toward` is inside the box
+  return { x: box.x + dx * s, y: box.y + dy * s };
+}
+
+/** The segment a→b moved sideways by `d` (positive: to the left of the direction of travel in screen space, y down). */
+export function offsetSegment(a: Point, b: Point, d: number): [Point, Point] {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (!len || !d) return [{ ...a }, { ...b }];
+  const nx = (dy / len) * d, ny = (-dx / len) * d;
+  return [{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }];
+}
+
+/**
+ * Sideways slot of each line so that several relations between the same two
+ * concepts sit side by side: for n lines of one pair, slots −(n−1)/2 … (n−1)/2
+ * in input order, signed along the pair's canonical direction (so A→B and
+ * B→A share one frame).
+ */
+export function pairSlots(edges: { source: string; target: string }[]): number[] {
+  const groups = new Map<string, number[]>();
+  edges.forEach((e, i) => {
+    const key = e.source < e.target ? `${e.source}\u0000${e.target}` : `${e.target}\u0000${e.source}`;
+    groups.set(key, [...(groups.get(key) ?? []), i]);
+  });
+  const out = edges.map(() => 0);
+  for (const idx of groups.values()) {
+    idx.forEach((i, j) => {
+      const slot = j - (idx.length - 1) / 2;
+      const e = edges[i];
+      out[i] = (e.source < e.target ? slot : -slot) || 0; // no -0
+    });
+  }
+  return out;
+}
+
+/** The next index in a cycle of `n` items after `current` (−1 = none yet) in direction `dir`. */
+export function cycleIndex(n: number, current: number, dir: 1 | -1 = 1): number {
+  if (n <= 0) return -1;
+  if (current < 0 || current >= n) return dir > 0 ? 0 : n - 1;
+  return (current + dir + n) % n;
 }
