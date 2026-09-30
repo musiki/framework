@@ -123,3 +123,9 @@ test('relation modeler migration: reveal date frozen per relation, no un-settle 
   ];
   assert.deepEqual(order, [...order].sort((a, b) => a - b));
 });
+
+test('commons space seed also seeds the built-in relation types (guarded, idempotent)', () => {
+  const seed = readFileSync(new URL('../../../postgres-patches/seeds/mm-commons-space.sql', import.meta.url), 'utf8');
+  assert.match(seed, /IF to_regprocedure\('mm_seed_relation_types\(uuid\)'\) IS NOT NULL THEN\s+PERFORM mm_seed_relation_types\(s\."id"\)/);
+  assert.match(seed, /s\."kind" = 'commons';\s+END IF;/);
+});

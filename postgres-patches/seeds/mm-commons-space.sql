@@ -1,5 +1,6 @@
 -- MishMash Concept Machine: the mm commons space and its first admin.
--- Usage (after the 20260929090* mm migrations):
+-- Usage (after the 20260929090* mm migrations; after 20260930120000 it also
+-- seeds the built-in relation types):
 -- psql -v ON_ERROR_STOP=1 -v admin_email=you@example.org -f mm-commons-space.sql
 -- Idempotent: re-running keeps the space as is (its settings, e.g. openJoin
 -- toggled later in the admin UI, are not reset) and (re)makes the user admin.
@@ -35,6 +36,17 @@ BEGIN
        AND ue."email" = current_setting('mm.seed_admin_email')
   ) THEN
     RAISE EXCEPTION 'mm seed: no user found for the admin email. Sign in once first, or write to sysop@musiki.org.ar';
+  END IF;
+END $$;
+
+-- Built-in relation types (relation modeler migration 20260930120000). Idempotent:
+-- existing types are never overwritten. Skipped when that migration is not
+-- applied yet (the engine also seeds lazily on the first read of the types).
+DO $$
+BEGIN
+  IF to_regprocedure('mm_seed_relation_types(uuid)') IS NOT NULL THEN
+    PERFORM mm_seed_relation_types(s."id")
+       FROM "Space" s WHERE s."tenantId" = 'mm' AND s."slug" = 'mishmash' AND s."kind" = 'commons';
   END IF;
 END $$;
 

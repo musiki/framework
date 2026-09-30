@@ -403,6 +403,11 @@ export type ConceptRelationView = {
   createdBy: UserRef;
   /** Whether `viewerUserId` created it (for "delete own" in the UI); never the id itself. */
   own: boolean;
+  /** Agreement totals (who voted what is never part of this view: stances-core). */
+  agree: number;
+  disagree: number;
+  /** A curator closed its discussion. */
+  settled: boolean;
 };
 
 export type ConceptView = {
@@ -590,9 +595,14 @@ export async function getConcept(
 
   const relRows = await run(
     q,
-    `SELECT r.id, r.type, r."sourceId", r."targetId", r."createdBy", ur.name AS "createdByName",
-            o.id AS "otherId", o.slug AS "otherSlug", o.label AS "otherLabel", o."labelNb" AS "otherLabelNb"
+    // Type slug through the FK (not the legacy "type" text); agreement as totals only.
+    `SELECT r.id, t.slug AS type, r."sourceId", r."targetId", r."createdBy", ur.name AS "createdByName",
+            o.id AS "otherId", o.slug AS "otherSlug", o.label AS "otherLabel", o."labelNb" AS "otherLabelNb",
+            (r."settledAt" IS NOT NULL) AS settled,
+            (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'agree')::int AS agree,
+            (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'disagree')::int AS disagree
      FROM "ConceptRelation" r
+     JOIN "RelationType" t ON t.id = r."typeId"
      JOIN "Concept" o ON o.id = CASE WHEN r."sourceId" = $1::uuid THEN r."targetId" ELSE r."sourceId" END
      LEFT JOIN "User" ur ON ur.id = r."createdBy"
      WHERE r."sourceId" = $1::uuid OR r."targetId" = $1::uuid
@@ -606,6 +616,9 @@ export async function getConcept(
     other: { id: r.otherId, slug: r.otherSlug, label: r.otherLabel, labelNb: r.otherLabelNb ?? null },
     createdBy: userRef(r.createdBy, r.createdByName),
     own: !!viewerUserId && r.createdBy === viewerUserId,
+    agree: Number(r.agree) || 0,
+    disagree: Number(r.disagree) || 0,
+    settled: r.settled === true,
   }));
 
   return {

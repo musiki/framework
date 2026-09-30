@@ -220,7 +220,7 @@ function getFixture() {
         fromPostId: null, createdAt: '2026-01-01T00:00:00Z', editedByName: 'Author', creditedName: 'Author' },
     ]],
     ['FROM "ConceptRelation" r', () => [
-      { id: 'r1', type: 'derives', sourceId: C1, targetId: C2, createdBy: U.member, createdByName: 'Mem',
+      { id: 'r1', type: 'derives', sourceId: C1, targetId: C2, createdBy: U.member, createdByName: 'Mem', agree: 2, disagree: 1, settled: true,
         otherId: C2, otherSlug: 'tertiary-retention', otherLabel: 'Tertiary retention', otherLabelNb: null },
       { id: 'r2', type: 'contrasts', sourceId: C3, targetId: C1, createdBy: null, createdByName: null,
         otherId: C3, otherSlug: 'grammatization', otherLabel: 'Grammatization', otherLabelNb: 'Grammatisering' },
@@ -247,6 +247,13 @@ test('getConcept: current per lang, history, both relation directions, forum, th
     ['r2', 'in', 'grammatization', false],
   ]);
   assert.deepEqual(c.relations[1].createdBy, { name: null, deleted: true });
+  // Type slug through the FK; agreement as totals only (no stance holders).
+  assert.deepEqual([c.relations[0].type, c.relations[0].agree, c.relations[0].disagree, c.relations[0].settled], ['derives', 2, 1, true]);
+  assert.deepEqual([c.relations[1].agree, c.relations[1].disagree, c.relations[1].settled], [0, 0, false]);
+  const relSql = fx.calls.find((x) => x.text.includes('FROM "ConceptRelation" r')).text;
+  assert.match(relSql, /t\.slug AS type/);
+  assert.match(relSql, /JOIN "RelationType" t ON t\.id = r\."typeId"/);
+  assert.doesNotMatch(relSql, /r\.type\b|s\."userId"/);
   const json = JSON.stringify(c);
   assert.ok(!json.includes(U.poster) && !json.includes(U.curator), 'no user ids in the view');
 });
