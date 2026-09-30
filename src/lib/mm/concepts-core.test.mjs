@@ -482,64 +482,11 @@ test('setStatus: curator/admin only; invalid status 400', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Relations
-// ---------------------------------------------------------------------------
-
-function relFixture({ existing = false, insertError = null, relCreatedBy = U.member } = {}) {
-  return fakeQuery([
-    memberRoute,
-    conceptByIdRoute({
-      [C1]: conceptRow(),
-      [C2]: conceptRow({ id: C2, slug: 'b' }),
-      [C3]: conceptRow({ id: C3, slug: 'c', spaceId: OTHER_SPACE }),
-    }),
-    [/SELECT id FROM "ConceptRelation" WHERE "sourceId"/, () => (existing ? [{ id: REL }] : [])],
-    ['INSERT INTO "ConceptRelation"', () => (insertError ? { error: insertError } : [{ id: REL }])],
-    [/SELECT id, "spaceId", "createdBy" FROM "ConceptRelation"/, ([rid]) =>
-      rid === REL ? [{ id: REL, spaceId: SPACE, createdBy: relCreatedBy }] : []],
-    ['DELETE FROM "ConceptRelation"', () => []],
-  ]);
-}
-
-test('createRelation: member creates; params carry space and creator', async () => {
-  const fx = relFixture();
-  assert.deepEqual(await createRelation(fx.q, { sourceId: C1, targetId: C2, type: 'derives', actorUserId: U.member }), { id: REL });
-  const ins = fx.calls.find((c) => c.text.includes('INSERT INTO "ConceptRelation"'));
-  assert.deepEqual(ins.params, [SPACE, C1, C2, 'derives', U.member]);
-});
-
-test('createRelation: self 400, bad type 400, cross-space 400, duplicate 409, guest 403', async () => {
-  await rejectsStatus(createRelation(relFixture().q, { sourceId: C1, targetId: C1, type: 'derives', actorUserId: U.member }), 400);
-  await rejectsStatus(createRelation(relFixture().q, { sourceId: C1, targetId: C2, type: 'loves', actorUserId: U.member }), 400);
-  await rejectsStatus(createRelation(relFixture().q, { sourceId: C1, targetId: C3, type: 'derives', actorUserId: U.member }), 400);
-  await rejectsStatus(createRelation(relFixture({ existing: true }).q, { sourceId: C1, targetId: C2, type: 'derives', actorUserId: U.member }), 409);
-  await rejectsStatus(
-    createRelation(relFixture({ insertError: { message: 'dup', code: '23505' } }).q, { sourceId: C1, targetId: C2, type: 'derives', actorUserId: U.member }),
-    409,
-  );
-  await rejectsStatus(createRelation(relFixture().q, { sourceId: C1, targetId: C2, type: 'derives', actorUserId: U.guest }), 403);
-});
-
-test('deleteRelation: own member ok, other member 403, curator ok, deleted creator only curator', async () => {
-  let fx = relFixture();
-  assert.deepEqual(await deleteRelation(fx.q, { relationId: REL, actorUserId: U.member }), { deleted: true });
-  assert.ok(fx.calls.some((c) => c.text.includes('DELETE FROM "ConceptRelation"')));
-
-  fx = relFixture();
-  await rejectsStatus(deleteRelation(fx.q, { relationId: REL, actorUserId: U.author }), 403);
-  assert.ok(!fx.calls.some((c) => c.text.includes('DELETE FROM')));
-
-  assert.deepEqual(await deleteRelation(relFixture().q, { relationId: REL, actorUserId: U.curator }), { deleted: true });
-  await rejectsStatus(deleteRelation(relFixture({ relCreatedBy: null }).q, { relationId: REL, actorUserId: U.member }), 403);
-  await rejectsStatus(deleteRelation(relFixture().q, { relationId: id(999), actorUserId: U.curator }), 404);
-});
-
-// ---------------------------------------------------------------------------
-// listConcepts / graph
+// listConcepts
 // ---------------------------------------------------------------------------
 
 const listRows = [
-  { id: C1, slug: 'pharmakon', label: 'Pharmakon', labelNb: 'Farmakon', status: 'discussion', updatedAt: 't',
+  { id: C1, slug: 'pharmakon', label: 'Pharmakon', labelNb: 'Farmakon', status: 'discussion', createdAt: 't0', updatedAt: 't',
     forumId: FORUM, forumSlug: 'stiegler', forumTitle: 'Stiegler', langs: ['nb', 'en'] },
   { id: C2, slug: 'b', label: 'B', labelNb: null, status: 'neologism', updatedAt: 't',
     forumId: null, forumSlug: null, forumTitle: null, langs: ['en'] },
@@ -550,6 +497,8 @@ test('listConcepts: passes filters and maps rows', async () => {
   const out = await listConcepts(fx.q, { spaceId: SPACE, forumId: FORUM, status: 'discussion' });
   assert.deepEqual(fx.calls[0].params, [SPACE, FORUM, 'discussion']);
   assert.deepEqual(out[0].langs, ['en', 'nb']);
+  assert.equal(out[0].createdAt, 't0');
+  assert.match(fx.calls[0].text, /c\."createdAt", c\."updatedAt"/);
   assert.deepEqual(out[0].forum, { id: FORUM, slug: 'stiegler', title: 'Stiegler' });
   assert.equal(out[1].forum, null);
   // A group filter includes its channels' concepts (they are stored with the group id);
@@ -559,43 +508,11 @@ test('listConcepts: passes filters and maps rows', async () => {
   assert.deepEqual(await listConcepts(fx.q, { spaceId: 'nope' }), []);
 });
 
-test('graph: slug nodes, edges only between included nodes, no user fields', async () => {
-  const fx = fakeQuery([
-    ['FROM "Concept" c', () => listRows],
-    ['FROM "ConceptRelation"', () => [
-      { sourceId: C1, targetId: C2, type: 'derives', createdBy: U.member },
-      { sourceId: C1, targetId: C3, type: 'contrasts', createdBy: U.member }, // C3 filtered out
-    ]],
-    ['FROM "ConceptVersion"', () => [
-      { conceptId: C1, lang: 'en', definition: 'A **remedy** and a [poison](https://x.org) <b>at once</b>' },
-      { conceptId: C1, lang: 'nb', definition: 'Både *medisin* og gift.' },
-    ]],
-  ]);
-  const g = await graph(fx.q, { spaceId: SPACE });
-  assert.deepEqual(g.nodes[0], { id: 'pharmakon', label: 'Pharmakon', labelNb: 'Farmakon', status: 'discussion', forum: 'stiegler',
-    excerpt: 'A remedy and a poison at once', excerptLang: 'en' });
-  assert.deepEqual(g.nodes[1], { id: 'b', label: 'B', labelNb: null, status: 'neologism', forum: null, excerpt: '', excerptLang: null });
-  assert.deepEqual(g.edges, [{ source: 'pharmakon', target: 'b', type: 'derives' }]);
-  const json = JSON.stringify(g);
-  assert.ok(!json.includes(U.member) && !/email|createdBy|userId/i.test(json));
-});
-
-test('graph: excerpt follows the reader language, falls back to English, is capped plain text', async () => {
-  const long = 'word '.repeat(200);
-  const fx = fakeQuery([
-    ['FROM "Concept" c', () => listRows],
-    ['FROM "ConceptVersion"', () => [
-      { conceptId: C1, lang: 'en', definition: long },
-      { conceptId: C1, lang: 'nb', definition: 'Både *medisin* og gift.' },
-      { conceptId: C2, lang: 'en', definition: 'English only.' },
-    ]],
-  ]);
-  const nb = await graph(fx.q, { spaceId: SPACE, lang: 'nb' });
-  assert.deepEqual([nb.nodes[0].excerpt, nb.nodes[0].excerptLang], ['Både medisin og gift.', 'nb']);
-  assert.deepEqual([nb.nodes[1].excerpt, nb.nodes[1].excerptLang], ['English only.', 'en']); // fallback
-  const en = await graph(fx.q, { spaceId: SPACE });
-  assert.ok(en.nodes[0].excerpt.length <= 240 && en.nodes[0].excerpt.endsWith('…'));
-  assert.deepEqual(fx.calls.find((c) => c.text.includes('DISTINCT ON')).params, [[C1, C2]]);
+test('createRelation / deleteRelation / graph are still exported here (implemented in relations-core)', async () => {
+  const rel = await import('./relations-core.ts');
+  assert.equal(createRelation, rel.createRelation);
+  assert.equal(deleteRelation, rel.deleteRelation);
+  assert.equal(graph, rel.graph);
 });
 
 // ---------------------------------------------------------------------------

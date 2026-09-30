@@ -35,6 +35,8 @@ if (isMm) {
     const forum = forums.find((f) => f.slug === forumParam) ?? null;
     forumSlug = forum?.slug ?? '';
     ({ nodes, edges } = await graph({ spaceId: viewer.space.id, forumId: forum?.id ?? null, status: status || null, lang }));
+    // Until the typed rendering lands (relation modeler, graph tasks) this page draws asserted relations only.
+    edges = edges.filter((e) => !e.inferred);
   } catch (err) {
     logPageError('graph', err);
     state = 'unavailable';

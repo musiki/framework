@@ -24,7 +24,7 @@
 import { can, type MmAction, type MmPolicyCtx } from './policy.ts';
 import { COMMONS_ROLES, isUuid, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
-import { publicName, definitionExcerpt, pickDefinition, type ViewLang } from './view.ts';
+import { publicName } from './view.ts';
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<{ data: any[] | null; error: any }>;
 
@@ -32,6 +32,7 @@ export const CONCEPT_LANGS = ['en', 'nb', 'nn'] as const;
 export type ConceptLang = (typeof CONCEPT_LANGS)[number];
 export const CONCEPT_STATUSES = ['neologism', 'discussion', 'assimilated'] as const;
 export type ConceptStatus = (typeof CONCEPT_STATUSES)[number];
+/** The five built-in relation type slugs (seeded per space; spaces may add their own — see relation-types-core). */
 export const RELATION_TYPES = ['derives', 'combines', 'contrasts', 'reformulates', 'exemplifies'] as const;
 export type RelationType = (typeof RELATION_TYPES)[number];
 
@@ -225,7 +226,7 @@ export async function authorize(
 // Loaders
 // ---------------------------------------------------------------------------
 
-type ConceptRow = {
+export type ConceptRow = {
   id: string;
   spaceId: string;
   forumId: string | null;
@@ -242,7 +243,7 @@ type ConceptRow = {
 export const RELATION_TYPE_KIND = 'relation-type';
 const isRelationTypeConcept = (c: { kind?: string }) => c.kind === RELATION_TYPE_KIND;
 
-async function loadConceptById(q: QueryFn, conceptId: unknown, forUpdate = false): Promise<ConceptRow> {
+export async function loadConceptById(q: QueryFn, conceptId: unknown, forUpdate = false): Promise<ConceptRow> {
   const id = requireUuid(conceptId, 'concept');
   const rows = await run(
     q,
@@ -395,7 +396,8 @@ export type ConceptVersionView = {
 
 export type ConceptRelationView = {
   id: string;
-  type: RelationType;
+  /** Relation type slug (a built-in or one of the space's own types). */
+  type: string;
   direction: 'out' | 'in';
   other: { id: string; slug: string; label: string; labelNb: string | null };
   createdBy: UserRef;
@@ -770,65 +772,16 @@ export async function setLabels(
 }
 
 // ---------------------------------------------------------------------------
-// Relations
+// Relations and graph: relations-core.ts (typed relations, provenance,
+// inference, agreement totals). Re-exported so existing imports keep working.
+// The import cycle is safe: neither module touches the other at load time.
 // ---------------------------------------------------------------------------
 
-export async function createRelation(
-  q: QueryFn,
-  input: { sourceId: string; targetId: string; type: unknown; actorUserId: string | null },
-): Promise<{ id: string }> {
-  const source = await loadConceptById(q, input.sourceId);
-  if (isRelationTypeConcept(source)) throw new ConceptError(404, 'concept not found');
-  await authorize(q, source.spaceId, input.actorUserId, 'createRelation');
-  if (!isRelationType(input.type)) throw new ConceptError(400, 'invalid relation type');
-  const targetId = requireUuid(input.targetId, 'target concept');
-  if (targetId === source.id) throw new ConceptError(400, 'a concept cannot relate to itself');
-  const target = await loadConceptById(q, targetId);
-  if (isRelationTypeConcept(target)) throw new ConceptError(404, 'target concept not found');
-  if (target.spaceId !== source.spaceId) throw new ConceptError(400, 'concepts belong to different spaces');
-
-  const existing = await run(
-    q,
-    `SELECT id FROM "ConceptRelation" WHERE "sourceId" = $1::uuid AND "targetId" = $2::uuid AND type = $3 LIMIT 1`,
-    [source.id, target.id, input.type],
-  );
-  if (existing.length) throw new ConceptError(409, 'relation already exists');
-  try {
-    const rows = await run(
-      q,
-      `INSERT INTO "ConceptRelation" ("spaceId", "sourceId", "targetId", type, "createdBy")
-       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5::uuid) RETURNING id`,
-      [source.spaceId, source.id, target.id, input.type, input.actorUserId],
-    );
-    if (!rows.length) throw new ConceptError(500, 'relation insert returned nothing');
-    return { id: rows[0].id };
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new ConceptError(409, 'relation already exists');
-    throw err;
-  }
-}
-
-export async function deleteRelation(
-  q: QueryFn,
-  input: { relationId: string; actorUserId: string | null },
-): Promise<{ deleted: true }> {
-  const id = requireUuid(input.relationId, 'relation');
-  const rows = await run(
-    q,
-    `SELECT id, "spaceId", "createdBy" FROM "ConceptRelation" WHERE id = $1::uuid LIMIT 1`,
-    [id],
-  );
-  const rel = rows[0];
-  if (!rel) throw new ConceptError(404, 'relation not found');
-  await authorize(q, rel.spaceId, input.actorUserId, 'deleteRelation', () => ({
-    isOwnRelation: !!rel.createdBy && rel.createdBy === input.actorUserId,
-  }));
-  await run(q, `DELETE FROM "ConceptRelation" WHERE id = $1::uuid`, [id]);
-  return { deleted: true };
-}
+export { createRelation, deleteRelation, graph, GRAPH_EXCERPT_CHARS } from './relations-core.ts';
+export type { GraphNode, GraphEdge, GraphPayload } from './relations-core.ts';
 
 // ---------------------------------------------------------------------------
-// Listing and graph (public reads; no user fields)
+// Listing (public read; no user fields)
 // ---------------------------------------------------------------------------
 
 export type ConceptListItem = {
@@ -839,6 +792,7 @@ export type ConceptListItem = {
   status: ConceptStatus;
   forum: { id: string; slug: string; title: string } | null;
   langs: ConceptLang[];
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -851,7 +805,7 @@ export async function listConcepts(
   if (status && !isConceptStatus(status)) throw new ConceptError(400, 'invalid status');
   const rows = await run(
     q,
-    `SELECT c.id, c.slug, c.label, c."labelNb", c.status, c."updatedAt",
+    `SELECT c.id, c.slug, c.label, c."labelNb", c.status, c."createdAt", c."updatedAt",
             f.id AS "forumId", f.slug AS "forumSlug", f.title AS "forumTitle",
             COALESCE((SELECT array_agg(DISTINCT v.lang) FROM "ConceptVersion" v WHERE v."conceptId" = c.id), '{}') AS langs
      FROM "Concept" c
@@ -871,77 +825,7 @@ export async function listConcepts(
     status: r.status,
     forum: r.forumId ? { id: r.forumId, slug: r.forumSlug, title: r.forumTitle } : null,
     langs: (Array.isArray(r.langs) ? r.langs : []).filter(isConceptLang).sort(),
+    createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }));
-}
-
-export type GraphNode = {
-  id: string; // slug
-  label: string;
-  labelNb: string | null;
-  status: ConceptStatus;
-  forum: string | null; // forum slug
-  /** Plain-text excerpt of the current definition in the reader's language ('' when there is none). */
-  excerpt: string;
-  /** Language of the excerpt (the reader's, or the fallback); null when there is none. */
-  excerptLang: ConceptLang | null;
-};
-export type GraphEdge = { source: string; target: string; type: RelationType };
-
-export const GRAPH_EXCERPT_CHARS = 240;
-
-/**
- * Concept graph for a space (optionally one forum); edges only between
- * included nodes. Each node carries a plain-text excerpt of its current
- * definition in `lang` (same fallback chain as the concept page).
- */
-export async function graph(
-  q: QueryFn,
-  { spaceId, forumId, status, lang }: { spaceId: string; forumId?: string | null; status?: string | null; lang?: ViewLang },
-): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
-  const concepts = await listConcepts(q, { spaceId, forumId, status });
-  if (!concepts.length) return { nodes: [], edges: [] };
-  const slugById = new Map(concepts.map((c) => [c.id, c.slug]));
-  const rels = await run(
-    q,
-    `SELECT "sourceId", "targetId", type FROM "ConceptRelation" WHERE "spaceId" = $1::uuid
-     ORDER BY "createdAt" ASC, id ASC`,
-    [spaceId],
-  );
-  // Latest definition per concept and language (bounded: only the head of a long text is needed).
-  const defRows = await run(
-    q,
-    `SELECT DISTINCT ON (v."conceptId", v.lang) v."conceptId", v.lang, left(v.definition, 4000) AS definition
-     FROM "ConceptVersion" v
-     WHERE v."conceptId" = ANY($1::uuid[])
-     ORDER BY v."conceptId", v.lang, v."createdAt" DESC, v.id DESC`,
-    [concepts.map((c) => c.id)],
-  );
-  const defs = new Map<string, Partial<Record<string, { lang: string; definition: string }>>>();
-  for (const r of defRows) {
-    if (!isConceptLang(r.lang)) continue;
-    const byLang = defs.get(r.conceptId) ?? {};
-    byLang[r.lang] = { lang: r.lang, definition: String(r.definition ?? '') };
-    defs.set(r.conceptId, byLang);
-  }
-  const nodes: GraphNode[] = concepts.map((c) => {
-    const pick = pickDefinition(defs.get(c.id) ?? {}, lang ?? 'en');
-    const excerpt = pick.version ? definitionExcerpt(pick.version.definition, GRAPH_EXCERPT_CHARS) : '';
-    return {
-      id: c.slug,
-      label: c.label,
-      labelNb: c.labelNb,
-      status: c.status,
-      forum: c.forum?.slug ?? null,
-      excerpt,
-      excerptLang: excerpt && pick.lang && isConceptLang(pick.lang) ? pick.lang : null,
-    };
-  });
-  const edges: GraphEdge[] = [];
-  for (const r of rels) {
-    const source = slugById.get(r.sourceId);
-    const target = slugById.get(r.targetId);
-    if (source && target) edges.push({ source, target, type: r.type });
-  }
-  return { nodes, edges };
 }
