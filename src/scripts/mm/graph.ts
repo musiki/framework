@@ -103,6 +103,7 @@ const NODE_H = 26;
 const NODE_PAD_X = 8;
 const EDGE_H = 14;
 const SLOT_GAP = 7; // px between side-by-side relations of one pair
+const AREA_CLEAR = 24; // world px an unrelated concept is kept clear of an area's reach
 const SCALE: [number, number] = [0.2, 4];
 const CARD_DELAY = 150; // hover rest before the card opens (ms)
 const CARD_GRACE = 250; // time to travel from the node to the card (ms)
@@ -322,6 +323,11 @@ function draw(holder: HTMLElement): void {
   let auto = true; // keep fitting the view until the reader zooms or pans
 
   // --- simulations --------------------------------------------------------
+  // The concepts of each area (container + members), resolved once for the 'areas' force.
+  const areaNodes = groups
+    .map((g) => [g.container, ...g.members].map((id) => byId.get(id)).filter((n): n is Node => !!n))
+    .filter((ns) => ns.length >= 2)
+    .map((ns) => ({ ns, set: new Set(ns) }));
   // Layout from asserted relations only (inferred ones would pull everything together).
   const simLinks = links.filter((l) => !l.inferred);
   const sim = forceSimulation<Node>(nodes)
@@ -332,15 +338,30 @@ function draw(holder: HTMLElement): void {
     .force('y', forceY(0).strength(small ? 0.04 : 0.08))
     .force('collide', forceCollide<Node>((d) => d.wFold / 2 + 10).strength(1).iterations(3))
     .force('areas', (alpha: number) => {
-      // Weak pull of an area's concepts towards their common centre.
-      for (const g of groups) {
-        const ns = [g.container, ...g.members].map((id) => byId.get(id)!).filter(Boolean);
-        if (ns.length < 2) continue;
-        const cx = ns.reduce((a, n) => a + (n.x ?? 0), 0) / ns.length;
-        const cy = ns.reduce((a, n) => a + (n.y ?? 0), 0) / ns.length;
+      // Weak pull of an area's concepts towards their common centre, and a weak push of every
+      // other concept away from it, so a hull does not swallow unrelated concepts. For an area
+      // type that is not transitive the members of an inner area are not members of the outer
+      // one: they are pushed out of it while pulled into theirs, so an inner hull may reach
+      // beyond the outer one (accepted: the relations say exactly that).
+      for (const { ns, set } of areaNodes) {
+        let cx = 0, cy = 0;
+        for (const n of ns) { cx += n.x ?? 0; cy += n.y ?? 0; }
+        cx /= ns.length; cy /= ns.length;
+        let r = 0;
         for (const n of ns) {
           n.vx = (n.vx ?? 0) + (cx - (n.x ?? 0)) * 0.04 * alpha;
           n.vy = (n.vy ?? 0) + (cy - (n.y ?? 0)) * 0.04 * alpha;
+          r = Math.max(r, Math.hypot((n.x ?? 0) - cx, (n.y ?? 0) - cy) + n.wFold / 2);
+        }
+        r += AREA_CLEAR;
+        for (const n of nodes) {
+          if (set.has(n)) continue;
+          const dx = (n.x ?? 0) - cx, dy = (n.y ?? 0) - cy;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d >= r + n.wFold / 2) continue;
+          const push = ((r + n.wFold / 2 - d) / d) * 0.06 * alpha;
+          n.vx = (n.vx ?? 0) + dx * push;
+          n.vy = (n.vy ?? 0) + dy * push;
         }
       }
     })
