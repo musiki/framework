@@ -80,6 +80,8 @@ const FIELD_KEYS = [
   'label', 'labelNb', 'inverseLabel', 'inverseLabelNb', 'render', 'stroke', 'arrow', 'color',
   'symmetric', 'transitive', 'hierarchical', 'skos', 'wikidata',
 ] as const;
+/** The editable fields of a type (what a create/update body may carry besides slug/definition). */
+export const RELATION_TYPE_FIELD_KEYS: readonly string[] = FIELD_KEYS;
 
 const DEFAULTS: Omit<RelationTypeFields, 'label'> = {
   labelNb: null, inverseLabel: null, inverseLabelNb: null, render: 'line', stroke: 'solid', arrow: true, color: 'ink',
