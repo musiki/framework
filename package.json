@@ -72,6 +72,7 @@
     "codemirror": "^6.0.2",
     "d3-drag": "^3.0.0",
     "d3-force": "^3.0.0",
+    "d3-polygon": "^3.0.1",
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
     "dockview-core": "^5.2.0",
