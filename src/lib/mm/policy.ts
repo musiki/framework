@@ -3,6 +3,7 @@ import type { CommonsRole } from '../tenant/space-roles.ts';
 export const MM_ACTIONS = [
   'read', 'vote', 'post', 'editOwnPost', 'proposeConcept', 'editDefinition', 'adoptPost', 'changeStatus',
   'moderate', 'createRelation', 'deleteRelation', 'manageForums', 'manageAccess',
+  'manageRelationTypes', 'stance', 'settleRelation',
 ] as const;
 export type MmAction = (typeof MM_ACTIONS)[number];
 
@@ -24,6 +25,8 @@ export function can(role: CommonsRole | null, action: MmAction, ctx: MmPolicyCtx
     case 'post':
     case 'proposeConcept':
     case 'createRelation':
+    case 'stance':
+      // Agree/disagree on a relation: members and up; guests never.
       return MEMBER_UP(role);
     case 'editOwnPost':
       // Author-only (edit/delete own post); curators get no edit power over others' posts.
@@ -36,6 +39,8 @@ export function can(role: CommonsRole | null, action: MmAction, ctx: MmPolicyCtx
     case 'changeStatus':
     case 'moderate':
     case 'manageForums':
+    case 'manageRelationTypes':
+    case 'settleRelation':
       return CURATOR_UP(role);
     case 'manageAccess':
       return role === 'admin';

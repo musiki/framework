@@ -19,6 +19,9 @@ const matrix = {
   deleteRelation: [F, F, T, T, F], // member: only with isOwnRelation
   manageForums: [F, F, T, T, F],
   manageAccess: [F, F, F, T, F],
+  manageRelationTypes: [F, F, T, T, F],
+  stance: [F, T, T, T, F],
+  settleRelation: [F, F, T, T, F],
 };
 
 for (const [action, row] of Object.entries(matrix)) {
@@ -60,6 +63,9 @@ test('deleteRelation: member only own relation', () => {
 test('ctx flags do not grant unrelated actions', () => {
   assert.equal(can('member', 'adoptPost', { isAuthor: true, isOwnRelation: true }), false);
   assert.equal(can('member', 'manageForums', { isAuthor: true }), false);
+  assert.equal(can('member', 'manageRelationTypes', { isAuthor: true, isOwnRelation: true }), false);
+  assert.equal(can('member', 'settleRelation', { isAuthor: true, isOwnRelation: true }), false);
+  assert.equal(can('guest', 'stance', { isAuthor: true, isOwnRelation: true }), false);
 });
 
 test('unknown role/action denied', () => {
