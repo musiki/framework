@@ -93,3 +93,40 @@ export function levelOfDetail(k: number, showAll: boolean, fullLabelsAt = 1.5, e
 export function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
+
+export type CardPlacement = { x: number; y: number; side: 'right' | 'left' | 'below' | 'above' | 'clamped' };
+
+/** Below this frame width the card docks at the bottom of the frame instead of floating by the node. */
+export const CARD_DOCK_BELOW = 480;
+export const shouldDock = (frameWidth: number, dockBelow = CARD_DOCK_BELOW): boolean => frameWidth < dockBelow;
+
+/**
+ * Top-left corner of the hover card for a node box (centre x/y, full w/h, in
+ * frame pixels) inside a frame of `frame` size. Prefers the right of the
+ * node, then left, below, above (the first side where the whole card fits,
+ * vertically centred on the node and clamped to the frame); when none fits
+ * the card is clamped inside the frame next to the node's side with most room.
+ */
+export function placeCard(
+  node: Box,
+  card: { w: number; h: number },
+  frame: { w: number; h: number },
+  gap = 8,
+  pad = 4,
+): CardPlacement {
+  const maxX = Math.max(pad, frame.w - card.w - pad);
+  const maxY = Math.max(pad, frame.h - card.h - pad);
+  const cy = clamp(node.y - card.h / 2, pad, maxY);
+  const cx = clamp(node.x - card.w / 2, pad, maxX);
+  const right = node.x + node.w / 2 + gap;
+  const left = node.x - node.w / 2 - gap - card.w;
+  const below = node.y + node.h / 2 + gap;
+  const above = node.y - node.h / 2 - gap - card.h;
+  if (right + card.w <= frame.w - pad) return { x: right, y: cy, side: 'right' };
+  if (left >= pad) return { x: left, y: cy, side: 'left' };
+  if (below + card.h <= frame.h - pad) return { x: cx, y: below, side: 'below' };
+  if (above >= pad) return { x: cx, y: above, side: 'above' };
+  const roomRight = frame.w - (node.x + node.w / 2);
+  const roomLeft = node.x - node.w / 2;
+  return { x: clamp(roomRight >= roomLeft ? right : left, pad, maxX), y: cy, side: 'clamped' };
+}

@@ -297,6 +297,8 @@ export const nb: Pick<Dict, 'mm'> = {
       canvas: 'Interaktiv begrepsgraf',
       keys: 'Klikk på grafen og rull for å zoome (eller knip med to fingre); dra bakgrunnen for å panorere. Klikk på et begrep for å velge det, og klikk igjen for å åpne det. Når grafen har fokus: + og − zoomer, 0 tilbakestiller, piltastene flytter mellom begrepene, Enter åpner det valgte, Escape fjerner valget.',
       selected: '{label}: {relations} relasjoner. Trykk Enter for å åpne.',
+      open: 'Åpne begrepet',
+      noDefinition: 'Ingen definisjon ennå.',
     },
     admin: {
       title: 'Administrasjon',

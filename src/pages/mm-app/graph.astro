@@ -34,7 +34,7 @@ if (isMm) {
     forums = await listForums({ spaceId: viewer.space.id });
     const forum = forums.find((f) => f.slug === forumParam) ?? null;
     forumSlug = forum?.slug ?? '';
-    ({ nodes, edges } = await graph({ spaceId: viewer.space.id, forumId: forum?.id ?? null, status: status || null }));
+    ({ nodes, edges } = await graph({ spaceId: viewer.space.id, forumId: forum?.id ?? null, status: status || null, lang }));
   } catch (err) {
     logPageError('graph', err);
     state = 'unavailable';
@@ -45,7 +45,7 @@ if (state === 'unavailable') Astro.response.status = 503;
 const relLabel = (type: string) => t(lang, `mm.relationTypes.${type}` as MessageKey);
 const labelOf = new Map(nodes.map((n) => [n.id, conceptLabel(n, lang)]));
 const graphData = JSON.stringify({
-  nodes: nodes.map((n) => ({ id: n.id, label: labelOf.get(n.id)!.text, lang: labelOf.get(n.id)!.lang, status: n.status, href: conceptPath(n.id) })),
+  nodes: nodes.map((n) => ({ id: n.id, label: labelOf.get(n.id)!.text, lang: labelOf.get(n.id)!.lang, status: n.status, statusLabel: t(lang, `mm.status.${n.status}` as MessageKey), href: conceptPath(n.id), excerpt: n.excerpt, excerptLang: n.excerptLang })),
   links: edges.map((e) => ({ source: e.source, target: e.target, type: e.type, label: relLabel(e.type) })),
 });
 const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((n) => n.status === s) })).filter((g) => g.nodes.length);
@@ -100,6 +100,8 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
             data-mm-graph
             data-graph={graphData}
             data-selected-template={t(lang, 'mm.graph.selected')}
+            data-open-label={t(lang, 'mm.graph.open')}
+            data-no-definition={t(lang, 'mm.graph.noDefinition')}
             role="group"
             aria-label={t(lang, 'mm.graph.canvas')}
             aria-describedby="mm-g-keys"
