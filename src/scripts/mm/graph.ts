@@ -810,6 +810,16 @@ function draw(holder: HTMLElement): void {
       rel.classList.toggle('is-docked', shouldDock(width));
       fillRel(l);
     }
+    // Docked at the bottom (phone width): keep the line's middle above the card, as setFocus does for a concept.
+    if (!same && shouldDock(width)) {
+      const m = midOf(l, Math.min(1, t.k));
+      const room = height - relSize.h;
+      const offX = m.x < 0 || m.x > width;
+      if (m.y > room - NODE_H || m.y < NODE_H || offX) {
+        auto = false;
+        moveTo({ k: t.k, x: offX ? t.x + width / 2 - m.x : t.x, y: t.y + Math.max(NODE_H, room / 2) - m.y });
+      }
+    }
     const age = l.id && viewAt.has(l.id) ? performance.now() - viewAt.get(l.id)! : Infinity;
     if (l.id && (pinning ? age > VIEW_RECENT : age > VIEW_FRESH) && (!same || pinning)) void loadView(l);
     describe();
