@@ -177,19 +177,25 @@ export function hullPath(boxes: HullBox[], padding: number): string {
 
 /**
  * Where an area's label sits: the midpoint of the hull side that lies highest
- * (smallest mean y; ties: the leftmost), so the label reads along the top edge.
+ * (smallest mean y; ties: the leftmost) — or, with `side: 'bottom'`, lowest —
+ * so the label reads along that edge. Nested areas alternate sides (see
+ * `areaLabelSide`) so an inner area's tab does not sit on its outer one's.
  */
-export function hullLabelAnchor(poly: [number, number][] | null): Point | null {
+export function hullLabelAnchor(poly: [number, number][] | null, side: 'top' | 'bottom' = 'top'): Point | null {
   if (!poly?.length) return null;
   if (poly.length === 1) return { x: poly[0][0], y: poly[0][1] };
+  const sign = side === 'top' ? 1 : -1;
   let best: Point | null = null;
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i], b = poly[(i + 1) % poly.length];
     const m = { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 };
-    if (!best || m.y < best.y - 1e-9 || (Math.abs(m.y - best.y) <= 1e-9 && m.x < best.x)) best = m;
+    if (!best || sign * m.y < sign * best.y - 1e-9 || (Math.abs(m.y - best.y) <= 1e-9 && m.x < best.x)) best = m;
   }
   return best;
 }
+
+/** Label side of an area at nesting `level`: odd levels on the top edge, even ones (innermost) on the bottom. */
+export const areaLabelSide = (level: number): 'top' | 'bottom' => (level % 2 === 1 ? 'top' : 'bottom');
 
 export type AreaEdge = { source: string; target: string; type: string; inferred?: boolean };
 export type AreaGroup = {

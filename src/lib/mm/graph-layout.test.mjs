@@ -114,7 +114,7 @@ test('shouldDock: phone-width frames dock the card', () => {
 // ---------------------------------------------------------------------------
 
 import {
-  hullPolygon, hullPath, hullLabelAnchor, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker,
+  hullPolygon, hullPath, hullLabelAnchor, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker,
   relationSentence, clipToBox, offsetSegment, pairSlots, cycleIndex,
 } from './graph-layout.ts';
 
@@ -172,8 +172,12 @@ test('hullPath is straight segments only (M/L/Z), rounded to 0.1px; nested paddi
   assert.equal(areaPadding(2), 40);
 });
 
-test('hullLabelAnchor: middle of the highest side', () => {
+test('hullLabelAnchor: middle of the highest (or lowest) side; nested levels alternate', () => {
   assert.deepEqual(hullLabelAnchor([[0, 10], [0, 0], [20, 0], [20, 10]]), { x: 10, y: 0 });
+  assert.deepEqual(hullLabelAnchor([[0, 10], [0, 0], [20, 0], [20, 10]], 'bottom'), { x: 10, y: 10 });
+  assert.equal(areaLabelSide(0), 'bottom');
+  assert.equal(areaLabelSide(1), 'top');
+  assert.equal(areaLabelSide(2), 'bottom');
   assert.deepEqual(hullLabelAnchor([[5, 5]]), { x: 5, y: 5 });
   assert.equal(hullLabelAnchor(null), null);
 });

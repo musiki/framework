@@ -133,8 +133,8 @@
 .mm-graph { position: relative; width: 100%; border: var(--mm-rule); margin: 0 0 0.5rem; background: var(--mm-white); }
 .mm-graph:empty { display: none; }
 .mm-graph:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
-.mm-graph svg { display: block; width: 100%; height: 520px; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-.mm-graph svg:active { cursor: grabbing; }
+.mm-graph > svg { display: block; width: 100%; height: 520px; cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.mm-graph > svg:active { cursor: grabbing; }
 .mm-graph .cm-node { cursor: pointer; }
 .mm-graph .cm-node rect { stroke: var(--mm-ink); stroke-width: 2px; fill: var(--mm-st, var(--mm-white)); }
 .mm-graph .cm-node text, .mm-graph text.cm-node-probe { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 13px; fill: var(--mm-ink); pointer-events: none; }
@@ -162,7 +162,7 @@
 .mm-graph svg.has-focus .cm-edge-label:not(.is-on) { opacity: 0.35; }
 .mm-graph .cm-node, .mm-graph .cm-edge, .mm-graph .cm-area { transition: opacity 0.15s; }
 @media (prefers-reduced-motion: reduce) { .mm-graph svg * { transition: none !important; } }
-@media (max-width: 40rem) { .mm-graph svg { height: 420px; } }
+@media (max-width: 40rem) { .mm-graph > svg { height: 420px; } }
 /* Hover / selection card: flat, ink rule, white, square bullet on the link. */
 .mm-graph-card { position: absolute; z-index: 2; box-sizing: border-box; width: min(20rem, calc(100% - 8px)); max-height: calc(100% - 8px); overflow: auto; padding: 0.7rem 0.85rem 0.8rem; background: var(--mm-white); color: var(--mm-ink); border: var(--mm-rule); border-radius: 0; box-shadow: none; }
 .mm-graph-card[hidden] { display: none; }
@@ -183,6 +183,7 @@
 /* Relation card: the sentence, the type's sample, totals, stance buttons, names after the reveal. */
 .mm-graph-relcard { padding-top: 0.5rem; }
 .mm-graph-relcard .mm-graph-card-close { float: right; margin: 0 0 0.25rem 0.5rem; min-height: 2.75rem; }
+.mm-graph-relcard .mm-rt-sample { width: 64px; height: 24px; }
 .mm-graph-relcard-verb { font-family: var(--mm-font-body); font-weight: 700; font-size: 0.95rem; }
 .mm-graph-relcard-type { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem !important; font-size: 0.85rem; clear: both; }
 .mm-graph .mm-graph-relcard-type a { color: var(--mm-ink); text-decoration: underline; text-underline-offset: 0.2em; }

@@ -49,7 +49,7 @@ import { drag } from 'd3-drag';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import {
   truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock,
-  hullPolygon, hullLabelAnchor, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
+  hullPolygon, hullLabelAnchor, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
   clipToBox, offsetSegment, pairSlots, cycleIndex, type Box, type AreaGroup, type Point,
 } from '../../lib/mm/graph-layout';
 import {
@@ -402,7 +402,7 @@ function draw(holder: HTMLElement): void {
       const d = (p: [number, number][] | null) => (p ? `M${p.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join('L')}Z` : null);
       sel.select('.cm-hull:not(.cm-hull-inner)').attr('d', d(poly));
       sel.select('.cm-hull-inner').attr('d', d(hullPolygon(boxes, Math.max(1, pad - 4))));
-      const at = hullLabelAnchor(poly);
+      const at = hullLabelAnchor(poly, areaLabelSide(g.level));
       const tw = (areaTextW.get(g.key) ?? 40) + 10;
       sel.select('.cm-area-tab').attr('display', at ? null : 'none')
         .attr('transform', at ? `translate(${at.x},${at.y}) scale(${s})` : null)
@@ -489,9 +489,12 @@ function draw(holder: HTMLElement): void {
       rel.style.visibility = '';
       return;
     }
-    const m = midOf(relLink, Math.min(1, t.k));
+    const [a, b] = segmentOf(relLink, Math.min(1, t.k));
+    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     rel.style.visibility = m.x < 0 || m.x > width || m.y < 0 || m.y > height ? 'hidden' : '';
-    const p = placeCard({ x: m.x, y: m.y, w: 16, h: 16 }, relSize, { w: width, h: height });
+    // Beside the line rather than on its middle, so the card leaves the two concepts in view when it can.
+    const span = { w: Math.min(Math.abs(b.x - a.x), width / 3) + 16, h: Math.min(Math.abs(b.y - a.y), height / 3) + 16 };
+    const p = placeCard({ x: m.x, y: m.y, ...span }, relSize, { w: width, h: height });
     rel.style.left = `${Math.round(p.x)}px`;
     rel.style.top = `${Math.round(p.y)}px`;
   };
@@ -578,7 +581,6 @@ function draw(holder: HTMLElement): void {
     b.type = 'button';
     b.dataset.act = act;
     if (pressed !== undefined) b.setAttribute('aria-pressed', String(pressed));
-    b.disabled = relBusy;
     b.addEventListener('click', onClick);
     return b;
   };
@@ -645,7 +647,7 @@ function draw(holder: HTMLElement): void {
         ? (mine === 'agree' ? S('rel.stanceAgree') : mine === 'disagree' ? S('rel.stanceDisagree') : S('rel.noStance'))
         : S('rel.yourStance')));
       const row = el('p', 'mm-graph-relcard-buttons');
-      const disabled = !view || relBusy;
+      const disabled = !view;
       const agree = button(S('rel.agree'), 'agree', () => vote(l, mine === 'agree' ? null : 'agree'), mine === 'agree');
       const disagree = button(S('rel.disagree'), 'disagree', () => vote(l, mine === 'disagree' ? null : 'disagree'), mine === 'disagree');
       agree.disabled = disagree.disabled = disabled;
@@ -689,7 +691,7 @@ function draw(holder: HTMLElement): void {
       const box = el('div', 'mm-graph-relcard-settle');
       const b = button(S('rel.settle'), 'settle', () => settle(l));
       b.classList.add('mm-button-quiet');
-      b.disabled = !view || relBusy;
+      b.disabled = !view;
       box.append(b, el('p', 'mm-help', S('rel.settleHelp')));
       parts.push(box);
     }
@@ -725,8 +727,9 @@ function draw(holder: HTMLElement): void {
   };
   const vote = async (l: Link, stance: 'agree' | 'disagree' | null) => {
     if (!l.id || relBusy) return;
+    // Busy: the buttons stay in place (disabling a focused button would drop the focus); a second press is ignored.
     relBusy = true;
-    fillRel(l);
+    rel.setAttribute('aria-busy', 'true');
     try {
       const r = await mmApi<{ relation?: RelationView }>(`/api/mm/relations/${encodeURIComponent(l.id)}/stance`, { method: 'POST', body: { stance } });
       if (r?.relation) {
@@ -738,13 +741,14 @@ function draw(holder: HTMLElement): void {
       say(err instanceof ApiFailure && err.status === 429 ? S('rel.slowDown') : errorText(err));
     } finally {
       relBusy = false;
+      rel.removeAttribute('aria-busy');
       if (relLink === l) fillRel(l);
     }
   };
   const settle = async (l: Link) => {
     if (!l.id || relBusy) return;
     relBusy = true;
-    fillRel(l);
+    rel.setAttribute('aria-busy', 'true');
     try {
       await mmApi(`/api/mm/relations/${encodeURIComponent(l.id)}/settle`, { method: 'POST' });
       l.settled = true;
@@ -756,6 +760,7 @@ function draw(holder: HTMLElement): void {
       say(err instanceof ApiFailure && err.status === 429 ? S('rel.slowDown') : errorText(err));
     } finally {
       relBusy = false;
+      rel.removeAttribute('aria-busy');
       if (relLink === l) fillRel(l);
     }
   };
