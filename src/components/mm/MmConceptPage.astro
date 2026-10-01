@@ -10,8 +10,9 @@
 // own/any), status and permalink (curators), new version (author/curators),
 // and the concept's discussion thread (posts, replies, votes, own edits,
 // moderation, adopt: MmThreadPosts.astro, the same as on a thread page).
-// Sections fold (native <details>, anchors #definition #discussion
-// #new-version #relations #status #history; lib/mm/fold.ts + scripts/mm/fold.ts);
+// Sections fold (native <details id="mm-sec-…">; public anchors #definition
+// #discussion #new-version #relations #status #history are mapped by
+// scripts/mm/fold.ts; lib/mm/fold.ts);
 // history versions are grouped by day, each day foldable.
 // Definitions are markdown: they are shown ONLY through the core's sanitized
 // `definitionHtml` (same mm renderer as posts: KaTeX, LilyPond as same-origin
@@ -28,7 +29,7 @@ import type { RelationTypeView } from '../../lib/mm/relation-types';
 import { typeInverse, typeLabel, typePath } from '../../lib/mm/relation-type-ui';
 import { can } from '../../lib/mm/policy';
 import { threadClientStrings } from '../../lib/mm/page-strings';
-import { FOLD_DEFAULT_OPEN } from '../../lib/mm/fold';
+import { FOLD_DEFAULT_OPEN, sectionId } from '../../lib/mm/fold';
 import type { ConceptPageData } from '../../lib/mm/concept-page';
 import { SLUG_MAX, SLUG_MIN } from '../../lib/mm/slugs';
 import {
@@ -84,7 +85,7 @@ const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne'
 ) : state !== 'ok' || !concept ? (
   <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
 ) : (
-  <MmLayout lang={lang} title={label.text} description={shown ? definitionExcerpt(shown.definition, 200) : undefined}>
+  <MmLayout lang={lang} title={label.text} description={shown ? definitionExcerpt(shown.definition, 200) : undefined} canonical={selfPath}>
     <div data-mm-i18n={strings} class={`mm-st-${concept.status}`}>
       <p class="mm-meta">
         {concept.forum && <a class="mm-more" href={forumPath(concept.forum.slug)}>{t(lang, 'mm.concept.proposedIn', { forum: concept.forum.title })}</a>}
@@ -100,7 +101,7 @@ const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne'
       </p>
       <p class="mm-alert" data-mm-flash role="alert" hidden></p>
 
-      <details class="mm-fold" id="definition" data-mm-fold="definition" open={open.definition}>
+      <details class="mm-fold" id={sectionId('definition')} data-mm-fold="definition" open={open.definition}>
         <summary><h2>{t(lang, 'mm.concept.definitionTitle')}</h2></summary>
         <div class="mm-fold-body">
         {pick?.missingTranslation && <p class="mm-note">{t(lang, 'mm.concept.missingNb')}</p>}
@@ -141,7 +142,7 @@ const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne'
         </div>
       </details>
 
-      <details class="mm-fold" id="discussion" data-mm-fold="discussion" open={open.discussion}>
+      <details class="mm-fold" id={sectionId('discussion')} data-mm-fold="discussion" open={open.discussion}>
         <summary><h2>{t(lang, 'mm.concept.discussion')}{discussion && <span class="mm-fold-count"> · {discussion.posts.filter((p) => p.status === 'published').length}</span>}</h2></summary>
         <div class="mm-fold-body">
           {discussion ? (
@@ -156,7 +157,7 @@ const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne'
         </div>
       </details>
 
-      <details class="mm-fold" id="new-version" data-mm-fold="new-version" open={open['new-version']}>
+      <details class="mm-fold" id={sectionId('new-version')} data-mm-fold="new-version" open={open['new-version']}>
         <summary><h2>{t(lang, 'mm.concept.editTitle')}</h2></summary>
         <div class="mm-fold-body">
       {canEdit ? (
@@ -187,7 +188,7 @@ const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne'
         </div>
       </details>
 
-      <details class="mm-fold" id="relations" data-mm-fold="relations" open={open.relations}>
+      <details class="mm-fold" id={sectionId('relations')} data-mm-fold="relations" open={open.relations}>
         <summary><h2>{t(lang, 'mm.concept.relationsTitle')}<span class="mm-fold-count"> · {concept.relations.length}</span></h2></summary>
         <div class="mm-fold-body">
         {concept.relations.length ? (
@@ -261,7 +262,7 @@ const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne'
         </div>
       </details>
 
-      <details class="mm-fold" id="status" data-mm-fold="status" open={open.status}>
+      <details class="mm-fold" id={sectionId('status')} data-mm-fold="status" open={open.status}>
         <summary><h2>{t(lang, 'mm.status.label')}</h2></summary>
         <div class="mm-fold-body">
       <p><span class="mm-badge">{t(lang, `mm.status.${concept.status}` as MessageKey)}</span>{' '}{t(lang, `mm.status.help.${concept.status}` as MessageKey)}</p>
@@ -303,7 +304,7 @@ const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne'
         </div>
       </details>
 
-      <details class="mm-fold" id="history" data-mm-fold="history" open={open.history}>
+      <details class="mm-fold" id={sectionId('history')} data-mm-fold="history" open={open.history}>
         <summary><h2>{t(lang, 'mm.concept.historyTitle')}<span class="mm-fold-count"> · {concept.history.length}</span></h2></summary>
         <div class="mm-fold-body">
           <p class="mm-help">{t(lang, 'mm.concept.historyLead')}</p>

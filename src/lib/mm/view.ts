@@ -155,6 +155,16 @@ export function forumCrumbs(b: BoardRef & { title: string }, current: string | n
 export const conceptPath = (slug: string) => (isRootSlug(slug) ? `/${slug}` : `/c/${encodeURIComponent(slug)}`);
 
 /**
+ * Where an old URL of a concept's discussion thread goes: the concept page
+ * with the request's query kept and from=thread added (no fragment).
+ */
+export function conceptThreadRedirect(slug: string, search = ''): string {
+  const params = new URLSearchParams(search);
+  params.set('from', 'thread');
+  return `${conceptPath(slug)}?${params.toString()}`;
+}
+
+/**
  * A user's name as it may appear publicly: trimmed, and never anything that
  * looks like an e-mail address (musiki fills User.name from sign-in profiles;
  * a name containing '@' is treated as no name). Null when unusable.

@@ -2,11 +2,16 @@
 // concept page. Without JS the server's defaults apply (lib/mm/fold.ts). With
 // it: the reader's own choice per section is remembered in localStorage
 // (`mm-fold:<section>`, the same for every concept; storage failures are
-// ignored), and an anchor (#history, #post-…) opens the section it points
-// into (on load and on hash changes). Printing shows every section and
-// every folded group.
+// ignored), and an anchor (#history — mapped to the section's prefixed id —
+// or #post-…) opens the section it points into (on load and on hash
+// changes). A reader sent here from an old thread URL (?from=thread) lands on
+// the Discussion unless their own fragment (#post-…) names something; the
+// `from` parameter is then dropped from the address. Printing shows every
+// section and every folded group.
 
-import { FOLD_DEFAULT_OPEN, foldKey, foldValue, hashTarget, initialFoldOpen, parseFoldValue } from '../../lib/mm/fold.ts';
+import {
+  FOLD_DEFAULT_OPEN, arrivalTarget, foldKey, foldValue, initialFoldOpen, parseFoldValue, resolveHashTarget,
+} from '../../lib/mm/fold.ts';
 
 const folds = [...document.querySelectorAll<HTMLDetailsElement>('details[data-mm-fold]')];
 
@@ -40,8 +45,10 @@ function foldsAround(target: Element | null): HTMLDetailsElement[] {
   return out;
 }
 
+const exists = (id: string) => document.getElementById(id) !== null;
+
 function targetOf(hash: string): Element | null {
-  const id = hashTarget(hash);
+  const id = resolveHashTarget(hash, exists);
   return id ? document.getElementById(id) : null;
 }
 
@@ -54,7 +61,18 @@ function openForHash(scroll: boolean): void {
 }
 
 if (folds.length) {
-  const target = targetOf(window.location.hash);
+  const params = new URLSearchParams(window.location.search);
+  const arrival = arrivalTarget({ hash: window.location.hash, from: params.get('from'), exists });
+  const target = arrival ? document.getElementById(arrival) : null;
+  if (params.has('from')) {
+    params.delete('from');
+    const query = params.toString();
+    try {
+      history.replaceState(history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    } catch {
+      /* the address keeps ?from=thread: harmless */
+    }
+  }
   const targeted = new Set(foldsAround(target));
   for (const d of folds) {
     const section = d.dataset.mmFold ?? '';
@@ -63,7 +81,8 @@ if (folds.length) {
   }
   // Nested groups (history days) the anchor points into.
   for (const d of targeted) setOpen(d, true);
-  // The browser scrolled before the section opened: bring the target back into view.
+  // The browser scrolled before the section opened (or never: a public section
+  // anchor or ?from=thread names no element): bring the target into view.
   if (target && targeted.size) requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
 
   for (const d of folds) {
@@ -79,6 +98,14 @@ if (folds.length) {
   // In-page links to an anchor that is already the current hash fire no hashchange.
   document.addEventListener('click', (event) => {
     const a = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href^="#"]') : null;
+    // Public section anchors (#history) have no element of that id: map them ourselves.
+    const href = a?.getAttribute('href') ?? '';
+    if (a && href !== window.location.hash && !document.getElementById(href.slice(1)) && targetOf(href)) {
+      event.preventDefault();
+      history.pushState(history.state, '', href);
+      openForHash(true);
+      return;
+    }
     if (a && a.getAttribute('href') === window.location.hash) openForHash(true);
   });
 }

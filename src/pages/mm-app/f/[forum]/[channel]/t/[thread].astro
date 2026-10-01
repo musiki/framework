@@ -2,7 +2,7 @@
 // Internal page for mm "/f/<group>/<channel>/t/<thread id>" (middleware
 // rewrite): a thread of a channel. The thread must be in THAT channel of
 // THAT group, else 404.
-// A concept's discussion thread answers 301 to /<concept slug>#discussion.
+// A concept's discussion thread answers 301 to /<concept slug>?from=thread.
 // Rendering: components/mm/MmThreadPage.astro.
 import MmThreadPage from '../../../../../../components/mm/MmThreadPage.astro';
 import { applyMmLang } from '../../../../../../lib/mm/ui-lang';

@@ -16,9 +16,11 @@ interface Props {
   title?: string;
   description?: string;
   noindex?: boolean;
+  /** Canonical path of the page (e.g. a concept's permalink /<slug>). */
+  canonical?: string;
 }
 
-const { lang, title, description, noindex = false } = Astro.props;
+const { lang, title, description, noindex = false, canonical } = Astro.props;
 const siteName = t(lang, 'mm.siteName');
 const pageTitle = title ? `${title} · ${siteName}` : siteName;
 const metaDescription = description ?? t(lang, 'mm.tagline');
@@ -44,6 +46,7 @@ const navItems = [
     <title>{pageTitle}</title>
     <meta name="description" content={metaDescription} />
     {noindex && <meta name="robots" content="noindex" />}
+    {canonical && <link rel="canonical" href={canonical} />}
     <link rel="icon" href="/mm/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/mm/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/mm/apple-touch-icon.png" />

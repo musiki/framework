@@ -2,7 +2,7 @@
 // Internal page for mm "/f/<group>/t/<thread id>" (middleware rewrite): a
 // thread that lives in the group itself (or in a forum without channels).
 // A channel's thread under this URL is a 404 (its URL has the channel).
-// A concept's discussion thread answers 301 to /<concept slug>#discussion.
+// A concept's discussion thread answers 301 to /<concept slug>?from=thread.
 // Rendering: components/mm/MmThreadPage.astro.
 import MmThreadPage from '../../../../../components/mm/MmThreadPage.astro';
 import { applyMmLang } from '../../../../../lib/mm/ui-lang';

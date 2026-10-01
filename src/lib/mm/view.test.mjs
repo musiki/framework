@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pickDefinition, conceptLabel, groupByDay, dayKey, safeHttpUrl, formatDate, forumPath, threadPath, conceptPath, displayName,
+  pickDefinition, conceptLabel, groupByDay, dayKey, conceptThreadRedirect, safeHttpUrl, formatDate, forumPath, threadPath, conceptPath, displayName,
 } from './view.ts';
 
 const en = { lang: 'en', definition: 'English text' };
@@ -157,4 +157,12 @@ test('groupByDay: consecutive versions of the same UTC day share a group, order 
   assert.deepEqual(groupByDay([], 'nb'), []);
   assert.equal(dayKey('nope'), '');
   assert.equal(dayKey(null), '');
+});
+
+test('conceptThreadRedirect: permalink + query kept + from=thread, never a fragment', () => {
+  assert.equal(conceptThreadRedirect('pharmakon'), '/pharmakon?from=thread');
+  assert.equal(conceptThreadRedirect('pharmakon', '?lang=nb'), '/pharmakon?lang=nb&from=thread');
+  assert.equal(conceptThreadRedirect('pharmakon', '?from=x&lang=en'), '/pharmakon?from=thread&lang=en');
+  assert.equal(conceptThreadRedirect('graph'), '/c/graph?from=thread');
+  assert.doesNotMatch(conceptThreadRedirect('a-b', '?q=%23x'), /#/);
 });

@@ -5,14 +5,14 @@
 //   /f/<group>/t/<thread>           thread of the group itself
 //   /f/<group>/<channel>/t/<thread> thread of a channel
 // A concept's discussion thread (under its correct board URL) is a 301 to the
-// concept page, /<slug>#discussion, where it is shown and answered.
+// concept page, /<slug>?from=thread, where it is shown and answered.
 // A thread requested under a board it does not belong to is a 404 (never a
 // redirect), as is a channel of another group or the reserved channel slug.
 
 import { getForumByPath, listPosts, listThreads, type ForumSummary, type ThreadSummary, type ThreadView } from './forum';
 import { listConcepts, type ConceptListItem } from './concepts';
 import { loadMmViewer, logPageError, type MmViewer } from './page-data';
-import { boardMatchesPath, conceptPath, pageErrorState } from './view';
+import { boardMatchesPath, conceptThreadRedirect, pageErrorState } from './view';
 import { isUuid } from '../tenant/space-roles';
 import type { MmLang } from './ui-lang';
 
@@ -70,12 +70,13 @@ export async function loadThreadPage(
     // The thread must belong to the board named by the URL (group or group/channel).
     if (!view || !boardMatchesPath(view.thread.forum, groupSlug, channelSlug)) return { state: 'notFound', view: null, redirect: null };
     // A concept's discussion thread lives on the concept page (Discussion section).
-    if (view.thread.concept) {
-      return { state: 'ok', view: null, redirect: `${conceptPath(view.thread.concept.slug)}${search}#discussion` };
-    }
+    // No fragment in the Location: the browser keeps the reader's own (#post-…);
+    // ?from=thread lets the page land on the Discussion otherwise (scripts/mm/fold.ts).
+    if (view.thread.concept) return { state: 'ok', view: null, redirect: conceptThreadRedirect(view.thread.concept.slug, search) };
     return { state: 'ok', view, redirect: null };
   } catch (err) {
     logPageError('thread', err);
     return { state: pageErrorState(err), view: null, redirect: null };
   }
 }
+
