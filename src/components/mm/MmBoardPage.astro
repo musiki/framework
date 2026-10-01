@@ -14,15 +14,17 @@
 import MmLayout from '../../layouts/MmLayout.astro';
 import MmStatus from './MmStatus.astro';
 import MmBreadcrumbs from './MmBreadcrumbs.astro';
+import MmThreadItem from './MmThreadItem.astro';
 import { t, type MessageKey } from '../../lib/i18n';
 import { POST_MOVES } from '../../lib/mm/forum';
 import { can } from '../../lib/mm/policy';
 import { clientStrings } from '../../lib/mm/page-strings';
 import { SLUG_MAX, SLUG_MIN } from '../../lib/mm/slugs';
 import type { BoardPageData } from '../../lib/mm/board-pages';
+import { THREAD_ORDERS, groupThreadsByKind, parseThreadOrder, threadOrderLink } from '../../lib/mm/thread-list';
 import type { MmLang } from '../../lib/mm/ui-lang';
 import {
-  boardPath, boardThreadPath, conceptLabel, conceptPath, displayName, forumCrumbs, formatDate,
+  boardPath, conceptLabel, conceptPath, forumCrumbs, formatDate,
 } from '../../lib/mm/view';
 
 interface Props {
@@ -39,8 +41,6 @@ const hasChannels = channels.length > 0;
 const role = viewer?.role ?? null;
 const canPost = can(role, 'post');
 const canPropose = can(role, 'proposeConcept');
-const formerMember = t(lang, 'mm.common.formerMember');
-const memberLabel = t(lang, 'mm.common.member');
 const strings = clientStrings(lang, {
   'cite.label': t(lang, 'mm.thread.citations.label'),
   'cite.searching': t(lang, 'mm.thread.citations.searching'),
@@ -51,7 +51,7 @@ const strings = clientStrings(lang, {
 const apiRef = forum ? (isChannel ? forum.id : forum.slug) : '';
 const apiPath = encodeURIComponent(apiRef);
 const crumbs = forum ? forumCrumbs(forum) : [];
-const threadsTitle = hasChannels ? t(lang, 'mm.forum.groupThreadsTitle') : t(lang, 'mm.forum.threadsTitle');
+const order = parseThreadOrder(Astro.url.searchParams);
 const threadsEmpty = hasChannels ? t(lang, 'mm.forum.groupThreadsEmpty') : t(lang, 'mm.forum.threadsEmpty');
 const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(lang, 'mm.forum.conceptsTitle');
 ---
@@ -89,31 +89,32 @@ const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(l
           )}
 
           <section aria-labelledby="mm-threads">
-            <h2 id="mm-threads">{threadsTitle}</h2>
-            {threads.length ? (
-              <ul class="mm-list">
-                {threads.map((th) => (
-                  <li>
-                    <a class="mm-list-title" href={th.concept ? `${conceptPath(th.concept.slug)}#discussion` : boardThreadPath(forum!, th.id)}>{th.title}</a>
-                    <ul class="mm-inline-list">
-                      {th.isPinned && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.pinned')}</span></li>}
-                      {th.isLocked && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.locked')}</span></li>}
-                      {th.concept && (
-                        <li>
-                          <a href={conceptPath(th.concept.slug)}>{t(lang, 'mm.forum.conceptThread', { label: th.concept.label })}</a>
-                        </li>
-                      )}
-                    </ul>
-                    <p class="mm-meta">
-                      <span>{t(lang, 'mm.forum.startedBy', { name: displayName(th.createdBy, formerMember, memberLabel) })}</span>
-                      <span>{th.postCount === 1 ? t(lang, 'mm.forum.postsOne') : t(lang, 'mm.forum.posts', { n: th.postCount })}</span>
-                      <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(th.lastActivityAt, lang) })}</span>
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
+            <div class="mm-section-head">
+              <h2 id="mm-threads">{t(lang, 'mm.forum.threadsTitle')}</h2>
+              {threads.length > 1 && (
+                <nav class="mm-order" aria-label={t(lang, 'mm.forum.orderLabel')}>
+                  <span class="mm-meta">{t(lang, 'mm.forum.orderLabel')}</span>
+                  {THREAD_ORDERS.map((o) => (
+                    <a href={threadOrderLink(Astro.url.searchParams, o)} aria-current={o === order ? 'true' : undefined}>{t(lang, `mm.forum.order.${o}`)}</a>
+                  ))}
+                </nav>
+              )}
+            </div>
+            {!threads.length ? (
               <p class="mm-muted">{threadsEmpty}</p>
+            ) : order === 'type' ? (
+              groupThreadsByKind(threads).map((g) => (
+                <section class="mm-thread-group" aria-labelledby={`mm-threads-${g.kind}`}>
+                  <h3 id={`mm-threads-${g.kind}`}>{t(lang, `mm.forum.kindGroup.${g.kind}`)}{' '}<span class="mm-meta">({g.threads.length})</span></h3>
+                  <ul class="mm-list mm-thread-list">
+                    {g.threads.map((th) => <MmThreadItem lang={lang} forum={forum!} th={th} />)}
+                  </ul>
+                </section>
+              ))
+            ) : (
+              <ul class="mm-list mm-thread-list">
+                {threads.map((th) => <MmThreadItem lang={lang} forum={forum!} th={th} />)}
+              </ul>
             )}
           </section>
 

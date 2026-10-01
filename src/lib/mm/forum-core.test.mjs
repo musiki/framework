@@ -304,12 +304,35 @@ test('listThreads: forum of the space, display names only, concept marker, own f
   assert.equal(threads[0].own, true);
   assert.equal(threads[1].own, false);
   assert.deepEqual(threads[0].concept, { slug: 'pharmakon', label: 'Pharmakon' });
+  assert.equal(threads[0].kind, 'concept');
+  assert.equal(threads[1].kind, 'post');
+  assert.equal(threads[1].relationType, null);
   assert.equal(threads[0].lastActivityAt, '2026-09-05T00:00:00Z');
   assert.equal(threads[1].lastActivityAt, '2026-09-03T00:00:00Z');
   assert.ok(!JSON.stringify(threads).includes(U.member), 'no user ids');
   const list = calls.find((c) => c.text.includes('FROM "ForumThread" t'));
   assert.match(list.text, /t\."spaceId" = \$1::uuid AND t\."boardId" = \$2::uuid AND t\."archivedAt" IS NULL/);
   await rejectsStatus(listThreads(q, { spaceId: SPACE, forumId: id(99) }), 404);
+});
+
+test('listThreads: relation-type threads and threads that ground a relation are of kind relation', async () => {
+  const base = { isPinned: false, isLocked: false, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-02T00:00:00Z',
+    createdByUserId: U.member, createdByName: 'Ada', conceptSlug: null, conceptLabel: null, postCount: 1, lastPostAt: null };
+  const { q, calls } = fakeQuery([
+    forumByIdRoute(),
+    ['FROM "ForumThread" t', () => [
+      { ...base, id: id(41), title: 'Contains', relationTypeSlug: 'contains', relationTypeLabel: 'contains', groundsRelation: false },
+      { ...base, id: id(42), title: 'Why A derives from B', relationTypeSlug: null, relationTypeLabel: null, groundsRelation: true },
+      { ...base, id: id(43), title: 'Pharmakon', conceptSlug: 'pharmakon', conceptLabel: 'Pharmakon', relationTypeSlug: null, groundsRelation: true },
+    ]],
+  ]);
+  const threads = await listThreads(q, { spaceId: SPACE, forumId: FORUM });
+  assert.deepEqual(threads.map((t) => t.kind), ['relation', 'relation', 'concept']);
+  assert.deepEqual(threads[0].relationType, { slug: 'contains', label: 'contains' });
+  assert.equal(threads[1].relationType, null);
+  const list = calls.find((c) => c.text.includes('FROM "ForumThread" t'));
+  assert.match(list.text, /rc\.kind = 'relation-type'/);
+  assert.match(list.text, /fp\."threadId" = t\.id AND fp\.status = 'published'/);
 });
 
 test('listThreads: archived forum is not found', async () => {

@@ -1,7 +1,7 @@
 ---
 // Shell of the MishMash Concept Machine (tenant mm): MishMash identity
 // (tokens in src/styles/mm-brand.css), header nav, en/nb switch, footer
-// with the MishMash wordmark as "built for the MishMash network".
+// with the MishMash, NMH and NordArt logos in one row, then credits and links.
 // No external requests: fonts and images are served from /mm/. Nothing in
 // here mentions musiki. Pages resolve `lang` in their own frontmatter with
 // applyMmLang (cookies cannot be set once the layout streams).
@@ -97,15 +97,19 @@ const navItems = [
 
     <footer class="mm-footer">
       <div class="mm-wrap mm-footer-inner">
-        <a class="mm-built" href={LAB_URL}>
-          <img src="/mm/mishmash-wordmark-black.svg" alt={t(lang, 'mm.footer.wordmarkAlt')} width="69" height="48" />
-          <span>{t(lang, 'mm.footer.builtFor')}</span>
-        </a>
-        <ul class="mm-footer-links">
-          <li><a href={LAB_URL}>{t(lang, 'mm.footer.lab')}</a></li>
-          <li><a href="/about">{t(lang, 'mm.nav.about')}</a></li>
-          <li>{t(lang, 'mm.footer.privacy')}</li>
+        <ul class="mm-footer-logos">
+          <li><a href={LAB_URL}><img src="/mm/mishmash-wordmark-black.svg" alt={t(lang, 'mm.footer.wordmarkAlt')} width="58" height="40" /></a></li>
+          <li><a href="https://nmh.no/en"><img src="/mm/nmh-logo.svg" alt={t(lang, 'mm.footer.nmhAlt')} width="141" height="40" /></a></li>
+          <li><img src="/mm/nordart-logo.svg" alt={t(lang, 'mm.footer.nordartAlt')} width="132" height="40" /></li>
         </ul>
+        <div class="mm-footer-text">
+          <p class="mm-footer-credit"><span>{t(lang, 'mm.footer.builtFor')}</span> <span>{t(lang, 'mm.footer.developedAt')}</span></p>
+          <ul class="mm-footer-links">
+            <li><a href={LAB_URL}>{t(lang, 'mm.footer.lab')}</a></li>
+            <li><a href="/about">{t(lang, 'mm.nav.about')}</a></li>
+            <li>{t(lang, 'mm.footer.privacy')}</li>
+          </ul>
+        </div>
       </div>
     </footer>
   </body>
@@ -223,12 +227,15 @@ const navItems = [
 
   .mm-alert { border-left: 6px solid var(--mm-red); background: var(--mm-pink-tint); padding: 0.75rem 1rem; }
 
-  /* Footer: ink rule, wordmark as "built for the MishMash network". */
+  /* Footer: ink rule; the three logos in one row (MishMash, NMH, NordArt), then credits and links. */
   .mm-footer { border-top: var(--mm-rule); background: var(--mm-white); }
-  .mm-footer-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 0.9rem; }
-  .mm-built { display: inline-flex; align-items: center; gap: 0.9rem; text-decoration: none; font-family: var(--mm-font-display); font-weight: 700; font-size: 1.05rem; }
-  .mm-built:hover { background: none; text-decoration: underline; text-decoration-color: var(--mm-purple); }
-  .mm-built img { display: block; height: 48px; width: auto; padding: 6px; }
+  .mm-footer-inner { display: grid; gap: 1rem; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 0.9rem; }
+  .mm-footer-logos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2.25rem; }
+  .mm-footer-logos a { display: block; }
+  .mm-footer-logos a:hover { background: none; }
+  .mm-footer-logos img { display: block; height: 40px; width: auto; }
+  .mm-footer-credit { margin: 0 0 0.35rem; font-family: var(--mm-font-display); font-weight: 700; font-size: 1.05rem; }
+  .mm-footer-credit > span + span::before { content: " · "; }
   .mm-footer-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; color: var(--mm-ink-70); }
 
   @media (prefers-reduced-motion: reduce) {

@@ -152,6 +152,14 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
             <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-graph-act="fit" title={t(lang, 'mm.graph.fitLabel')}>{t(lang, 'mm.graph.fit')}</button>
             <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-graph-act="reset" title={t(lang, 'mm.graph.resetLabel')}>{t(lang, 'mm.graph.reset')}</button>
             <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-graph-act="labels" aria-pressed="false">{t(lang, 'mm.graph.showLabels')}</button>
+            <button type="button" class="mm-button mm-button-small mm-button-quiet mm-graph-full-btn" data-mm-graph-act="full" aria-pressed="false"
+              aria-label={t(lang, 'mm.graph.fullscreen')} title={t(lang, 'mm.graph.fullscreen')}
+              data-enter-label={t(lang, 'mm.graph.fullscreen')} data-exit-label={t(lang, 'mm.graph.exitFullscreen')}>
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+                <path class="mm-fs-enter" d="M1 5V1h4M11 1h4v4M15 11v4h-4M5 15H1v-4" />
+                <path class="mm-fs-exit" d="M5 1v4H1M15 5h-4V1M11 15v-4h4M1 11h4v4" />
+              </svg>
+            </button>
           </div>
           <div
             class="mm-graph"

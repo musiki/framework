@@ -1,0 +1,57 @@
+---
+// One row of a board's thread list (MmBoardPage). A small ink glyph from
+// primitive geometry says what the thread is about, without colour:
+//   concept  ● a node (as in the graph)
+//   relation ●—● two nodes and an edge
+//   post     □ a page
+// The glyph is decorative; its name is given as text for screen readers.
+import { t } from '../../lib/i18n';
+import type { ForumSummary, ThreadSummary } from '../../lib/mm/forum';
+import type { MmLang } from '../../lib/mm/ui-lang';
+import { typePath } from '../../lib/mm/relation-type-ui';
+import { boardThreadPath, conceptPath, displayName, formatDate } from '../../lib/mm/view';
+
+interface Props {
+  lang: MmLang;
+  forum: ForumSummary;
+  th: ThreadSummary;
+}
+const { lang, forum, th } = Astro.props;
+const formerMember = t(lang, 'mm.common.formerMember');
+const memberLabel = t(lang, 'mm.common.member');
+const kindName = t(lang, `mm.forum.kind.${th.kind}`);
+---
+<li class="mm-thread-item">
+  <span class="mm-thread-kind" title={kindName}>
+    <svg viewBox="0 0 24 12" width="24" height="12" aria-hidden="true" focusable="false">
+      {th.kind === 'concept' && <circle cx="12" cy="6" r="4.5" />}
+      {th.kind === 'relation' && (
+        <>
+          <line x1="5" y1="6" x2="19" y2="6" />
+          <circle cx="4" cy="6" r="3" />
+          <circle cx="20" cy="6" r="3" />
+        </>
+      )}
+      {th.kind === 'post' && <rect x="7.5" y="1.5" width="9" height="9" class="mm-glyph-open" />}
+    </svg>
+    <span class="mm-visually-hidden">{kindName}: </span>
+  </span>
+  <div>
+    <a class="mm-list-title" href={th.concept ? `${conceptPath(th.concept.slug)}#discussion` : boardThreadPath(forum, th.id)}>{th.title}</a>
+    <ul class="mm-inline-list">
+      {th.isPinned && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.pinned')}</span></li>}
+      {th.isLocked && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.locked')}</span></li>}
+      {th.concept && (
+        <li><a href={conceptPath(th.concept.slug)}>{t(lang, 'mm.forum.conceptThread', { label: th.concept.label })}</a></li>
+      )}
+      {th.relationType && (
+        <li><a href={typePath(th.relationType.slug)}>{t(lang, 'mm.forum.relationTypeThread', { label: th.relationType.label })}</a></li>
+      )}
+    </ul>
+    <p class="mm-meta">
+      <span>{t(lang, 'mm.forum.startedBy', { name: displayName(th.createdBy, formerMember, memberLabel) })}</span>
+      <span>{th.postCount === 1 ? t(lang, 'mm.forum.postsOne') : t(lang, 'mm.forum.posts', { n: th.postCount })}</span>
+      <span>{t(lang, 'mm.forumList.lastActivity', { date: formatDate(th.lastActivityAt, lang) })}</span>
+    </p>
+  </div>
+</li>

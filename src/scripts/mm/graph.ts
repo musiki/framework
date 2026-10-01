@@ -72,6 +72,7 @@ import {
 } from '../../lib/mm/relation-type-ui';
 import { conceptPath, threadPath } from '../../lib/mm/view';
 import { ApiFailure, errorText, mmApi, pageStrings } from './api';
+import { setupGraphFullscreen } from './graph-fullscreen';
 
 // Type filter from the relation modeler table (relation-types.ts): the slugs
 // whose relations are shown; null = all. Kept at module level so a state sent
@@ -1127,15 +1128,20 @@ function draw(holder: HTMLElement): void {
   };
 
   // --- zoom / pan ---------------------------------------------------------
+  const fullBtn = wrap?.querySelector<HTMLButtonElement>('[data-mm-graph-act="full"]');
+  const full = wrap && fullBtn
+    ? setupGraphFullscreen(wrap, fullBtn, { enter: fullBtn.dataset.enterLabel ?? '', exit: fullBtn.dataset.exitLabel ?? '' })
+    : null;
   const zoomer = zoom<SVGSVGElement, unknown>()
     .scaleExtent(SCALE)
     .clickDistance(4)
     // Plain wheel scrolls the page unless the graph has focus; pinch (ctrl+wheel) always zooms.
     .filter((e: Event) => {
       const ev = e as WheelEvent;
-      if (ev.type === 'wheel') return ev.ctrlKey || holder.matches(':focus-within');
+      // In full screen there is no page to scroll: wheel zooms, one finger pans.
+      if (ev.type === 'wheel') return ev.ctrlKey || full?.isFull() || holder.matches(':focus-within');
       // One finger scrolls the page (touch-action: pan-y); two fingers pan and zoom the graph.
-      if (ev.type.startsWith('touch')) return (e as TouchEvent).touches.length > 1;
+      if (ev.type.startsWith('touch')) return (e as TouchEvent).touches.length > 1 || !!full?.isFull();
       return !ev.ctrlKey && !(ev as MouseEvent).button;
     })
     .on('zoom', (e) => {
@@ -1353,6 +1359,8 @@ function draw(holder: HTMLElement): void {
         case 'out': zoomBy(1 / 1.4); break;
         case 'fit': auto = false; fit(); break;
         case 'reset': reset(); break;
+        // Refit to the new size once the ResizeObserver sees it.
+        case 'full': auto = true; full?.toggle(); break;
         case 'labels':
           showAll = !showAll;
           btn.setAttribute('aria-pressed', String(showAll));

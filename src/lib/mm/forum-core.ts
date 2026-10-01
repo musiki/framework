@@ -720,11 +720,21 @@ export type ThreadSummary = {
   /** Whether the viewer started it; never the user id itself. */
   own: boolean;
   concept: { slug: string; label: string } | null;
+  /** The relation type whose definition this thread discusses, if any. */
+  relationType: { slug: string; label: string } | null;
+  /**
+   * What the thread is about: a concept's discussion, a relation (a relation
+   * type's discussion, or a thread where a relation was argued), or plain posts.
+   */
+  kind: ThreadKind;
   postCount: number;
   lastActivityAt: string;
   createdAt: string;
   updatedAt: string;
 };
+
+/** Grouping order on the board pages: lib/mm/thread-list.ts. */
+export type ThreadKind = 'concept' | 'relation' | 'post';
 
 /** Public: threads of an active forum of the space, pinned first then most recent. */
 export async function listThreads(
@@ -737,6 +747,11 @@ export async function listThreads(
     q,
     `SELECT t.id, t.title, t."isPinned", t."isLocked", t."createdAt", t."updatedAt", t."createdByUserId",
             u.name AS "createdByName", c.slug AS "conceptSlug", c.label AS "conceptLabel",
+            rtype.slug AS "relationTypeSlug", rtype.label AS "relationTypeLabel",
+            EXISTS (
+              SELECT 1 FROM "ConceptRelation" cr JOIN "ForumPost" fp ON fp.id = cr."fromPostId"
+              WHERE fp."threadId" = t.id AND fp.status = 'published'
+            ) AS "groundsRelation",
             (SELECT count(*) FROM "ForumPost" p WHERE p."threadId" = t.id AND p.status = 'published')::int AS "postCount",
             (SELECT max(p."createdAt") FROM "ForumPost" p WHERE p."threadId" = t.id AND p.status = 'published') AS "lastPostAt"
      FROM "ForumThread" t
@@ -746,6 +761,11 @@ export async function listThreads(
        WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId" AND c.kind = 'concept'
        ORDER BY c."createdAt" ASC, c.id ASC LIMIT 1
      ) c ON true
+     LEFT JOIN LATERAL (
+       SELECT rt.slug, rt.label FROM "Concept" rc JOIN "RelationType" rt ON rt."conceptId" = rc.id
+       WHERE rc."threadId" = t.id AND rc."spaceId" = t."spaceId" AND rc.kind = 'relation-type'
+       ORDER BY rc."createdAt" ASC, rc.id ASC LIMIT 1
+     ) rtype ON true
      WHERE t."spaceId" = $1::uuid AND t."boardId" = $2::uuid AND t."archivedAt" IS NULL
      ORDER BY t."isPinned" DESC, t."updatedAt" DESC, t.id DESC
      LIMIT ${THREAD_LIST_LIMIT}`,
@@ -759,6 +779,8 @@ export async function listThreads(
     createdBy: userRef(r.createdByUserId, r.createdByName),
     own: !!viewerUserId && r.createdByUserId === viewerUserId,
     concept: r.conceptSlug ? { slug: r.conceptSlug, label: r.conceptLabel } : null,
+    relationType: !r.conceptSlug && r.relationTypeSlug ? { slug: r.relationTypeSlug, label: r.relationTypeLabel } : null,
+    kind: r.conceptSlug ? 'concept' : r.relationTypeSlug || r.groundsRelation ? 'relation' : 'post',
     postCount: Number(r.postCount ?? 0),
     lastActivityAt: latest(r.updatedAt, r.lastPostAt),
     createdAt: r.createdAt,

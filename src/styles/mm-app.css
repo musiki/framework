@@ -36,6 +36,18 @@
 
 .mm-pre-line { white-space: pre-line; }
 
+/* Board thread list: a glyph of primitive geometry per kind (concept ●,
+   relation ●—●, posts □), ink only; Date / Type order links. */
+.mm-section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; }
+.mm-order { display: flex; gap: 0.6rem; align-items: baseline; font-size: 0.9rem; }
+.mm-order a { text-decoration: none; border-bottom: 2px solid transparent; }
+.mm-order a[aria-current='true'] { border-bottom-color: var(--mm-ink); font-weight: 700; }
+.mm-thread-list > li.mm-thread-item { display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); align-items: start; }
+.mm-thread-kind { display: inline-flex; padding-top: 0.45rem; color: var(--mm-ink); }
+.mm-thread-kind svg { fill: currentColor; stroke: currentColor; stroke-width: 1.6; }
+.mm-thread-kind .mm-glyph-open { fill: none; }
+.mm-thread-group h3 { margin: 1.25rem 0 0.4rem; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
 /* Forms. */
 .mm-form { display: grid; gap: 0.9rem; max-width: 42rem; }
 .mm-form-row { display: grid; gap: 0.3rem; }
@@ -176,6 +188,30 @@
 .mm-graph svg .cm-gone, .mm-graph svg .cm-gone * { pointer-events: none !important; }
 @media (prefers-reduced-motion: reduce) { .mm-graph svg * { transition: none !important; } }
 @media (max-width: 40rem) { .mm-graph > svg { height: 420px; } }
+
+/* Full screen (scripts/mm/graph-fullscreen.ts): a fixed layer inside the safe
+   areas; native full screen hides the browser chrome where supported. */
+.mm-graph-full-btn svg { display: block; margin: auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: square; }
+.mm-graph-full-btn .mm-fs-exit, .mm-graph-full .mm-graph-full-btn .mm-fs-enter { display: none; }
+.mm-graph-full .mm-graph-full-btn .mm-fs-exit { display: inline; }
+html.mm-noscroll, html.mm-noscroll body { overflow: hidden; }
+.mm-graph-wrap.mm-graph-full {
+  position: fixed; inset: 0; z-index: 1000; margin: 0; height: 100vh; height: 100dvh;
+  display: flex; flex-direction: column; background: var(--mm-white); overflow: auto; overscroll-behavior: contain;
+  padding: max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+}
+.mm-graph-wrap.mm-graph-full .mm-graph { flex: 1 1 auto; min-height: 12rem; display: flex; }
+.mm-graph-wrap.mm-graph-full .mm-graph > svg { flex: 1 1 auto; height: auto; touch-action: none; }
+.mm-graph-wrap.mm-graph-full .mm-graph-tools, .mm-graph-wrap.mm-graph-full .mm-graph-timeline { flex: none; }
+/* One row of controls each (scrolls sideways on phones), so the drawing gets the height. */
+.mm-graph-wrap.mm-graph-full .mm-graph-tools, .mm-graph-wrap.mm-graph-full .mm-graph-timeline-buttons { flex-wrap: nowrap; overflow-x: auto; }
+.mm-graph-wrap.mm-graph-full .mm-graph-tools > *, .mm-graph-wrap.mm-graph-full .mm-graph-timeline-buttons > * { flex: none; }
+.mm-graph-wrap.mm-graph-full .mm-graph-timeline { margin-top: 0; padding-top: 0.25rem; }
+.mm-graph-wrap.mm-graph-full .mm-graph-full-btn { order: -1; } /* the way out is always in view */
+/* Room for the drawing: help texts and the timeline title stay for screen readers only. */
+.mm-graph-wrap.mm-graph-full .mm-help, .mm-graph-wrap.mm-graph-full .mm-graph-timeline-title {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
 
 .mm-graph-timeline { margin: 0.25rem 0 0.75rem; padding: 0.6rem 0 0.2rem; border-top: var(--mm-rule); }
 .mm-graph-timeline[hidden] { display: none; }
