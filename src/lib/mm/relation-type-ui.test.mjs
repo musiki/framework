@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TYPE_COLORS, TYPE_STROKES, TYPE_RENDERS, typeLabel, typeInverse, typeProperties, typePath, strokeColor, tintColor,
-  dashArray, needsInkUnderlay, sampleSpec, svgAttrs, formRules, buildTypeBody, moveSlug, visibleSlugs,
+  dashArray, needsInkUnderlay, sampleSpec, svgAttrs, formRules, buildTypeBody, moveSlug, visibleSlugs, CLOUD_SAMPLE, SAMPLE_W, SAMPLE_H,
 } from './relation-type-ui.ts';
 import { RELATION_COLORS, RELATION_STROKES, RELATION_RENDERS, cleanRelationTypeFields } from './relation-types-core.ts';
 
@@ -93,20 +93,35 @@ test('sampleSpec: double = two parallel strokes', () => {
   assert.equal(s.shapes[0].attrs.y1, s.shapes[0].attrs.y2);
 });
 
-test('sampleSpec: area = tint square + slot-coloured border, no radius', () => {
+test('sampleSpec: area = a small straight-edged cloud, tint fill + slot-coloured border, never a square', () => {
   const s = sampleSpec(contains);
-  assert.deepEqual(tags(s), ['rect', 'rect']);
+  assert.deepEqual(tags(s), ['path', 'path']);
   assert.equal(s.shapes[0].attrs.fill, 'var(--mm-purple-tint)');
-  assert.equal(s.shapes[0].attrs.width, s.shapes[0].attrs.height);
   assert.equal(s.shapes[1].attrs.stroke, 'var(--mm-purple-text)');
   assert.equal(s.shapes[1].attrs.fill, 'none');
+  assert.equal(s.shapes[1].attrs['stroke-width'], 2);
+  assert.equal(s.shapes[0].attrs.d, s.shapes[1].attrs.d);
+  // Straight segments only, more than four sides (not a square), convex, inside the viewBox.
+  const d = String(s.shapes[0].attrs.d);
+  assert.match(d, /^M[-\d.,]+(L[-\d.,]+)+Z$/);
+  const pts = d.slice(1, -1).split('L').map((p) => p.split(',').map(Number));
+  assert.ok(pts.length > 4);
+  const turns = pts.map((a, i) => {
+    const b = pts[(i + 1) % pts.length], c = pts[(i + 2) % pts.length];
+    return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+  });
+  assert.ok(turns.every((x) => x > 0) || turns.every((x) => x < 0));
+  for (const [x, y] of pts) assert.ok(x >= 1 && x <= SAMPLE_W - 1 && y >= 1 && y <= SAMPLE_H - 1, `${x},${y}`);
+  assert.deepEqual(CLOUD_SAMPLE.map((p) => p.join(',')), pts.map((p) => p.join(',')));
   for (const sh of s.shapes) {
+    assert.notEqual(sh.tag, 'rect');
     assert.equal(sh.attrs.rx, undefined);
-    assert.equal(sh.attrs.ry, undefined);
   }
   const dashed = sampleSpec({ ...contains, stroke: 'dashed' });
   assert.equal(dashed.shapes[1].attrs['stroke-dasharray'], '6 4');
-  assert.deepEqual(tags(sampleSpec({ ...contains, stroke: 'double' })), ['rect', 'rect', 'rect']);
+  const double = sampleSpec({ ...contains, stroke: 'double' });
+  assert.deepEqual(tags(double), ['path', 'path', 'path']);
+  assert.notEqual(double.shapes[1].attrs.d, double.shapes[2].attrs.d);
 });
 
 test('svgAttrs: colours move into style, geometry stays attributes', () => {
@@ -225,11 +240,12 @@ test('sampleSpec: double light line underlays each of the two strokes', () => {
   assert.equal(s.shapes[0].attrs['stroke-width'], 2.5);
 });
 
-test('sampleSpec: light area border gets a 2px-wider ink underlay; dark slots none', () => {
+test('sampleSpec: light cloud border gets a 2px-wider ink underlay; dark slots none', () => {
   const s = sampleSpec({ render: 'area', stroke: 'solid', arrow: false, color: 'blue', symmetric: false });
-  assert.deepEqual(tags(s), ['rect', 'rect', 'rect']);
+  assert.deepEqual(tags(s), ['path', 'path', 'path']);
   assert.equal(s.shapes[1].attrs.stroke, 'var(--mm-ink)');
   assert.equal(s.shapes[1].attrs['stroke-width'], 4);
+  assert.equal(s.shapes[1].attrs.d, s.shapes[2].attrs.d);
   assert.equal(s.shapes[2].attrs.stroke, 'var(--mm-blue)');
   for (const c of ['purple', 'red', 'ink']) {
     const d = sampleSpec({ render: 'area', stroke: 'solid', arrow: true, color: c, symmetric: false });

@@ -822,8 +822,9 @@ function draw(holder: HTMLElement): void {
     const view = l.id ? views.get(l.id) ?? null : null;
     const parts: HTMLElement[] = [];
     const flags = el('p', 'mm-graph-relcard-flags');
-    if (!l.inferred && isContested(l.agree, l.disagree)) flags.append(el('span', 'mm-badge mm-badge-quiet', S('rel.contested')));
-    if (l.settled) flags.append(el('span', 'mm-badge mm-badge-quiet', S('rel.settled')));
+    // Typographic flags (no boxes on relations): contested is underlined in the red token, as on the graph's labels.
+    if (!l.inferred && isContested(l.agree, l.disagree)) flags.append(el('span', 'mm-graph-relcard-flag is-contested', S('rel.contested')));
+    if (l.settled) flags.append(el('span', 'mm-graph-relcard-flag', S('rel.settled')));
     if (flags.childNodes.length) parts.push(flags);
 
     if (l.inferred) {

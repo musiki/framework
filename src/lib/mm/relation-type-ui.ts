@@ -127,13 +127,25 @@ export type SampleSpec = { width: number; height: number; shapes: SvgShape[] };
 export const SAMPLE_W = 64;
 export const SAMPLE_H = 24;
 
+/** The cloud sample's outline (viewBox 0 0 64 24): a convex, faceted region with straight sides, kept inside the 2px border's reach. */
+export const CLOUD_SAMPLE: readonly (readonly [number, number])[] = [
+  [6, 12], [10, 6.5], [19, 3], [32, 2], [45, 3], [54, 6.5], [58, 12], [54, 17.5], [45, 21], [32, 22], [19, 21], [10, 17.5],
+];
+const polyPath = (pts: readonly (readonly [number, number])[]) =>
+  `M${pts.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join('L')}Z`;
+const CLOUD_SAMPLE_PATH = polyPath(CLOUD_SAMPLE);
+/** The inner border of a `double` cloud: the outline drawn 4px further in (horizontally) and 3.5px (vertically). */
+const CLOUD_SAMPLE_INNER_PATH = polyPath(CLOUD_SAMPLE.map(([x, y]) => [32 + (x - 32) * (22 / 26), 12 + (y - 12) * (6.5 / 10)] as const));
+
 /**
  * The shapes of a type's sample (viewBox 0 0 64 24), drawn by the page and the
  * form preview alike. Line: a horizontal stroke in the slot colour with the
  * type's pattern, two parallel strokes for `double`, a filled arrowhead in the
- * slot colour when directed (never for symmetric types). Area: a square
- * of the slot's tint with a 2px border in the slot colour and pattern. Flat:
- * butt caps, miter joins, no radius.
+ * slot colour when directed (never for symmetric types). Area: a small
+ * cloud — a faceted region with straight sides only (never a square, never a
+ * curve), as the graph draws it — in the slot's tint with a 2px border in the
+ * slot colour and pattern (a second, inner border for `double`). Flat: butt
+ * caps, miter joins, no radius.
  */
 export function sampleSpec(t: Pick<TypeLike, 'render' | 'stroke' | 'arrow' | 'color' | 'symmetric'>): SampleSpec {
   const stroke = strokeColor(t.color);
@@ -146,18 +158,16 @@ export function sampleSpec(t: Pick<TypeLike, 'render' | 'stroke' | 'arrow' | 'co
   const shapes: SvgShape[] = [];
   const ink = needsInkUnderlay(t.color);
   /** Ink copy of a coloured stroke, drawn first (under it): `grow` px wider, same geometry and dash. */
-  const under = (attrs: Record<string, string | number>, grow: number): SvgShape =>
-    ({ tag: 'width' in attrs ? 'rect' : 'line', attrs: { ...attrs, stroke: 'var(--mm-ink)', 'stroke-width': Number(attrs['stroke-width']) + grow } });
+  const under = (tag: SvgShape['tag'], attrs: Record<string, string | number>, grow: number): SvgShape =>
+    ({ tag, attrs: { ...attrs, stroke: 'var(--mm-ink)', 'stroke-width': Number(attrs['stroke-width']) + grow } });
   if (t.render === 'area') {
-    // Square area: 20×20 centred, border drawn inside the box.
-    const size = 20, x = (SAMPLE_W - size) / 2, y = (SAMPLE_H - size) / 2;
-    shapes.push({ tag: 'rect', attrs: { x, y, width: size, height: size, fill: tintColor(t.color) } });
+    shapes.push({ tag: 'path', attrs: { d: CLOUD_SAMPLE_PATH, fill: tintColor(t.color), stroke: 'none' } });
     const borders = pattern === 'double'
-      ? [base({ x: x + 1, y: y + 1, width: size - 2, height: size - 2, 'stroke-width': 1 }), base({ x: x + 4, y: y + 4, width: size - 8, height: size - 8, 'stroke-width': 1 })]
-      : [base({ x: x + 1, y: y + 1, width: size - 2, height: size - 2 })];
+      ? [base({ d: CLOUD_SAMPLE_PATH, 'stroke-width': 1 }), base({ d: CLOUD_SAMPLE_INNER_PATH, 'stroke-width': 1 })]
+      : [base({ d: CLOUD_SAMPLE_PATH })];
     // 1px ink each side of a 2px border; the 1px strokes of `double` get 0.5px each side so the gap between them stays visible.
-    if (ink) for (const b of borders) shapes.push(under(b, pattern === 'double' ? 1 : 2));
-    for (const b of borders) shapes.push({ tag: 'rect', attrs: b });
+    if (ink) for (const b of borders) shapes.push(under('path', b, pattern === 'double' ? 1 : 2));
+    for (const b of borders) shapes.push({ tag: 'path', attrs: b });
     return { width: SAMPLE_W, height: SAMPLE_H, shapes };
   }
   const arrow = t.arrow === true && t.symmetric !== true;
@@ -165,7 +175,7 @@ export function sampleSpec(t: Pick<TypeLike, 'render' | 'stroke' | 'arrow' | 'co
   const strokes = pattern === 'double'
     ? [base({ x1, y1: y - 2, x2, y2: y - 2, 'stroke-width': 1.5 }), base({ x1, y1: y + 2, x2, y2: y + 2, 'stroke-width': 1.5 })]
     : [base({ x1, y1: y, x2, y2: y })];
-  if (ink) for (const b of strokes) shapes.push(under(b, 1));
+  if (ink) for (const b of strokes) shapes.push(under('line', b, 1));
   for (const b of strokes) shapes.push({ tag: 'line', attrs: b });
   if (arrow) {
     const tip = SAMPLE_W - 4;
