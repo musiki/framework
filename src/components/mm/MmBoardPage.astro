@@ -18,6 +18,7 @@ import { t, type MessageKey } from '../../lib/i18n';
 import { POST_MOVES } from '../../lib/mm/forum';
 import { can } from '../../lib/mm/policy';
 import { clientStrings } from '../../lib/mm/page-strings';
+import { SLUG_MAX, SLUG_MIN } from '../../lib/mm/slugs';
 import type { BoardPageData } from '../../lib/mm/board-pages';
 import type { MmLang } from '../../lib/mm/ui-lang';
 import {
@@ -199,6 +200,13 @@ const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(l
               <input id="mm-c-label" type="text" name="label" required maxlength="200" autocomplete="off" lang="en" />
             </div>
             <div class="mm-form-row">
+              <label for="mm-c-slug">{t(lang, 'mm.slug.field')}</label>
+              <span class="mm-slug-field"><span class="mm-slug-prefix" aria-hidden="true">/</span><input id="mm-c-slug" type="text" name="slug"
+                minlength={SLUG_MIN} maxlength={SLUG_MAX} pattern="[a-z0-9]+(-[a-z0-9]+)*" autocomplete="off" autocapitalize="none" spellcheck="false"
+                data-mm-slug data-mm-slug-from="mm-c-label" aria-describedby="mm-c-slug-help" /></span>
+              <p class="mm-help" id="mm-c-slug-help">{t(lang, 'mm.slug.proposeHelp', { min: SLUG_MIN, max: SLUG_MAX })}</p>
+            </div>
+            <div class="mm-form-row">
               <label for="mm-c-def">{t(lang, 'mm.forum.conceptDefinition')}</label>
               <textarea id="mm-c-def" name="definition" required maxlength="20000" lang="en"></textarea>
             </div>
@@ -222,4 +230,5 @@ const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(l
 <script>
   import '../../scripts/mm/forms.ts';
   import '../../scripts/mm/composer.ts';
+  import '../../scripts/mm/slug.ts';
 </script>

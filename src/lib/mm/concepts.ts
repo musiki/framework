@@ -2,8 +2,8 @@
 // `query`; mutations check out one pooled client and bind `q` to it for the
 // whole core call, so their BEGIN/…/COMMIT run on the same connection (same
 // pattern as `writing/notes/space-notes.ts` reorderSpaceItem).
-// createConcept, editDefinition, adoptPost, setLabels and createRelation are
-// transactional. Stances, settling and the relation view: relations.ts.
+// createConcept, editDefinition, adoptPost, setLabels, renameConceptSlug and
+// createRelation are transactional. Stances, settling and the relation view: relations.ts.
 
 import { query, getClient } from '../db/pool';
 import * as core from './concepts-core.ts';
@@ -68,6 +68,11 @@ export const editDefinition = (args: Parameters<typeof core.editDefinition>[1]) 
 export const adoptPost = (args: Parameters<typeof core.adoptPost>[1]) => onClient((q) => core.adoptPost(q, args));
 export const setStatus = (args: Parameters<typeof core.setStatus>[1]) => core.setStatus(poolQ, args);
 export const setLabels = (args: Parameters<typeof core.setLabels>[1]) => onClient((q) => core.setLabels(q, args));
+/** Curators/admins: new slug, old one kept as a redirecting alias (transactional). */
+export const renameConceptSlug = (args: Parameters<typeof core.renameConceptSlug>[1]) =>
+  onClient((q) => core.renameConceptSlug(q, args));
+/** Live slug → itself; rename alias → the concept's current slug; else null. */
+export const resolveConceptSlug = (args: Parameters<typeof core.resolveConceptSlug>[1]) => core.resolveConceptSlug(poolQ, args);
 // Transactional: the duplicate / hierarchy-cycle checks and the insert share one client.
 export const createRelation = (args: Parameters<typeof relations.createRelation>[1]) =>
   onClient((q) => relations.createRelation(q, args));

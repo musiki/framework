@@ -23,8 +23,8 @@
 
 import { can, type MmAction, type MmPolicyCtx } from './policy.ts';
 import { COMMONS_ROLES, isUuid, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
-import { slugify } from '../site/frontmatter.ts';
 import { publicName } from './view.ts';
+import { RESERVED_SLUGS, checkCustomSlug, slugProblemMessage, slugifyLabel } from './slugs.ts';
 
 export type QueryFn = (text: string, params?: unknown[]) => Promise<{ data: any[] | null; error: any }>;
 
@@ -171,10 +171,40 @@ export function requireUuid(value: unknown, what: string): string {
   return value;
 }
 
-/** Base slug for a label: site slugify, but never the site's `'page'` fallback. */
+/** Base slug for a label (slugs.ts slugifyLabel, at most SLUG_MAX); 'concept' when the label has no letters or digits. */
 export function conceptBaseSlug(label: string): string {
-  const s = slugify(label);
-  return s === 'page' && !/page/i.test(label) ? 'concept' : s;
+  return slugifyLabel(label) || 'concept';
+}
+
+/**
+ * A slug the person typed (create / rename): trimmed, canonical format,
+ * 2–80 characters, never a reserved word (400 with the reason).
+ */
+export function cleanCustomSlug(raw: unknown): string {
+  const checked = checkCustomSlug(raw);
+  if (checked.problem) throw new ConceptError(400, slugProblemMessage(checked.problem, typeof raw === 'string' ? raw.trim() : ''));
+  return checked.slug;
+}
+
+/** Serializes slug allocation (create, rename) per space for the transaction's lifetime. */
+const SLUG_LOCK_SQL = 'SELECT pg_advisory_xact_lock(hashtext($1))';
+const slugLockKey = (spaceId: string) => `mm-concept-slug:${spaceId}`;
+
+/**
+ * Whether `slug` is in use in the space: a live concept slug (any kind) or an
+ * alias left by a rename (aliases redirect forever, so they stay taken).
+ * Returns who holds it.
+ */
+async function slugHolder(q: QueryFn, spaceId: string, slug: string): Promise<{ conceptId: string; alias: boolean } | null> {
+  const rows = await run(
+    q,
+    `SELECT id AS "conceptId", false AS alias FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2
+     UNION ALL
+     SELECT "conceptId", true AS alias FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND slug = $2
+     LIMIT 1`,
+    [spaceId, slug],
+  );
+  return rows[0] ? { conceptId: rows[0].conceptId, alias: rows[0].alias === true } : null;
 }
 
 /** First free slug among `base`, `base-2`, `base-3`, … given the taken ones. */
@@ -305,6 +335,12 @@ export async function createConcept(
     definition: unknown;
     definitionNb?: unknown;
     sources?: unknown;
+    /**
+     * Optional slug typed by the proposer: validated (400), and a slug already
+     * in use (live or alias) is a 409 — never silently suffixed. Without it
+     * the slug comes from the label, with -2, -3… when taken.
+     */
+    slug?: unknown;
   },
 ): Promise<{ id: string; slug: string; threadId: string; versionId: string }> {
   const spaceId = requireUuid(input.spaceId, 'space');
@@ -319,6 +355,10 @@ export async function createConcept(
       : cleanDefinition(input.definitionNb);
   const sources = cleanSources(input.sources);
   const forumId = requireUuid(input.forumId, 'forum');
+  const customSlug =
+    input.slug === undefined || input.slug === null || (typeof input.slug === 'string' && input.slug.trim() === '')
+      ? null
+      : cleanCustomSlug(input.slug);
 
   const forum = await run(
     q,
@@ -334,13 +374,22 @@ export async function createConcept(
   try {
     return await withTransaction(q, async () => {
       // Serialize slug allocation per space for the transaction's lifetime.
-      await run(q, 'SELECT pg_advisory_xact_lock(hashtext($1))', [`mm-concept-slug:${spaceId}`]);
-      const taken = await run(
-        q,
-        `SELECT slug FROM "Concept" WHERE "spaceId" = $1::uuid AND (slug = $2 OR slug LIKE $3)`,
-        [spaceId, base, `${base}-%`],
-      );
-      const slug = uniqueSlug(base, taken.map((r: any) => r.slug));
+      await run(q, SLUG_LOCK_SQL, [slugLockKey(spaceId)]);
+      let slug: string;
+      if (customSlug) {
+        if (await slugHolder(q, spaceId, customSlug)) throw new ConceptError(409, 'concept slug already exists');
+        slug = customSlug;
+      } else {
+        // Live slugs and rename aliases are taken; reserved words never become automatic slugs.
+        const taken = await run(
+          q,
+          `SELECT slug FROM "Concept" WHERE "spaceId" = $1::uuid AND (slug = $2 OR slug LIKE $3)
+           UNION
+           SELECT slug FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND (slug = $2 OR slug LIKE $3)`,
+          [spaceId, base, `${base}-%`],
+        );
+        slug = uniqueSlug(base, [...taken.map((r: any) => r.slug), ...RESERVED_SLUGS]);
+      }
 
       const thread = await run(
         q,
@@ -782,6 +831,87 @@ export async function setLabels(
     }
     return { label, labelNb };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Slugs: rename (old slug kept as an alias) and resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Curators/admins rename a concept's slug. The old slug becomes an alias in
+ * "ConceptSlugAlias" that redirects (301) to the concept forever; aliases
+ * follow the concept (they point at its id), so earlier aliases keep working
+ * after further renames. The new slug must be free: not a live slug and not
+ * another concept's alias (409). Renaming back to one of the concept's own
+ * aliases reclaims it. One transaction under the space's slug lock.
+ */
+export async function renameConceptSlug(
+  q: QueryFn,
+  input: { conceptId: string; actorUserId: string | null; slug: unknown },
+): Promise<{ slug: string; previous: string; changed: boolean }> {
+  const concept = await loadConceptById(q, input.conceptId);
+  if (isRelationTypeConcept(concept)) throw new ConceptError(404, 'concept not found');
+  await authorize(q, concept.spaceId, input.actorUserId, 'renameConceptSlug');
+  const slug = cleanCustomSlug(input.slug);
+  if (slug === concept.slug) return { slug, previous: concept.slug, changed: false };
+
+  try {
+    return await withTransaction(q, async () => {
+      await run(q, SLUG_LOCK_SQL, [slugLockKey(concept.spaceId)]);
+      const locked = await loadConceptById(q, concept.id, true);
+      if (locked.slug === slug) return { slug, previous: locked.slug, changed: false };
+      const holder = await slugHolder(q, concept.spaceId, slug);
+      if (holder && !(holder.alias && holder.conceptId === concept.id)) {
+        throw new ConceptError(409, 'concept slug already exists');
+      }
+      if (holder) {
+        await run(q, `DELETE FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND slug = $2 AND "conceptId" = $3::uuid`, [
+          concept.spaceId, slug, concept.id,
+        ]);
+      }
+      const updated = await run(
+        q,
+        `UPDATE "Concept" SET slug = $1, "updatedAt" = now() WHERE id = $2::uuid AND "spaceId" = $3::uuid RETURNING slug`,
+        [slug, concept.id, concept.spaceId],
+      );
+      if (!updated.length) throw new ConceptError(404, 'concept not found');
+      await run(
+        q,
+        `INSERT INTO "ConceptSlugAlias" ("spaceId", slug, "conceptId") VALUES ($1::uuid, $2, $3::uuid)
+         ON CONFLICT ("spaceId", slug) DO NOTHING`,
+        [concept.spaceId, locked.slug, concept.id],
+      );
+      return { slug, previous: locked.slug, changed: true };
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new ConceptError(409, 'concept slug already exists');
+    throw err;
+  }
+}
+
+export type SlugResolution = { kind: 'live' | 'alias'; slug: string } | null;
+
+/**
+ * What `slug` names in the space, in order: a live concept (kind 'concept')
+ * → its slug; else a rename alias of one → the concept's current slug; else
+ * null. Relation-type concepts are never resolved.
+ */
+export async function resolveConceptSlug(q: QueryFn, { spaceId, slug }: { spaceId: string; slug: string }): Promise<SlugResolution> {
+  if (typeof spaceId !== 'string' || !isUuid(spaceId) || typeof slug !== 'string' || !slug || slug.length > 200) return null;
+  const live = await run(
+    q,
+    `SELECT slug FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2 AND kind = 'concept' LIMIT 1`,
+    [spaceId, slug],
+  );
+  if (live[0]) return { kind: 'live', slug: live[0].slug };
+  const alias = await run(
+    q,
+    `SELECT c.slug FROM "ConceptSlugAlias" a
+     JOIN "Concept" c ON c.id = a."conceptId" AND c."spaceId" = a."spaceId" AND c.kind = 'concept'
+     WHERE a."spaceId" = $1::uuid AND a.slug = $2 LIMIT 1`,
+    [spaceId, slug],
+  );
+  return alias[0] ? { kind: 'alias', slug: alias[0].slug } : null;
 }
 
 // Relations (create/delete) and the concept graph live in relations-core.ts,

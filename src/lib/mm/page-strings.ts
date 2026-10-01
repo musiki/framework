@@ -16,6 +16,11 @@ export function clientStrings(lang: MmLang, extra: Record<string, string> = {}):
     'error.invalid': t(lang, 'mm.common.errors.invalid'),
     'error.generic': t(lang, 'mm.common.errors.generic'),
     'error.network': t(lang, 'mm.common.errors.network'),
+    'slug.taken': t(lang, 'mm.slug.errors.taken'),
+    'slug.reserved': t(lang, 'mm.slug.errors.reserved'),
+    'slug.format': t(lang, 'mm.slug.errors.format'),
+    'slug.length': t(lang, 'mm.slug.errors.length'),
+    'slug.required': t(lang, 'mm.slug.errors.required'),
     ...extra,
   });
 }

@@ -1,11 +1,12 @@
 import type { RouteFamily, Tenant } from './tenants.ts';
+import { isRootSlugPath } from '../mm/slugs.ts';
 
 export const ROUTE_FAMILY_PREFIXES: Record<RouteFamily, string[]> = {
   studio: ['/studio'],
   'api:studio': ['/api/studio'],
   'api:public': ['/api/public'],
   auth: ['/api/auth'],
-  mm: ['/f', '/c', '/r', '/graph', '/about', '/join', '/admin'],
+  mm: ['/f', '/c', '/r', '/graph', '/about', '/join', '/admin', '/concepts'],
   'api:mm': ['/api/mm'],
   'api:public-mm': ['/api/public/mm'],
   // Rendered LilyPond assets (src/pages/lily/[file].ts: content-hash names only).
@@ -27,8 +28,16 @@ export const ROUTE_FAMILY_EXCLUDED: Partial<Record<RouteFamily, string[]>> = {
   'api:public': ['/api/public/mm'],
 };
 
+// Single-segment paths a family owns by shape: on mm, a root concept
+// permalink /<slug> (slug format, not a reserved word — src/lib/mm/slugs.ts).
+// The raw path must already be canonical: escapes, uppercase or dots never match.
+export const ROUTE_FAMILY_SHAPES: Partial<Record<RouteFamily, (pathname: string) => boolean>> = {
+  mm: isRootSlugPath,
+};
+
 const familyMatches = (family: RouteFamily, pathname: string) =>
   (ROUTE_FAMILY_EXACT[family] ?? []).includes(pathname) ||
+  (ROUTE_FAMILY_SHAPES[family]?.(pathname) ?? false) ||
   (ROUTE_FAMILY_PREFIXES[family].some((prefix) => matchesPrefix(pathname, prefix)) &&
     !(ROUTE_FAMILY_EXCLUDED[family] ?? []).some((prefix) => matchesPrefix(pathname, prefix)));
 
@@ -57,16 +66,24 @@ export function isInternalMmPath(pathname: string): boolean {
   return matchesPrefix(p, MM_INTERNAL_PREFIX);
 }
 
+/** Internal page of a root concept permalink: /<slug> → /mm-app/concept/<slug>. */
+export const MM_CONCEPT_MOUNT = `${MM_INTERNAL_PREFIX}/concept`;
+
 /**
  * Maps a public mm path to its internal page path, or null when the path is
- * not an mm page (APIs, auth, anything else). Takes the raw (still
+ * not an mm page (APIs, auth, anything else). A root concept slug
+ * ('/pharmakon') maps to the concept page ('/mm-app/concept/pharmakon'). Takes the raw (still
  * percent-encoded) pathname and never decodes it: the router decodes params
  * exactly once, so '/f/%2561' keeps the param '%61'.
  *   '/' → '/mm-app/', '/f/stiegler' → '/mm-app/f/stiegler', '/cursos' → null
  */
 export function mapMmPath(pathname: string): string | null {
   if (!isMmPagePath(pathname)) return null;
-  const target = pathname === '/' ? `${MM_INTERNAL_PREFIX}/` : `${MM_INTERNAL_PREFIX}${pathname}`;
+  const target = pathname === '/'
+    ? `${MM_INTERNAL_PREFIX}/`
+    : isRootSlugPath(pathname)
+      ? `${MM_CONCEPT_MOUNT}${pathname}`
+      : `${MM_INTERNAL_PREFIX}${pathname}`;
   // Defence in depth: the target must stay under the mount after URL
   // normalisation (dot segments, including %2e forms).
   let normalized: string;
@@ -78,7 +95,7 @@ export function mapMmPath(pathname: string): string | null {
   return matchesPrefix(normalized, MM_INTERNAL_PREFIX) ? target : null;
 }
 
-/** True when the path belongs to the public mm page family (`/` exactly, /f, /c, …). */
+/** True when the path belongs to the public mm page family (`/` exactly, /f, /c, …, or a root concept slug). */
 export function isMmPagePath(pathname: string): boolean {
   return familyMatches('mm', pathname);
 }

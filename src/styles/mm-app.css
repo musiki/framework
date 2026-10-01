@@ -393,3 +393,12 @@ h3 .mm-dot { margin-right: 0.45rem; }
 }
 .mm-rt-actions .mm-rt-move { background: var(--mm-white); color: var(--mm-ink); }
 .mm-rt-actions .mm-rt-move:not(:disabled):hover { background: var(--mm-yellow); }
+
+/* Concept slug (permalink) field: "/" + input, invalid state from the API. */
+.mm-slug-field { display: flex; align-items: stretch; max-width: 32rem; }
+.mm-slug-prefix {
+  display: inline-flex; align-items: center; padding: 0 0.55rem; border: var(--mm-rule); border-right: 0;
+  background: var(--mm-ink-5); color: var(--mm-ink); font-weight: 700;
+}
+.mm-slug-field input { flex: 1 1 auto; min-width: 0; }
+.mm-form input[aria-invalid='true'] { border-color: var(--mm-red, var(--mm-ink)); outline: 2px solid var(--mm-red, var(--mm-ink)); outline-offset: 0; }

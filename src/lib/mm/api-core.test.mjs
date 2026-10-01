@@ -140,6 +140,9 @@ test('concept PATCH rejects unknown extra keys', () => {
   assert.throws(() => conceptPatchKind({ label: 'X', sources: [] }), (e) => e.status === 400);
   assert.equal(conceptPatchKind({ definition: 'x', lang: 'nb', sources: [] }), 'definition');
   assert.equal(conceptPatchKind({ label: 'X', labelNb: 'Y' }), 'labels');
+  assert.equal(conceptPatchKind({ slug: 'new-slug' }), 'slug');
+  assert.throws(() => conceptPatchKind({ slug: 'x-y', label: 'X' }), (e) => e.status === 400);
+  assert.throws(() => conceptPatchKind({ slug: 'x-y', lang: 'en' }), (e) => e.status === 400 && /unexpected field: lang/.test(e.message));
 });
 
 test('API languages are en and nb only (nn is a UI fallback)', () => {

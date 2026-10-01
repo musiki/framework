@@ -71,6 +71,24 @@ export function apiErrorMessage(
   return lead;
 }
 
+export type SlugErrorKind = 'taken' | 'reserved' | 'format' | 'length' | 'required';
+
+/**
+ * Concept slug forms (propose, rename): the API's slug errors (concepts-core
+ * cleanCustomSlug / 409 'concept slug already exists') get their own
+ * localized message instead of the generic lead; null for anything else.
+ */
+export function slugErrorKind(status: number, apiMessage: unknown): SlugErrorKind | null {
+  if (typeof apiMessage !== 'string') return null;
+  if (status === 409) return /slug already exists/i.test(apiMessage) ? 'taken' : null;
+  if (status !== 400 || !/slug/i.test(apiMessage)) return null;
+  if (/reserved word/i.test(apiMessage)) return 'reserved';
+  if (/characters/i.test(apiMessage) && /\d+.\d+/.test(apiMessage)) return 'length';
+  if (/lowercase letters/i.test(apiMessage)) return 'format';
+  if (/slug required/i.test(apiMessage)) return 'required';
+  return null;
+}
+
 export type AdminErrorKind = 'lastAdmin' | 'self' | 'slugTaken';
 
 /**

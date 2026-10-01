@@ -62,7 +62,8 @@ test('so-dev host: prerendered routes obey allowlist', () => {
 
 test('mm host: public pages are rewritten to the internal mount, with internal target', () => {
   const cases = [['/', '/mm-app/'], ['/f/stiegler', '/mm-app/f/stiegler'], ['/c/x', '/mm-app/c/x'],
-    ['/r/contains', '/mm-app/r/contains'], ['/r/%2561', '/mm-app/r/%2561'], ['/graph', '/mm-app/graph'], ['/about', '/mm-app/about'], ['/join', '/mm-app/join'], ['/admin', '/mm-app/admin']];
+    ['/r/contains', '/mm-app/r/contains'], ['/r/%2561', '/mm-app/r/%2561'], ['/graph', '/mm-app/graph'], ['/about', '/mm-app/about'], ['/join', '/mm-app/join'], ['/admin', '/mm-app/admin'],
+    ['/concepts', '/mm-app/concepts'], ['/pharmakon', '/mm-app/concept/pharmakon']];
   for (const [p, target] of cases) {
     const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: p });
     assert.equal(d.tenant.id, 'mm');
@@ -80,10 +81,25 @@ test('mm host: apis and auth pass without rewrite', () => {
 });
 
 test('mm host: musiki and so routes are not-found', () => {
-  for (const p of ['/cursos', '/foro', '/dashboard', '/login', '/studio', '/studio/login', '/api/studio/me',
+  for (const p of ['/login', '/studio', '/studio/login', '/api/studio/me', '/cursos/x', '/foro/x',
     '/api/public/instruments', '/search.json', '/slides/x', '/f/../../cursos']) {
     assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).action, 'not-found', p);
   }
+  // a slug-shaped single segment is a concept permalink: only ever the mm concept page
+  for (const p of ['/cursos', '/foro', '/dashboard']) {
+    assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).rewrite, `/mm-app/concept${p}`, p);
+  }
+});
+
+test('mm host: root concept slugs rewrite to the concept page; odd spellings are not-found', () => {
+  const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: '/tertiary-retention' });
+  assert.equal(d.action, 'next');
+  assert.equal(d.rewrite, '/mm-app/concept/tertiary-retention');
+  for (const p of ['/Tertiary-retention', '/%74ertiary', '/tertiary.retention', '/tertiary-retention/', '/caf%C3%A9', '/%2e%2e']) {
+    assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).action, 'not-found', p);
+  }
+  assert.equal(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/tertiary-retention' }).rewrite, undefined);
+  assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/tertiary-retention' }).action, 'not-found');
 });
 
 test('/mm-app/* is not-found on every host', () => {

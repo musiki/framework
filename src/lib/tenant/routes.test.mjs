@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { TENANTS } from './tenants.ts';
-import { isRouteAllowed, mapMmPath, isInternalMmPath, isMmPagePath } from './routes.ts';
+import { isRouteAllowed, mapMmPath, isInternalMmPath, isMmPagePath, ROUTE_FAMILY_PREFIXES } from './routes.ts';
+import { RESERVED_SLUGS, isReservedSlug } from '../mm/slugs.ts';
 
 const so = TENANTS.so;
 const mm = TENANTS.mm;
@@ -48,7 +49,9 @@ test('mapMmPath keeps raw encoding', () => {
 test('mapMmPath: /r never escapes the mount and /rx is not /r', () => {
   assert.equal(mapMmPath('/r/../../cursos'), null);
   assert.equal(mapMmPath('/r/%2e%2e/%2E%2E/cursos'), null);
-  for (const p of ['/rx', '/relations', '/r-types']) assert.equal(mapMmPath(p), null, p);
+  // single slug-shaped segments are concept permalinks, never the /r family
+  for (const p of ['/rx', '/relations', '/r-types']) assert.equal(mapMmPath(p), `/mm-app/concept${p}`, p);
+  for (const p of ['/rx/y', '/relations/x']) assert.equal(mapMmPath(p), null, p);
 });
 
 test('mm (no api:public family) is refused /api/public/instruments and so data', () => {
@@ -62,10 +65,43 @@ test('mm allows / exactly, its page prefixes, its apis and auth', () => {
     '/api/auth/session', '/api/auth/signin/logto-mm', '/lily/0123456789abcdef0123456789abcdef.svg']) {
     assert.equal(isRouteAllowed(mm, p), true, p);
   }
-  for (const p of ['//', '/x', '/cursos', '/foro', '/dashboard', '/login', '/studio', '/studio/login', '/api/studio/me',
-    '/api/public', '/api/public/mmx', '/api/mmx', '/fx', '/cx', '/rx', '/relations', '/graphs', '/aboutx', '/joinx', '/adminx',
-    '/search.json', '/public-search.json', '/slides/x', '/mm-app', '/mm-app/', '/api/graph-data', '/lilyx', '/api/lily/render']) {
+  for (const p of ['//', '/studio/login', '/api/studio/me', '/api/public', '/api/public/mmx', '/api/mmx',
+    '/search.json', '/public-search.json', '/slides/x', '/mm-app', '/mm-app/', '/api/graph-data', '/api/lily/render',
+    '/X', '/Pharmakon', '/%70harmakon', '/pharma.kon', '/pharmakon/', '/-x', '/x-', '/a--b', '/api', '/auth', '/mm',
+    '/studio', '/login', '/not-found', '/concept']) {
     assert.equal(isRouteAllowed(mm, p), false, p);
+  }
+  // slug-shaped single segments are concept permalinks (served only via the rewrite)
+  for (const p of ['/x', '/cursos', '/foro', '/dashboard', '/fx', '/cx', '/rx', '/relations', '/graphs', '/aboutx',
+    '/joinx', '/adminx', '/lilyx', '/pharmakon', '/tertiary-retention', '/a1-b2']) {
+    assert.equal(isRouteAllowed(mm, p), true, p);
+    assert.equal(mapMmPath(p), `/mm-app/concept${p}`, p);
+  }
+});
+
+test('root concept slugs: canonical spelling only, reserved words never', () => {
+  assert.equal(mapMmPath('/pharmakon'), '/mm-app/concept/pharmakon');
+  for (const p of ['/Pharmakon', '/PHARMAKON', '/%70harmakon', '/pharmakon%2F', '/pharm%C3%A1kon', '/pharmakon.json',
+    '/.', '/..', '/%2e%2e', '/pharmakon/', '/pharmakon/x', '/-pharmakon', '/pharma--kon', `/${'a'.repeat(201)}`]) {
+    assert.equal(mapMmPath(p), null, p);
+  }
+  assert.equal(mapMmPath(`/${'a'.repeat(200)}`), `/mm-app/concept/${'a'.repeat(200)}`);
+  // reserved words keep their own pages (or 404), never the concept page
+  for (const w of RESERVED_SLUGS) {
+    const target = mapMmPath(`/${w}`);
+    assert.ok(target === null || !target.startsWith('/mm-app/concept/'), w);
+  }
+  assert.equal(mapMmPath('/concepts'), '/mm-app/concepts');
+  assert.equal(mapMmPath('/graph'), '/mm-app/graph');
+  for (const w of ['api', 'auth', 'mm', 'lily', 'mm-app', 'concept', 'not-found', 'healthz']) assert.equal(mapMmPath(`/${w}`), null, w);
+  // so never gets root slugs
+  assert.equal(isRouteAllowed(so, '/pharmakon'), false);
+});
+
+test('every existing top-level mm path family is a reserved slug', () => {
+  for (const prefix of ROUTE_FAMILY_PREFIXES.mm) assert.ok(isReservedSlug(prefix.slice(1)), prefix);
+  for (const fam of ['api:mm', 'api:public-mm', 'auth', 'lily']) {
+    for (const prefix of ROUTE_FAMILY_PREFIXES[fam]) assert.ok(isReservedSlug(prefix.split('/')[1]), prefix);
   }
 });
 
@@ -89,10 +125,12 @@ test('mapMmPath maps public mm pages to the internal mount', () => {
   assert.equal(mapMmPath('/about'), '/mm-app/about');
   assert.equal(mapMmPath('/join'), '/mm-app/join');
   assert.equal(mapMmPath('/admin/members'), '/mm-app/admin/members');
+  assert.equal(mapMmPath('/concepts'), '/mm-app/concepts');
+  assert.equal(mapMmPath('/pharmakon'), '/mm-app/concept/pharmakon');
 });
 
 test('mapMmPath returns null for everything else', () => {
-  for (const p of ['', '//', '/cursos', '/fx', '/aboutx', '/api/mm/concepts', '/api/public/mm/concepts.json',
+  for (const p of ['', '//', '/cursos/x', '/fx/y', '/aboutx/', '/api/mm/concepts', '/api/public/mm/concepts.json',
     '/api/auth/session', '/studio', '/mm-app', '/mm-app/f']) {
     assert.equal(mapMmPath(p), null, p);
   }

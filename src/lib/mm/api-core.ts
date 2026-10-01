@@ -268,16 +268,21 @@ export async function assertRelationInSpace(q: QueryFn, spaceId: string, relatio
 
 /**
  * PATCH /concepts/[slug] carries exactly one kind of change: a definition
- * version (`definition` + `lang` [+ `sources`]), a status, or labels.
+ * version (`definition` + `lang` [+ `sources`]), a status, labels, or a new
+ * slug (curators/admins; the old slug becomes a redirecting alias).
  */
-const PATCH_KEYS = { definition: ['definition', 'lang', 'sources'], status: ['status'], labels: ['label', 'labelNb'] } as const;
+const PATCH_KEYS = {
+  definition: ['definition', 'lang', 'sources'], status: ['status'], labels: ['label', 'labelNb'], slug: ['slug'],
+} as const;
+export type ConceptPatchKind = keyof typeof PATCH_KEYS;
 
-export function conceptPatchKind(body: Record<string, unknown>): 'definition' | 'status' | 'labels' {
-  const kinds: Array<'definition' | 'status' | 'labels'> = [];
+export function conceptPatchKind(body: Record<string, unknown>): ConceptPatchKind {
+  const kinds: ConceptPatchKind[] = [];
   if ('definition' in body) kinds.push('definition');
   if ('status' in body) kinds.push('status');
   if ('label' in body || 'labelNb' in body) kinds.push('labels');
-  if (kinds.length !== 1) throw new MmApiError(400, 'send exactly one of: definition, status, label/labelNb');
+  if ('slug' in body) kinds.push('slug');
+  if (kinds.length !== 1) throw new MmApiError(400, 'send exactly one of: definition, status, label/labelNb, slug');
   const allowed: readonly string[] = PATCH_KEYS[kinds[0]];
   const extra = Object.keys(body).filter((k) => !allowed.includes(k));
   if (extra.length) throw new MmApiError(400, `unexpected field: ${extra[0].slice(0, 40)}`);

@@ -643,6 +643,21 @@ export const nb: Pick<Dict, 'mm'> = {
         cancel: 'Avbryt',
       },
     },
+    slug: {
+      field: 'Adresse (permalenke)',
+      proposeHelp: 'Begrepet får adressen mm.zztt.org/ etterfulgt av denne adressen. Foreslått ut fra navnet; du kan endre den: {min}–{max} små bokstaver a–z, sifre og enkle bindestreker. Beholder du forslaget og det er opptatt, brukes den neste ledige.',
+      renameTitle: 'Endre adressen',
+      renameLead: 'Begrepets adresse (permalenke). Den nåværende adressen fortsetter å virke: den sender videre til den nye.',
+      renameHelp: '{min}–{max} små bokstaver a–z, sifre og enkle bindestreker.',
+      save: 'Endre adresse',
+      errors: {
+        taken: 'Et annet begrep bruker (eller har brukt) denne adressen. Velg en annen.',
+        reserved: 'Denne adressen er reservert av Concept Machine. Velg en annen.',
+        format: 'Bruk bare små bokstaver a–z, sifre og enkle bindestreker mellom dem.',
+        length: 'Adressen må være 2–80 tegn lang.',
+        required: 'Skriv en adresse.',
+      },
+    },
     notFound: {
       title: 'Fant ikke siden',
       lead: 'Denne siden finnes ikke.',

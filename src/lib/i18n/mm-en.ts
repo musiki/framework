@@ -640,6 +640,21 @@ export const mmEn = {
       cancel: 'Cancel',
     },
   },
+  slug: {
+    field: 'Address (permalink)',
+    proposeHelp: 'The concept will live at mm.zztt.org/ followed by this address. Suggested from the label; you may change it: {min}–{max} lowercase letters a–z, digits and single hyphens. If you keep the suggestion and it is taken, the next free one is used.',
+    renameTitle: 'Change the address',
+    renameLead: 'The concept’s address (permalink). The current address keeps working: it redirects to the new one.',
+    renameHelp: '{min}–{max} lowercase letters a–z, digits and single hyphens.',
+    save: 'Change address',
+    errors: {
+      taken: 'This address is already used by another concept (or was used by one). Choose a different one.',
+      reserved: 'This address is reserved by the Concept Machine. Choose a different one.',
+      format: 'Use only lowercase letters a–z, digits and single hyphens between them.',
+      length: 'The address must be 2–80 characters long.',
+      required: 'Write an address.',
+    },
+  },
   notFound: {
     title: 'Not found',
     lead: 'This page does not exist.',

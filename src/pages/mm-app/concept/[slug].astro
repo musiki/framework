@@ -1,9 +1,8 @@
 ---
-// Internal page for mm "/c/<slug>" (middleware rewrite): the concept URL
-// before root permalinks. A concept with a root permalink gets a 301 to
-// /<slug>; a renamed slug a 301 to the current permalink; an older slug that
-// cannot live at the root (a reserved word) is still served here; anything
-// else is a 404.
+// Internal page for the mm concept permalink "/<slug>" (middleware rewrite;
+// routing: src/lib/tenant/routes.ts mapMmPath, slug rules: lib/mm/slugs.ts).
+// A live concept renders; a slug a curator renamed away 301-redirects to the
+// concept's current permalink; anything else is a 404.
 // Rendering: components/mm/MmConceptPage.astro.
 import MmConceptPage from '../../../components/mm/MmConceptPage.astro';
 import { applyMmLang } from '../../../lib/mm/ui-lang';
@@ -12,7 +11,7 @@ export const prerender = false;
 
 const isMm = Astro.locals.tenant?.id === 'mm';
 const lang = applyMmLang(Astro);
-const data = await loadConceptPage(Astro.locals, isMm, lang, String(Astro.params.slug ?? ''), 'legacy', Astro.url.search);
+const data = await loadConceptPage(Astro.locals, isMm, lang, String(Astro.params.slug ?? ''), 'root', Astro.url.search);
 if (data.redirect) return Astro.redirect(data.redirect, 301);
 if (data.state === 'notFound') Astro.response.status = 404;
 if (data.state === 'unavailable') Astro.response.status = 503;

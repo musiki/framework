@@ -7,14 +7,18 @@
 //     reload-post   reload at #post-<response.post.id>
 //     go-thread     go to <data-forum-path>/t/<response.threadId> (the board's
 //                   public path: /f/<group> or /f/<group>/<channel>)
-//     go-concept    go to /c/<response.slug>
-//   Errors (429 included) show in the form's [data-mm-form-status].
+//     go-concept    go to the concept's permalink (response.path: /<slug>, or
+//                   /c/<slug> for an older slug; propose and rename answer it)
+//   Errors (429 included) show in the form's [data-mm-form-status]; a concept
+//   slug error (taken / reserved / format) gets its own message and marks the
+//   [data-mm-slug] field invalid.
 //
 // <button data-mm-action data-endpoint data-method data-body='{"…"}' data-then="reload">
 //   One-click calls (hide/unhide a post, remove a relation). Errors show in
 //   the page's [data-mm-flash].
 
-import { mmApi, errorText, flash, reloadAt } from './api.ts';
+import { mmApi, errorText, flash, pageStrings, reloadAt, ApiFailure } from './api.ts';
+import { slugErrorKind } from '../../lib/mm/client-core.ts';
 
 function formBody(form: HTMLFormElement): Record<string, string> {
   const body: Record<string, string> = {};
@@ -42,6 +46,11 @@ function after(then: string | undefined, result: any, el: HTMLElement): void {
       return;
     }
     case 'go-concept':
+      // Only a same-site permalink built server-side (view.ts conceptPath) is followed.
+      if (typeof result?.path === 'string' && /^\/(?:[a-z0-9]+(?:-[a-z0-9]+)*|c\/[^/?#]+)$/.test(result.path)) {
+        window.location.assign(result.path);
+        return;
+      }
       if (result?.slug) {
         window.location.assign(`/c/${encodeURIComponent(result.slug)}`);
         return;
@@ -71,7 +80,15 @@ document.addEventListener('submit', async (event) => {
     const result = await mmApi(form.dataset.endpoint ?? '', { method: form.dataset.method ?? 'POST', body: formBody(form) });
     after(form.dataset.then, result, form);
   } catch (err) {
-    flash(errorText(err), status);
+    const slugField = form.querySelector<HTMLInputElement>('input[data-mm-slug]');
+    const kind = slugField && err instanceof ApiFailure ? slugErrorKind(err.status, err.detail) : null;
+    if (slugField && kind) {
+      flash(pageStrings()[`slug.${kind}`] || errorText(err), status);
+      slugField.setAttribute('aria-invalid', 'true');
+      slugField.focus();
+    } else {
+      flash(errorText(err), status);
+    }
     setBusy(form, false);
   }
 });

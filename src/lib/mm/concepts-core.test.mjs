@@ -16,6 +16,9 @@ import {
   getCommonsRole,
   shouldDestroyClient,
   forumBibliographyKey,
+  renameConceptSlug,
+  resolveConceptSlug,
+  cleanCustomSlug,
 } from './concepts-core.ts';
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -113,9 +116,10 @@ test('cleanSources keeps known string fields only', () => {
 // createConcept
 // ---------------------------------------------------------------------------
 
-function createFixture({ taken = [], failOn = null } = {}) {
+function createFixture({ taken = [], failOn = null, holders = {} } = {}) {
   return fakeQuery([
     memberRoute,
+    ['FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND slug = $2', ([, slug]) => (holders[slug] ? [holders[slug]] : [])],
     [/FROM "ForumBoard" b LEFT JOIN "ForumBoard" pb[\s\S]*WHERE b\.id = \$1::uuid AND b\."spaceId" = \$2::uuid/, ([fid, sid]) =>
       sid !== SPACE ? [] : fid === FORUM ? [{ id: FORUM, parentId: null }] : fid === CHANNEL ? [{ id: CHANNEL, parentId: FORUM }] : []],
     ['SELECT slug FROM "Concept"', () => taken.map((slug) => ({ slug }))],
@@ -607,4 +611,127 @@ test('relation-type concepts: no status/labels; definition edits need manageRela
   await rejectsStatus(setLabels(mk().q, { conceptId: RT, actorUserId: U.admin, label: 'x' }), 404);
   await rejectsStatus(editDefinition(mk().q, { conceptId: RT, actorUserId: U.member, lang: 'en', definition: 'd' }), 403);
   assert.deepEqual(await editDefinition(mk().q, { conceptId: RT, actorUserId: U.curator, lang: 'nb', definition: 'd' }), { versionId: 'v9' });
+});
+
+// ---------------------------------------------------------------------------
+// Custom slugs, rename + aliases, resolution
+// ---------------------------------------------------------------------------
+
+test('conceptBaseSlug cuts long labels to 80 characters at a hyphen', () => {
+  const slug = conceptBaseSlug('a very long concept label '.repeat(8));
+  assert.ok(slug.length <= 80 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug), slug);
+});
+
+test('cleanCustomSlug: 400 with the reason', () => {
+  assert.equal(cleanCustomSlug(' pharmakon '), 'pharmakon');
+  for (const [raw, re] of [['graph', /reserved/], ['Pharmakon', /lowercase/], ['x', /2–80/], ['a--b', /lowercase/]]) {
+    assert.throws(() => cleanCustomSlug(raw), (e) => e instanceof ConceptError && e.status === 400 && re.test(e.message), raw);
+  }
+});
+
+test('createConcept: automatic slug skips reserved words and rename aliases', async () => {
+  const fx = createFixture({ taken: [] });
+  const out = await createConcept(fx.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'Graph', definition: 'D' });
+  assert.equal(out.slug, 'graph-2');
+  const taken = fx.calls.find((c) => c.text.includes('SELECT slug FROM "Concept"'));
+  assert.match(taken.text, /UNION\s+SELECT slug FROM "ConceptSlugAlias"/);
+  const fx2 = createFixture({ taken: ['memory'] });
+  assert.equal((await createConcept(fx2.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'Memory', definition: 'D' })).slug, 'memory-2');
+});
+
+test('createConcept: a typed slug is used as is, under the lock; taken (live or alias) is 409, never -2', async () => {
+  const fx = createFixture();
+  const out = await createConcept(fx.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'Pharmakon', definition: 'D', slug: ' poison-cure ' });
+  assert.equal(out.slug, 'poison-cure');
+  const texts = fx.calls.map((c) => c.text);
+  assert.ok(texts.findIndex((t) => t.includes('pg_advisory_xact_lock')) < texts.findIndex((t) => t.includes('FROM "ConceptSlugAlias"')));
+  assert.ok(!texts.some((t) => t.includes('slug LIKE')), 'no suffix search for a typed slug');
+  assert.equal(fx.calls.find((c) => c.text.includes('INSERT INTO "Concept"')).params[2], 'poison-cure');
+
+  for (const holder of [{ conceptId: C2, alias: false }, { conceptId: C2, alias: true }]) {
+    const taken = createFixture({ holders: { 'poison-cure': holder } });
+    await rejectsStatus(createConcept(taken.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'P', definition: 'D', slug: 'poison-cure' }), 409);
+    assert.equal(taken.calls.at(-1).text, 'ROLLBACK');
+    assert.ok(!taken.calls.some((c) => c.text.includes('INSERT INTO "ForumThread"')));
+  }
+  // invalid typed slugs fail before any write; empty means automatic
+  for (const bad of ['about', 'Bad Slug', 'x']) {
+    const f = createFixture();
+    await rejectsStatus(createConcept(f.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'P', definition: 'D', slug: bad }), 400);
+    assert.ok(!f.calls.some((c) => c.text === 'BEGIN'), bad);
+  }
+  const auto = createFixture();
+  assert.equal((await createConcept(auto.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'Pharmakon', definition: 'D', slug: '  ' })).slug, 'pharmakon');
+});
+
+function renameFixture({ holders = {}, failAlias = false, rows } = {}) {
+  return fakeQuery([
+    memberRoute,
+    conceptByIdRoute(rows),
+    ['FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND slug = $2', ([, slug]) => (holders[slug] ? [holders[slug]] : [])],
+    ['DELETE FROM "ConceptSlugAlias"', () => []],
+    ['UPDATE "Concept" SET slug', ([slug]) => [{ slug }]],
+    ['INSERT INTO "ConceptSlugAlias"', () => (failAlias ? { error: new Error('alias failed') } : [])],
+  ]);
+}
+
+test('renameConceptSlug: curators/admins only; old slug becomes an alias, in one transaction', async () => {
+  const fx = renameFixture();
+  assert.deepEqual(await renameConceptSlug(fx.q, { conceptId: C1, actorUserId: U.curator, slug: 'poison-and-cure' }),
+    { slug: 'poison-and-cure', previous: 'pharmakon', changed: true });
+  const texts = fx.calls.map((c) => c.text);
+  const at = (needle) => texts.findIndex((t) => t.includes(needle));
+  assert.ok(at('BEGIN') < at('pg_advisory_xact_lock') && at('pg_advisory_xact_lock') < at('FOR UPDATE'));
+  assert.ok(at('FOR UPDATE') < at('UPDATE "Concept" SET slug') && at('UPDATE "Concept" SET slug') < at('INSERT INTO "ConceptSlugAlias"'));
+  assert.equal(texts.at(-1), 'COMMIT');
+  assert.deepEqual(fx.calls[at('INSERT INTO "ConceptSlugAlias"')].params, [SPACE, 'pharmakon', C1]);
+
+  for (const who of [U.author, U.member, U.guest, U.stranger]) {
+    await rejectsStatus(renameConceptSlug(renameFixture().q, { conceptId: C1, actorUserId: who, slug: 'x-y' }), 403);
+  }
+  await rejectsStatus(renameConceptSlug(renameFixture().q, { conceptId: C1, actorUserId: null, slug: 'x-y' }), 401);
+  await rejectsStatus(renameConceptSlug(renameFixture().q, { conceptId: C1, actorUserId: U.admin, slug: 'admin' }), 400);
+  await rejectsStatus(renameConceptSlug(renameFixture().q, { conceptId: id(999), actorUserId: U.admin, slug: 'x-y' }), 404);
+});
+
+test('renameConceptSlug: unchanged is a no-op; taken by another concept (live or alias) is 409; own alias is reclaimed', async () => {
+  const same = renameFixture();
+  assert.equal((await renameConceptSlug(same.q, { conceptId: C1, actorUserId: U.admin, slug: 'pharmakon' })).changed, false);
+  assert.ok(!same.calls.some((c) => c.text === 'BEGIN'));
+
+  for (const holder of [{ conceptId: C2, alias: false }, { conceptId: C2, alias: true }]) {
+    const fx = renameFixture({ holders: { 'tertiary-retention': holder } });
+    await rejectsStatus(renameConceptSlug(fx.q, { conceptId: C1, actorUserId: U.admin, slug: 'tertiary-retention' }), 409);
+    assert.equal(fx.calls.at(-1).text, 'ROLLBACK');
+    assert.ok(!fx.calls.some((c) => c.text.includes('UPDATE "Concept" SET slug')));
+  }
+
+  const back = renameFixture({ holders: { 'old-name': { conceptId: C1, alias: true } } });
+  await renameConceptSlug(back.q, { conceptId: C1, actorUserId: U.admin, slug: 'old-name' });
+  const del = back.calls.find((c) => c.text.includes('DELETE FROM "ConceptSlugAlias"'));
+  assert.deepEqual(del.params, [SPACE, 'old-name', C1]);
+  assert.equal(back.calls.at(-1).text, 'COMMIT');
+
+  const fail = renameFixture({ failAlias: true });
+  await assert.rejects(renameConceptSlug(fail.q, { conceptId: C1, actorUserId: U.admin, slug: 'x-y' }));
+  assert.equal(fail.calls.at(-1).text, 'ROLLBACK');
+});
+
+test('renameConceptSlug: relation-type concepts are not renamed', async () => {
+  const fx = renameFixture({ rows: { [RT]: relTypeConcept() } });
+  await rejectsStatus(renameConceptSlug(fx.q, { conceptId: RT, actorUserId: U.admin, slug: 'x-y' }), 404);
+});
+
+test('resolveConceptSlug: live concept → alias → null; space-scoped; concepts only', async () => {
+  const fx = fakeQuery([
+    ['FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2 AND kind', ([sid, slug]) => (sid === SPACE && slug === 'pharmakon' ? [{ slug }] : [])],
+    ['FROM "ConceptSlugAlias" a', ([sid, slug]) => (sid === SPACE && slug === 'old-name' ? [{ slug: 'pharmakon' }] : [])],
+  ]);
+  assert.deepEqual(await resolveConceptSlug(fx.q, { spaceId: SPACE, slug: 'pharmakon' }), { kind: 'live', slug: 'pharmakon' });
+  assert.deepEqual(await resolveConceptSlug(fx.q, { spaceId: SPACE, slug: 'old-name' }), { kind: 'alias', slug: 'pharmakon' });
+  assert.equal(await resolveConceptSlug(fx.q, { spaceId: SPACE, slug: 'nothing' }), null);
+  assert.equal(await resolveConceptSlug(fx.q, { spaceId: OTHER_SPACE, slug: 'pharmakon' }), null);
+  assert.equal(await resolveConceptSlug(fx.q, { spaceId: 'nope', slug: 'pharmakon' }), null);
+  const alias = fx.calls.find((c) => c.text.includes('"ConceptSlugAlias" a'));
+  assert.match(alias.text, /c\.kind = 'concept'/);
 });

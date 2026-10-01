@@ -2,6 +2,8 @@
 // view.test.mjs): which definition a reader sees in their language, labels,
 // safe source links, dates and public paths.
 
+import { isRootSlug } from './slugs.ts';
+
 export type ViewLang = 'en' | 'nb' | 'nn';
 type Versioned = { definition: string; lang: string };
 
@@ -119,7 +121,12 @@ export function forumCrumbs(b: BoardRef & { title: string }, current: string | n
   if (current !== null) crumbs.push({ label: current, href: null });
   return crumbs;
 }
-export const conceptPath = (slug: string) => `/c/${encodeURIComponent(slug)}`;
+/**
+ * A concept's permalink: the root (/<slug>) when the slug can live there
+ * (slugs.ts isRootSlug); older slugs that cannot (a reserved word, an odd
+ * spelling) keep /c/<slug>, where the concept page is still served.
+ */
+export const conceptPath = (slug: string) => (isRootSlug(slug) ? `/${slug}` : `/c/${encodeURIComponent(slug)}`);
 
 /**
  * A user's name as it may appear publicly: trimmed, and never anything that

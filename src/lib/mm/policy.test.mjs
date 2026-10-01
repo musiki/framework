@@ -22,6 +22,7 @@ const matrix = {
   manageRelationTypes: [F, F, T, T, F],
   stance: [F, T, T, T, F],
   settleRelation: [F, F, T, T, F],
+  renameConceptSlug: [F, F, T, T, F], // never the concept's author as a member
 };
 
 for (const [action, row] of Object.entries(matrix)) {

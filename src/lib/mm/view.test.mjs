@@ -63,6 +63,12 @@ test('paths are encoded', () => {
   assert.equal(threadPath('stiegler', '0b7c'), '/f/stiegler/t/0b7c');
   assert.equal(conceptPath('café'), '/c/caf%C3%A9');
   assert.equal(conceptPath('a/b'), '/c/a%2Fb');
+  assert.equal(conceptPath('pharmakon'), '/pharmakon');
+  assert.equal(conceptPath('tertiary-retention'), '/tertiary-retention');
+  // reserved words and non-canonical legacy slugs keep /c/<slug>
+  assert.equal(conceptPath('graph'), '/c/graph');
+  assert.equal(conceptPath('concepts'), '/c/concepts');
+  assert.equal(conceptPath('Odd'), '/c/Odd');
 });
 
 test('display names', () => {

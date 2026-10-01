@@ -3,7 +3,7 @@ import type { CommonsRole } from '../tenant/space-roles.ts';
 export const MM_ACTIONS = [
   'read', 'vote', 'post', 'editOwnPost', 'proposeConcept', 'editDefinition', 'adoptPost', 'changeStatus',
   'moderate', 'createRelation', 'deleteRelation', 'manageForums', 'manageAccess',
-  'manageRelationTypes', 'stance', 'settleRelation',
+  'manageRelationTypes', 'stance', 'settleRelation', 'renameConceptSlug',
 ] as const;
 export type MmAction = (typeof MM_ACTIONS)[number];
 
@@ -41,6 +41,7 @@ export function can(role: CommonsRole | null, action: MmAction, ctx: MmPolicyCtx
     case 'manageForums':
     case 'manageRelationTypes':
     case 'settleRelation':
+    case 'renameConceptSlug':
       return CURATOR_UP(role);
     case 'manageAccess':
       return role === 'admin';

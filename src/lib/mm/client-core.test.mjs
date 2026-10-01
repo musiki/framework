@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findCitekeyQuery, insertCitekey, apiErrorKind, apiErrorMessage, adminErrorKind, libraryPickerOptions } from './client-core.ts';
+import { findCitekeyQuery, insertCitekey, apiErrorKind, apiErrorMessage, adminErrorKind, libraryPickerOptions, slugErrorKind } from './client-core.ts';
+import { slugProblemMessage } from './slugs.ts';
 
 test('citekey query right after @', () => {
   assert.deepEqual(findCitekeyQuery('see @stie', 9), { start: 4, query: 'stie' });
@@ -70,4 +71,13 @@ test('libraryPickerOptions keeps a linked id missing from the list', () => {
   const out = libraryPickerOptions([], 'gone-1', { none: '-', option: '{path}', unknown: 'Current: {id}' });
   assert.deepEqual(out.at(-1), { value: 'gone-1', label: 'Current: gone-1', selected: true });
   assert.equal(out.filter((o) => o.selected).length, 1);
+});
+
+test('slugErrorKind maps the API slug errors (and nothing else)', () => {
+  assert.equal(slugErrorKind(409, 'concept slug already exists'), 'taken');
+  for (const p of ['reserved', 'format', 'length', 'required']) assert.equal(slugErrorKind(400, slugProblemMessage(p, 'graph')), p, p);
+  assert.equal(slugErrorKind(409, 'thread is locked or archived'), null);
+  assert.equal(slugErrorKind(400, 'definition required'), null);
+  assert.equal(slugErrorKind(403, 'concept slug already exists'), null);
+  assert.equal(slugErrorKind(400, undefined), null);
 });
