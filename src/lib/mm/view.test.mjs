@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pickDefinition, conceptLabel, safeHttpUrl, formatDate, forumPath, threadPath, conceptPath, displayName,
+  pickDefinition, conceptLabel, groupByDay, dayKey, safeHttpUrl, formatDate, forumPath, threadPath, conceptPath, displayName,
 } from './view.ts';
 
 const en = { lang: 'en', definition: 'English text' };
@@ -145,4 +145,16 @@ test('definitionExcerpt: plain text from markdown (no fences, math delimiters, l
   const long = definitionExcerpt('word '.repeat(80), 50);
   assert.ok(long.length <= 50 && long.endsWith('…'), long);
   assert.equal(definitionExcerpt(null), '');
+});
+
+test('groupByDay: consecutive versions of the same UTC day share a group, order kept', () => {
+  const v = (id, createdAt) => ({ id, createdAt });
+  const groups = groupByDay([
+    v('c', '2026-09-30T23:30:00Z'), v('b', '2026-09-30T08:00:00Z'), v('a', '2026-09-29T10:00:00Z'),
+  ], 'en');
+  assert.deepEqual(groups.map((g) => [g.day, g.items.map((x) => x.id)]), [['2026-09-30', ['c', 'b']], ['2026-09-29', ['a']]]);
+  assert.equal(groups[0].label, '30 Sept 2026'.replace('Sept', new Intl.DateTimeFormat('en-GB', { month: 'short', timeZone: 'UTC' }).format(new Date('2026-09-30'))));
+  assert.deepEqual(groupByDay([], 'nb'), []);
+  assert.equal(dayKey('nope'), '');
+  assert.equal(dayKey(null), '');
 });

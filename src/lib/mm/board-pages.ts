@@ -4,13 +4,15 @@
 //   /f/<group>/<channel>            channel page
 //   /f/<group>/t/<thread>           thread of the group itself
 //   /f/<group>/<channel>/t/<thread> thread of a channel
+// A concept's discussion thread (under its correct board URL) is a 301 to the
+// concept page, /<slug>#discussion, where it is shown and answered.
 // A thread requested under a board it does not belong to is a 404 (never a
 // redirect), as is a channel of another group or the reserved channel slug.
 
 import { getForumByPath, listPosts, listThreads, type ForumSummary, type ThreadSummary, type ThreadView } from './forum';
 import { listConcepts, type ConceptListItem } from './concepts';
 import { loadMmViewer, logPageError, type MmViewer } from './page-data';
-import { boardMatchesPath, pageErrorState } from './view';
+import { boardMatchesPath, conceptPath, pageErrorState } from './view';
 import { isUuid } from '../tenant/space-roles';
 import type { MmLang } from './ui-lang';
 
@@ -59,16 +61,21 @@ export async function loadThreadPage(
   groupSlug: string,
   channelSlug: string | null,
   threadId: string,
-): Promise<{ state: PageState; view: ThreadView | null }> {
-  if (!isMm || !isUuid(threadId)) return { state: 'notFound', view: null };
+  search = '',
+): Promise<{ state: PageState; view: ThreadView | null; redirect: string | null }> {
+  if (!isMm || !isUuid(threadId)) return { state: 'notFound', view: null, redirect: null };
   try {
     const viewer = await loadMmViewer(locals);
     const view = await listPosts({ spaceId: viewer.space.id, threadId, viewerUserId: viewer.userId, lang });
     // The thread must belong to the board named by the URL (group or group/channel).
-    if (!view || !boardMatchesPath(view.thread.forum, groupSlug, channelSlug)) return { state: 'notFound', view: null };
-    return { state: 'ok', view };
+    if (!view || !boardMatchesPath(view.thread.forum, groupSlug, channelSlug)) return { state: 'notFound', view: null, redirect: null };
+    // A concept's discussion thread lives on the concept page (Discussion section).
+    if (view.thread.concept) {
+      return { state: 'ok', view: null, redirect: `${conceptPath(view.thread.concept.slug)}${search}#discussion` };
+    }
+    return { state: 'ok', view, redirect: null };
   } catch (err) {
     logPageError('thread', err);
-    return { state: pageErrorState(err), view: null };
+    return { state: pageErrorState(err), view: null, redirect: null };
   }
 }

@@ -24,3 +24,18 @@ export function clientStrings(lang: MmLang, extra: Record<string, string> = {}):
     ...extra,
   });
 }
+
+/** Client strings of the thread scripts (composer, adopt, own edit) on top of the common ones. */
+export function threadClientStrings(lang: MmLang, conceptLabel: string | null, extra: Record<string, string> = {}): string {
+  return clientStrings(lang, {
+    'reply.to': t(lang, 'mm.thread.replyingTo'),
+    'cite.label': t(lang, 'mm.thread.citations.label'),
+    'cite.searching': t(lang, 'mm.thread.citations.searching'),
+    'cite.none': t(lang, 'mm.thread.citations.none'),
+    'cite.unavailable': t(lang, 'mm.thread.citations.unavailable'),
+    'adopt.lead': conceptLabel ? t(lang, 'mm.thread.adoptDialog.lead', { concept: conceptLabel }) : '',
+    'adopt.loading': t(lang, 'mm.thread.adoptDialog.loading'),
+    'edit.loading': t(lang, 'mm.thread.editLoading'),
+    ...extra,
+  });
+}

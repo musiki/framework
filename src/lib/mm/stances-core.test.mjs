@@ -209,7 +209,7 @@ test('getRelationView: shape, provenance, own; pinned to the space; bad ids → 
     id: REL, type: 'derives',
     source: { slug: 'a', label: 'A', labelNb: null }, target: { slug: 'b', label: 'B', labelNb: 'B nb' },
     createdBy: { name: 'Mem', deleted: false }, own: true, createdAt: '2026-09-10T00:00:00.000Z',
-    fromPost: { id: POST, threadId: THREAD, groupSlug: 'stiegler', channelSlug: 'concepts' },
+    fromPost: { id: POST, threadId: THREAD, groupSlug: 'stiegler', channelSlug: 'concepts', conceptSlug: null },
     settled: false, revealAt: '2026-09-24T00:00:00.000Z', revealed: false, agree: 1, disagree: 1,
     myStance: null, myStanceAfterReveal: false, stances: null,
   });
@@ -227,6 +227,8 @@ test('getRelationView: shape, provenance, own; pinned to the space; bad ids → 
   assert.match(main.text, /ft\."archivedAt" IS NOT NULL OR fb\.id IS NULL OR fb\."isArchived" OR COALESCE\(fpb\."isArchived", false\)/);
   assert.equal(await getRelationView(fx.q, { relationId: 'nope', spaceId: SPACE }), null);
   assert.equal(await getRelationView(fx.q, { relationId: id(999), spaceId: SPACE }), null);
+  // A post in a concept's discussion thread is read on the concept page.
+  assert.match(main.text, /fc\."threadId" = ft\.id AND fc\."spaceId" = r\."spaceId" AND fc\.kind = 'concept'[\s\S]*AS "fromConceptSlug"/);
 });
 
 // ---------------------------------------------------------------------------

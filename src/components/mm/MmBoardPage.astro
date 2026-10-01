@@ -94,7 +94,7 @@ const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(l
               <ul class="mm-list">
                 {threads.map((th) => (
                   <li>
-                    <a class="mm-list-title" href={boardThreadPath(forum!, th.id)}>{th.title}</a>
+                    <a class="mm-list-title" href={th.concept ? `${conceptPath(th.concept.slug)}#discussion` : boardThreadPath(forum!, th.id)}>{th.title}</a>
                     <ul class="mm-inline-list">
                       {th.isPinned && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.pinned')}</span></li>}
                       {th.isLocked && <li><span class="mm-badge mm-badge-quiet">{t(lang, 'mm.forum.locked')}</span></li>}

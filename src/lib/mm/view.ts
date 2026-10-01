@@ -80,6 +80,32 @@ export function formatDate(iso: string | null | undefined, readerLang: ViewLang)
   }).format(d);
 }
 
+/** UTC calendar day of an ISO date ('2026-09-29'); '' for invalid input. */
+export function dayKey(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
+/**
+ * Versions grouped by the day they were written (UTC), in the order given
+ * (history is newest first, so the groups are too). Each group carries the
+ * day key (stable anchor material) and its display date.
+ */
+export function groupByDay<V extends { createdAt: string }>(
+  versions: V[],
+  readerLang: ViewLang,
+): Array<{ day: string; label: string; items: V[] }> {
+  const groups: Array<{ day: string; label: string; items: V[] }> = [];
+  for (const v of versions) {
+    const day = dayKey(v.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.items.push(v);
+    else groups.push({ day, label: formatDate(v.createdAt, readerLang), items: [v] });
+  }
+  return groups;
+}
+
 /** /f/<group> or, with a channel, /f/<group>/<channel>. */
 export const forumPath = (slug: string, channel?: string | null) =>
   `/f/${encodeURIComponent(slug)}${channel ? `/${encodeURIComponent(channel)}` : ''}`;

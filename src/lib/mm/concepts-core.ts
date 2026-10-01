@@ -858,8 +858,8 @@ export async function renameConceptSlug(
   try {
     return await withTransaction(q, async () => {
       await run(q, SLUG_LOCK_SQL, [slugLockKey(concept.spaceId)]);
-      const locked = await loadConceptById(q, concept.id, true);
-      if (locked.slug === slug) return { slug, previous: locked.slug, changed: false };
+      const previous = (await loadConceptById(q, concept.id, true)).slug;
+      if (previous === slug) return { slug, previous, changed: false };
       const holder = await slugHolder(q, concept.spaceId, slug);
       if (holder && !(holder.alias && holder.conceptId === concept.id)) {
         throw new ConceptError(409, 'concept slug already exists');
@@ -879,9 +879,9 @@ export async function renameConceptSlug(
         q,
         `INSERT INTO "ConceptSlugAlias" ("spaceId", slug, "conceptId") VALUES ($1::uuid, $2, $3::uuid)
          ON CONFLICT ("spaceId", slug) DO NOTHING`,
-        [concept.spaceId, locked.slug, concept.id],
+        [concept.spaceId, previous, concept.id],
       );
-      return { slug, previous: locked.slug, changed: true };
+      return { slug, previous, changed: true };
     });
   } catch (err) {
     if (isUniqueViolation(err)) throw new ConceptError(409, 'concept slug already exists');

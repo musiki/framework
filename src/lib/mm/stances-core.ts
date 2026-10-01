@@ -115,7 +115,11 @@ export type RelationView = {
   own: boolean;
   createdAt: string;
   /** The post where it was argued, with what a page needs to link it; null when there is none or its board is archived. */
-  fromPost: { id: string; threadId: string; groupSlug: string | null; channelSlug: string | null } | null;
+  fromPost: {
+    id: string; threadId: string; groupSlug: string | null; channelSlug: string | null;
+    /** Set when the post is in a concept's discussion thread: it is read on that concept's page. */
+    conceptSlug: string | null;
+  } | null;
   settled: boolean;
   /** When names are (or were) revealed to members. */
   revealAt: string;
@@ -153,6 +157,8 @@ export async function getRelationView(
             src.slug AS "sourceSlug", src.label AS "sourceLabel", src."labelNb" AS "sourceLabelNb",
             tgt.slug AS "targetSlug", tgt.label AS "targetLabel", tgt."labelNb" AS "targetLabelNb",
             fp.id AS "fromPostId", ft.id AS "fromThreadId", fb.slug AS "fromBoardSlug", fpb.slug AS "fromGroupSlug",
+            (SELECT fc.slug FROM "Concept" fc WHERE fc."threadId" = ft.id AND fc."spaceId" = r."spaceId" AND fc.kind = 'concept'
+             ORDER BY fc."createdAt" ASC, fc.id ASC LIMIT 1) AS "fromConceptSlug",
             (ft."archivedAt" IS NOT NULL OR fb.id IS NULL OR fb."isArchived" OR COALESCE(fpb."isArchived", false)) AS "fromArchived",
             (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'agree')::int AS agree,
             (SELECT count(*) FROM "ConceptRelationStance" s WHERE s."relationId" = r.id AND s.stance = 'disagree')::int AS disagree
@@ -218,6 +224,7 @@ export async function getRelationView(
           threadId: r.fromThreadId,
           groupSlug: r.fromGroupSlug ?? r.fromBoardSlug ?? null,
           channelSlug: r.fromGroupSlug ? (r.fromBoardSlug ?? null) : null,
+          conceptSlug: r.fromConceptSlug ?? null,
         }
       : null,
     settled: r.settled === true,

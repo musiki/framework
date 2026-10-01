@@ -2,6 +2,7 @@
 // Internal page for mm "/f/<group>/t/<thread id>" (middleware rewrite): a
 // thread that lives in the group itself (or in a forum without channels).
 // A channel's thread under this URL is a 404 (its URL has the channel).
+// A concept's discussion thread answers 301 to /<concept slug>#discussion.
 // Rendering: components/mm/MmThreadPage.astro.
 import MmThreadPage from '../../../../../components/mm/MmThreadPage.astro';
 import { applyMmLang } from '../../../../../lib/mm/ui-lang';
@@ -10,9 +11,10 @@ export const prerender = false;
 
 const isMm = Astro.locals.tenant?.id === 'mm';
 const lang = applyMmLang(Astro);
-const { state, view } = await loadThreadPage(
-  Astro.locals, isMm, lang, String(Astro.params.forum ?? ''), null, String(Astro.params.thread ?? ''),
+const { state, view, redirect } = await loadThreadPage(
+  Astro.locals, isMm, lang, String(Astro.params.forum ?? ''), null, String(Astro.params.thread ?? ''), Astro.url.search,
 );
+if (redirect) return Astro.redirect(redirect, 301);
 if (state === 'notFound') Astro.response.status = 404;
 if (state === 'unavailable') Astro.response.status = 503;
 ---

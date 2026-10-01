@@ -4,10 +4,12 @@
 //              permalink, except for older slugs that cannot live at the root
 //              (reserved word, non-canonical), which are still served here.
 // Resolution: live concept → page; rename alias → 301 to the concept's
-// current permalink; anything else → 404.
+// current permalink; anything else → 404. The page also carries the concept's
+// discussion thread (its thread URLs 301 here, see board-pages.ts).
 
 import { getConcept, listConcepts, resolveConceptSlug, type ConceptListItem, type ConceptView } from './concepts';
 import { listRelationTypes, type RelationTypeView } from './relation-types';
+import { listPosts, type ThreadView } from './forum';
 import { can } from './policy';
 import { isConceptAuthor, loadMmViewer, logPageError, type MmViewer } from './page-data';
 import { conceptPath, pageErrorState } from './view';
@@ -25,6 +27,11 @@ export type ConceptPageData = {
   others: ConceptListItem[];
   isAuthor: boolean;
   relationTypes: RelationTypeView[];
+  /**
+   * The concept's discussion thread with its posts (Discussion section), or
+   * null when it has none or its board is archived (the thread is closed).
+   */
+  discussion: ThreadView | null;
 };
 
 export async function loadConceptPage(
@@ -36,7 +43,7 @@ export async function loadConceptPage(
   search = '',
 ): Promise<ConceptPageData> {
   const out: ConceptPageData = {
-    state: 'ok', redirect: null, viewer: null, concept: null, others: [], isAuthor: false, relationTypes: [],
+    state: 'ok', redirect: null, viewer: null, concept: null, others: [], isAuthor: false, relationTypes: [], discussion: null,
   };
   if (!isMm || !slug || slug.length > 200 || (route === 'root' && !isRootSlug(slug))) return { ...out, state: 'notFound' };
   try {
@@ -52,15 +59,21 @@ export async function loadConceptPage(
     if (route === 'legacy' && isRootSlug(concept.slug)) return { ...out, redirect: `${conceptPath(concept.slug)}${search}` };
     out.concept = concept;
     const role = viewer.role;
-    const [isAuthor, others, relationTypes] = await Promise.all([
+    const [isAuthor, others, relationTypes, discussion] = await Promise.all([
       role === 'member' ? isConceptAuthor(concept.id, viewer.userId) : Promise.resolve(false),
       can(role, 'createRelation') ? listConcepts({ spaceId: viewer.space.id }) : Promise.resolve([]),
       // Archived types too: existing relations may still use them (labels); the picker offers only live ones.
       listRelationTypes({ spaceId: viewer.space.id, includeArchived: true }),
+      // listPosts is null for an archived thread or board: the discussion is closed.
+      concept.threadId && !concept.originArchived
+        ? listPosts({ spaceId: viewer.space.id, threadId: concept.threadId, viewerUserId: viewer.userId, lang })
+        : Promise.resolve(null),
     ]);
     out.isAuthor = isAuthor;
     out.others = others.filter((c) => c.slug !== concept.slug);
     out.relationTypes = relationTypes;
+    // Only the concept's own thread (listPosts names its concept) is shown as its discussion.
+    out.discussion = discussion && discussion.thread.concept?.slug === concept.slug ? discussion : null;
   } catch (err) {
     logPageError('concept', err);
     out.state = pageErrorState(err);

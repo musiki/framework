@@ -70,7 +70,7 @@ import {
   RELATION_FILTER_EVENT, dashArray, needsInkUnderlay, sampleSpec, strokeColor, svgAttrs, tintColor, typeLabel, typePath,
   type RelationFilterDetail, type TypeLike,
 } from '../../lib/mm/relation-type-ui';
-import { threadPath } from '../../lib/mm/view';
+import { conceptPath, threadPath } from '../../lib/mm/view';
 import { ApiFailure, errorText, mmApi, pageStrings } from './api';
 
 // Type filter from the relation modeler table (relation-types.ts): the slugs
@@ -129,7 +129,7 @@ type Tag = { x: number; y: number; mx: number; my: number; r: number; fx?: numbe
 /** GET /api/mm/relations/<id> (stances-core getRelationView), as far as the card uses it. */
 type RelationView = {
   id: string; createdBy: { name: string | null; deleted: boolean } | null;
-  fromPost: { id: string; threadId: string; groupSlug: string | null; channelSlug: string | null } | null;
+  fromPost: { id: string; threadId: string; groupSlug: string | null; channelSlug: string | null; conceptSlug?: string | null } | null;
   settled: boolean; revealAt: string; revealed: boolean; agree: number; disagree: number;
   myStance: 'agree' | 'disagree' | null;
   stances: { name: string | null; deleted: boolean; stance: 'agree' | 'disagree'; afterReveal: boolean }[] | null;
@@ -870,8 +870,11 @@ function draw(holder: HTMLElement): void {
     }
     return s;
   };
+  // A post of a concept's discussion is read on the concept page; other posts on their thread page.
   const postHref = (p: NonNullable<RelationView['fromPost']>) =>
-    p.groupSlug ? `${threadPath(p.groupSlug, p.threadId, p.channelSlug)}#post-${encodeURIComponent(p.id)}` : null;
+    p.conceptSlug
+      ? `${conceptPath(p.conceptSlug)}#post-${encodeURIComponent(p.id)}`
+      : p.groupSlug ? `${threadPath(p.groupSlug, p.threadId, p.channelSlug)}#post-${encodeURIComponent(p.id)}` : null;
   const button = (text: string, act: string, onClick: () => void, pressed?: boolean) => {
     const b = el('button', 'mm-button mm-button-small', text);
     b.type = 'button';

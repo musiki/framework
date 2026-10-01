@@ -8,7 +8,11 @@
 // text; never machine translation; nn readers get nb), credit, sources,
 // history with credited authors, relations (+ picker for members, remove
 // own/any), status and permalink (curators), new version (author/curators),
-// link to the discussion thread.
+// and the concept's discussion thread (posts, replies, votes, own edits,
+// moderation, adopt: MmThreadPosts.astro, the same as on a thread page).
+// Sections fold (native <details>, anchors #definition #discussion
+// #new-version #relations #status #history; lib/mm/fold.ts + scripts/mm/fold.ts);
+// history versions are grouped by day, each day foldable.
 // Definitions are markdown: they are shown ONLY through the core's sanitized
 // `definitionHtml` (same mm renderer as posts: KaTeX, LilyPond as same-origin
 // /lily/<hash>.svg, citations against the concept's forum); the raw
@@ -16,17 +20,19 @@
 import 'katex/dist/katex.min.css';
 import MmLayout from '../../layouts/MmLayout.astro';
 import MmStatus from './MmStatus.astro';
+import MmThreadPosts from './MmThreadPosts.astro';
 import { t, type MessageKey } from '../../lib/i18n';
 import { langSwitchHref, type MmLang } from '../../lib/mm/ui-lang';
 import { CONCEPT_STATUSES } from '../../lib/mm/concepts';
 import type { RelationTypeView } from '../../lib/mm/relation-types';
 import { typeInverse, typeLabel, typePath } from '../../lib/mm/relation-type-ui';
 import { can } from '../../lib/mm/policy';
-import { clientStrings } from '../../lib/mm/page-strings';
+import { threadClientStrings } from '../../lib/mm/page-strings';
+import { FOLD_DEFAULT_OPEN } from '../../lib/mm/fold';
 import type { ConceptPageData } from '../../lib/mm/concept-page';
 import { SLUG_MAX, SLUG_MIN } from '../../lib/mm/slugs';
 import {
-  conceptLabel, conceptPath, definitionExcerpt, displayName, formatDate, forumPath, pickDefinition, safeHttpUrl, threadPath,
+  conceptLabel, conceptPath, definitionExcerpt, displayName, formatDate, forumPath, groupByDay, pickDefinition, safeHttpUrl,
 } from '../../lib/mm/view';
 
 interface Props {
@@ -35,7 +41,7 @@ interface Props {
   data: ConceptPageData;
 }
 const { lang, isMm, data } = Astro.props;
-const { state, viewer, concept, others, isAuthor, relationTypes } = data;
+const { state, viewer, concept, others, isAuthor, relationTypes, discussion } = data;
 
 const role = viewer?.role ?? null;
 const formerMember = t(lang, 'mm.common.formerMember');
@@ -48,11 +54,6 @@ const canStatus = can(role, 'changeStatus');
 const canRename = can(role, 'renameConceptSlug');
 const canRelate = can(role, 'createRelation');
 const apiSlug = concept ? encodeURIComponent(concept.slug) : '';
-// The discussion thread may live in a channel of the concept's group (origin).
-// Not linked when that board is archived (its pages are 404s).
-const discussion = concept?.threadId && concept.origin && !concept.originArchived
-  ? threadPath(concept.origin.groupSlug, concept.threadId, concept.origin.channel?.slug ?? null)
-  : null;
 const langName = (l: string | null) =>
   l === 'nb' ? t(lang, 'mm.common.langNb') : l === 'nn' ? t(lang, 'mm.common.langNn') : t(lang, 'mm.common.langEn');
 const typeBySlug = new Map(relationTypes.map((rt) => [rt.slug, rt]));
@@ -68,9 +69,15 @@ const optionText = (rt: RelationTypeView) => {
   const inv = typeInverse(rt, lang);
   return inv ? t(lang, 'mm.concept.relationOption', { label: l, inverse: inv.text }) : l;
 };
-const strings = clientStrings(lang);
+const strings = threadClientStrings(lang, concept ? label.text : null);
 const selfPath = concept ? conceptPath(concept.slug) : '/';
-const postLink = (postId: string | null) => (postId && discussion ? `${discussion}#post-${postId}` : null);
+// Posts of the discussion are on this page (Discussion section).
+const postLink = (postId: string | null) => (postId && discussion?.posts.some((p) => p.id === postId) ? `#post-${postId}` : null);
+const signedIn = Boolean(viewer?.signedIn);
+const historyDays = concept ? groupByDay(concept.history, lang) : [];
+// Server defaults; src/scripts/mm/fold.ts applies the reader's own choices and anchors.
+const open = FOLD_DEFAULT_OPEN;
+const versionsLabel = (n: number) => (n === 1 ? t(lang, 'mm.concept.versionsOne') : t(lang, 'mm.concept.versions', { n }));
 ---
 {!isMm ? (
   <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
@@ -93,8 +100,9 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
       </p>
       <p class="mm-alert" data-mm-flash role="alert" hidden></p>
 
-      <section aria-labelledby="mm-def">
-        <h2 id="mm-def">{t(lang, 'mm.concept.definitionTitle')}</h2>
+      <details class="mm-fold" id="definition" data-mm-fold="definition" open={open.definition}>
+        <summary><h2>{t(lang, 'mm.concept.definitionTitle')}</h2></summary>
+        <div class="mm-fold-body">
         {pick?.missingTranslation && <p class="mm-note">{t(lang, 'mm.concept.missingNb')}</p>}
         {shown ? (
           <>
@@ -130,12 +138,29 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
         )}
         {pick?.alternate === 'nb' && <p><a href={langSwitchHref(selfPath, 'nb')} hreflang="nb" lang="nb">{t(lang, 'mm.concept.readNb')}</a></p>}
         {pick?.alternate === 'en' && <p><a href={langSwitchHref(selfPath, 'en')} hreflang="en" lang="en">{t(lang, 'mm.concept.readEn')}</a></p>}
-        {discussion && <p><a class="mm-more" href={discussion}>{t(lang, 'mm.concept.discussionLink')}</a></p>}
-      </section>
+        </div>
+      </details>
 
-      {canEdit && (
-        <section aria-labelledby="mm-edit" class="mm-panel">
-          <h2 id="mm-edit">{t(lang, 'mm.concept.editTitle')}</h2>
+      <details class="mm-fold" id="discussion" data-mm-fold="discussion" open={open.discussion}>
+        <summary><h2>{t(lang, 'mm.concept.discussion')}{discussion && <span class="mm-fold-count"> · {discussion.posts.filter((p) => p.status === 'published').length}</span>}</h2></summary>
+        <div class="mm-fold-body">
+          {discussion ? (
+            <>
+              <p class="mm-help">{t(lang, 'mm.concept.discussionLead')}</p>
+              {discussion.thread.isLocked && <p class="mm-note">{t(lang, 'mm.thread.locked')}</p>}
+              <MmThreadPosts lang={lang} view={discussion} level={3} />
+            </>
+          ) : (
+            <p class="mm-muted">{t(lang, 'mm.concept.discussionClosed')}</p>
+          )}
+        </div>
+      </details>
+
+      <details class="mm-fold" id="new-version" data-mm-fold="new-version" open={open['new-version']}>
+        <summary><h2>{t(lang, 'mm.concept.editTitle')}</h2></summary>
+        <div class="mm-fold-body">
+      {canEdit ? (
+        <>
           <p class="mm-help">{t(lang, 'mm.concept.editLead')}</p>
           <form class="mm-form" data-mm-form data-mm-definition-form data-method="PATCH" data-endpoint={`/api/mm/concepts/${apiSlug}`} data-then="reload"
             data-current-en={concept.current.en?.definition ?? ''} data-current-nb={concept.current.nb?.definition ?? ''}>
@@ -153,11 +178,18 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
             <p class="mm-alert" data-mm-form-status role="alert" hidden></p>
             <div class="mm-form-actions"><button class="mm-button" type="submit">{t(lang, 'mm.concept.saveDefinition')}</button></div>
           </form>
-        </section>
+        </>
+      ) : signedIn ? (
+        <p class="mm-note">{t(lang, 'mm.concept.editNotAllowed')}</p>
+      ) : (
+        <p><a class="mm-button" href="/join">{t(lang, 'mm.common.signInToTakePart')}</a></p>
       )}
+        </div>
+      </details>
 
-      <section aria-labelledby="mm-rel">
-        <h2 id="mm-rel">{t(lang, 'mm.concept.relationsTitle')}</h2>
+      <details class="mm-fold" id="relations" data-mm-fold="relations" open={open.relations}>
+        <summary><h2>{t(lang, 'mm.concept.relationsTitle')}<span class="mm-fold-count"> · {concept.relations.length}</span></h2></summary>
+        <div class="mm-fold-body">
         {concept.relations.length ? (
           <div class="mm-table-wrap">
             <table class="mm-table">
@@ -226,11 +258,17 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
             )}
           </div>
         )}
-      </section>
+        </div>
+      </details>
 
+      <details class="mm-fold" id="status" data-mm-fold="status" open={open.status}>
+        <summary><h2>{t(lang, 'mm.status.label')}</h2></summary>
+        <div class="mm-fold-body">
+      <p><span class="mm-badge">{t(lang, `mm.status.${concept.status}` as MessageKey)}</span>{' '}{t(lang, `mm.status.help.${concept.status}` as MessageKey)}</p>
+      <p class="mm-meta"><span>{t(lang, 'mm.slug.current')}{' '}<code>{selfPath}</code></span></p>
       {canStatus && (
-        <section aria-labelledby="mm-status" class="mm-panel">
-          <h2 id="mm-status">{t(lang, 'mm.concept.statusTitle')}</h2>
+        <section aria-labelledby="mm-status-form" class="mm-panel">
+          <h3 id="mm-status-form">{t(lang, 'mm.concept.statusTitle')}</h3>
           <form class="mm-form mm-inline-form" data-mm-form data-method="PATCH" data-endpoint={`/api/mm/concepts/${apiSlug}`} data-then="reload">
             <div class="mm-form-row">
               <label for="mm-status-select">{t(lang, 'mm.status.label')}</label>
@@ -246,7 +284,7 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
 
       {canRename && (
         <section aria-labelledby="mm-permalink" class="mm-panel">
-          <h2 id="mm-permalink">{t(lang, 'mm.slug.renameTitle')}</h2>
+          <h3 id="mm-permalink">{t(lang, 'mm.slug.renameTitle')}</h3>
           <p class="mm-help">{t(lang, 'mm.slug.renameLead')}</p>
           <form class="mm-form mm-inline-form" data-mm-form data-method="PATCH" data-endpoint={`/api/mm/concepts/${apiSlug}`} data-then="go-concept">
             <div class="mm-form-row">
@@ -262,36 +300,48 @@ const postLink = (postId: string | null) => (postId && discussion ? `${discussio
         </section>
       )}
 
-      <section aria-labelledby="mm-history">
-        <h2 id="mm-history">{t(lang, 'mm.concept.historyTitle')}</h2>
-        <p class="mm-help">{t(lang, 'mm.concept.historyLead')}</p>
-        <ol class="mm-history" reversed>
-          {concept.history.map((v) => {
-            const credited = displayName(v.credited, formerMember, memberLabel);
-            const editor = displayName(v.editedBy, formerMember, memberLabel);
-            return (
-              <li>
-                <p class="mm-meta">
-                  <span><strong>{langName(v.lang)}</strong></span>
-                  <span>{formatDate(v.createdAt, lang)}</span>
-                  <span>{t(lang, 'mm.concept.credit', { name: credited })}</span>
-                  {editor !== credited && <span>{t(lang, 'mm.concept.editedBy', { name: editor })}</span>}
-                  {v.fromPostId && (postLink(v.fromPostId)
-                    ? <a href={postLink(v.fromPostId)!}>{t(lang, 'mm.concept.fromPost')}</a>
-                    : <span>{t(lang, 'mm.concept.fromPost')}</span>)}
-                </p>
-                <blockquote class="mm-post-body" lang={v.lang} set:html={v.definitionHtml} />
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+        </div>
+      </details>
+
+      <details class="mm-fold" id="history" data-mm-fold="history" open={open.history}>
+        <summary><h2>{t(lang, 'mm.concept.historyTitle')}<span class="mm-fold-count"> · {concept.history.length}</span></h2></summary>
+        <div class="mm-fold-body">
+          <p class="mm-help">{t(lang, 'mm.concept.historyLead')}</p>
+          {historyDays.map((g, i) => (
+            <details class="mm-fold-day" id={`history-${g.day}`} open={i === 0}>
+              <summary><h3><time datetime={g.day}>{g.label}</time><span class="mm-fold-count"> · {versionsLabel(g.items.length)}</span></h3></summary>
+              <ol class="mm-history">
+                {g.items.map((v) => {
+                  const credited = displayName(v.credited, formerMember, memberLabel);
+                  const editor = displayName(v.editedBy, formerMember, memberLabel);
+                  return (
+                    <li>
+                      <p class="mm-meta">
+                        <span><strong>{langName(v.lang)}</strong></span>
+                        <span>{t(lang, 'mm.concept.credit', { name: credited })}</span>
+                        {editor !== credited && <span>{t(lang, 'mm.concept.editedBy', { name: editor })}</span>}
+                        {v.fromPostId && (postLink(v.fromPostId)
+                          ? <a href={postLink(v.fromPostId)!}>{t(lang, 'mm.concept.fromPost')}</a>
+                          : <span>{t(lang, 'mm.concept.fromPost')}</span>)}
+                      </p>
+                      <blockquote class="mm-post-body" lang={v.lang} set:html={v.definitionHtml} />
+                    </li>
+                  );
+                })}
+              </ol>
+            </details>
+          ))}
+        </div>
+      </details>
     </div>
   </MmLayout>
 )}
 
 <script>
   import '../../scripts/mm/forms.ts';
+  import '../../scripts/mm/composer.ts';
+  import '../../scripts/mm/thread.ts';
   import '../../scripts/mm/concept.ts';
   import '../../scripts/mm/slug.ts';
+  import '../../scripts/mm/fold.ts';
 </script>

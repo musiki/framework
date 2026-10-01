@@ -402,3 +402,34 @@ h3 .mm-dot { margin-right: 0.45rem; }
 }
 .mm-slug-field input { flex: 1 1 auto; min-width: 0; }
 .mm-form input[aria-invalid='true'] { border-color: var(--mm-red, var(--mm-ink)); outline: 2px solid var(--mm-red, var(--mm-ink)); outline-offset: 0; }
+
+/* Foldable sections of the concept page (native <details>; scripts/mm/fold.ts).
+   Flat: 2px ink rule above each section, a +/− glyph, no boxes. */
+.mm-fold { border-top: var(--mm-rule); margin: 0; }
+.mm-fold:last-of-type { border-bottom: var(--mm-rule); }
+.mm-fold > summary, .mm-fold-day > summary {
+  display: flex; align-items: baseline; gap: 0.6rem; cursor: pointer; list-style: none; padding: 0.8rem 0;
+}
+.mm-fold > summary::-webkit-details-marker, .mm-fold-day > summary::-webkit-details-marker { display: none; }
+.mm-fold > summary::before, .mm-fold-day > summary::before {
+  content: '+'; flex: none; width: 1.1em; font-family: var(--mm-font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
+  color: var(--mm-ink);
+}
+.mm-fold[open] > summary::before, .mm-fold-day[open] > summary::before { content: '−'; }
+.mm-fold > summary h2, .mm-fold-day > summary h3 { margin: 0; }
+.mm-fold > summary:hover h2, .mm-fold-day > summary:hover h3 { text-decoration: underline; text-decoration-color: var(--mm-purple); text-decoration-thickness: 2px; text-underline-offset: 0.2em; }
+.mm-fold > summary:focus-visible, .mm-fold-day > summary:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
+.mm-fold { scroll-margin-top: 1rem; }
+.mm-fold-body { padding: 0 0 1.5rem; }
+.mm-fold-body > :first-child { margin-top: 0; }
+.mm-fold-count { font-family: var(--mm-font-body); font-weight: 400; font-size: 0.85em; color: var(--mm-ink-70); letter-spacing: 0; }
+.mm-fold-day { border-top: 1px solid var(--mm-ink-15); }
+.mm-fold-day > summary { padding: 0.55rem 0; }
+.mm-fold-day > summary::before { font-size: 1.1rem; }
+.mm-fold-day > summary h3 { font-size: 1.05rem; }
+.mm-fold-day .mm-history { border-top: 0; margin-bottom: 0.75rem; }
+@media print {
+  .mm-fold > summary::before, .mm-fold-day > summary::before { content: none; }
+  .mm-fold::details-content, .mm-fold-day::details-content { content-visibility: visible; display: block; }
+  .mm-fold form, .mm-fold dialog { display: none; }
+}
