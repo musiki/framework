@@ -72,7 +72,10 @@ test('mm allows / exactly, its page prefixes, its apis and auth', () => {
     assert.equal(isRouteAllowed(mm, p), false, p);
   }
   // slug-shaped single segments are concept permalinks (served only via the rewrite)
-  for (const p of ['/x', '/cursos', '/foro', '/dashboard', '/fx', '/cx', '/rx', '/relations', '/graphs', '/aboutx',
+  for (const p of ['/cursos', '/foro', '/dashboard', '/slides', '/editor', '/fonts', '/vendor']) {
+    assert.equal(isRouteAllowed(mm, p), false, p);
+  }
+  for (const p of ['/x', '/fx', '/cx', '/rx', '/relations', '/graphs', '/aboutx',
     '/joinx', '/adminx', '/lilyx', '/pharmakon', '/tertiary-retention', '/a1-b2']) {
     assert.equal(isRouteAllowed(mm, p), true, p);
     assert.equal(mapMmPath(p), `/mm-app/concept${p}`, p);

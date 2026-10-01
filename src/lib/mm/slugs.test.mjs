@@ -1,4 +1,6 @@
 import test from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
 import assert from 'node:assert/strict';
 import {
   RESERVED_SLUGS, SLUG_MAX, checkCustomSlug, hasSlugFormat, isReservedSlug, isRootSlug, isRootSlugPath, slugProblemMessage,
@@ -59,4 +61,24 @@ test('slugifyLabel: same rule as the site slugify, no fallback, cut at a hyphen'
   assert.ok(long.length <= SLUG_MAX && hasSlugFormat(long), long);
   assert.equal(long.endsWith('word'), true);
   assert.equal(slugifyLabel('a'.repeat(100)).length, SLUG_MAX);
+});
+
+test('every slug-shaped top-level entry of src/pages and public/ is reserved', () => {
+  const missing = [];
+  for (const dir of ['src/pages', 'public']) {
+    for (const name of fs.readdirSync(path.resolve(dir))) {
+      if (name.startsWith('.')) continue;
+      for (const candidate of new Set([name, name.replace(/\..*$/, '')])) {
+        if (hasSlugFormat(candidate) && !isReservedSlug(candidate)) missing.push(`${dir}/${name} → ${candidate}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, [], 'add these to RESERVED_SLUGS');
+});
+
+test('musiki top-level pages are reserved', () => {
+  for (const w of ['dashboard', 'slides', 'cursos', 'foro', 'live', 'editor', 'privacy', 'terms', 'login', 'studio', 'search']) {
+    assert.ok(isReservedSlug(w), w);
+    assert.equal(isRootSlugPath(`/${w}`), false, w);
+  }
 });

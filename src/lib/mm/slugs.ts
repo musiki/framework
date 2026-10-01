@@ -17,8 +17,10 @@ export const ROUTE_SLUG_MAX = 200;
 
 /**
  * Words a concept slug can never be: every top-level mm path and route
- * family, the internal mount, the files a crawler asks for, plus a few kept
- * free for future pages. Lowercase; entries that cannot match SLUG_RE
+ * family, the internal mount, the files a crawler asks for, a few kept free
+ * for future pages, and every top-level entry of src/pages and public/
+ * (slugs.test.mjs scans both, so a new page or static folder fails the tests
+ * until it is listed here). Lowercase; entries that cannot match SLUG_RE
  * (favicon.ico, _astro, …) are listed for completeness.
  */
 export const RESERVED_SLUGS: readonly string[] = Object.freeze([
@@ -32,6 +34,13 @@ export const RESERVED_SLUGS: readonly string[] = Object.freeze([
   'not-found', '404', '500', 'index', 'search', 'export', 'new', 'edit', 'settings', 'help',
   'login', 'logout', 'signin', 'signout', 'sign-in', 'sign-out', 'account', 'me', 'u', 'users',
   'feed', 'rss', 'atom', 'static', 'assets', 'public', 'studio', 'www',
+  // musiki pages of the engine (top-level src/pages entries) — kept out of
+  // the concept namespace so an mm URL never looks like one of them
+  'dashboard', 'slides', 'cursos', 'foro', 'live', 'editor', 'privacy', 'terms', 'centauro', 'content-media',
+  'debug', 'demo', 'notas', 'notas-editor', 'room', 'sse', 'test-table', 'public-search', 'search-index',
+  // top-level entries of public/ (static files served before any page)
+  'favicon', 'fonts', 'inc', 'lib', 'logos', 'scripts', 'vendor', 'wasm', 'graph-data', 'logo-musiki',
+  'msk-diagnostico', 'musiki-background', 'og-image', 'universidad-publica',
 ]);
 
 const RESERVED = new Set(RESERVED_SLUGS);

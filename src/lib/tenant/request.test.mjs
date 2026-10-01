@@ -85,10 +85,12 @@ test('mm host: musiki and so routes are not-found', () => {
     '/api/public/instruments', '/search.json', '/slides/x', '/f/../../cursos']) {
     assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).action, 'not-found', p);
   }
-  // a slug-shaped single segment is a concept permalink: only ever the mm concept page
+  // musiki's top-level pages are reserved words: never a concept permalink either
   for (const p of ['/cursos', '/foro', '/dashboard']) {
-    assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).rewrite, `/mm-app/concept${p}`, p);
+    assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).action, 'not-found', p);
   }
+  // any other slug-shaped single segment is a concept permalink: only ever the mm concept page
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/cursus' }).rewrite, '/mm-app/concept/cursus');
 });
 
 test('mm host: root concept slugs rewrite to the concept page; odd spellings are not-found', () => {
