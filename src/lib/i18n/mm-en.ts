@@ -323,6 +323,7 @@ export const mmEn = {
       fromPost: 'The post where it was proposed',
       totals: '{agree} agree · {disagree} disagree',
       contested: 'Contested',
+      contestedMark: ' ⁄ contested',
       settled: 'Discussion closed',
       inferred: 'Inferred: it follows from a chain of “{label}” relations. Inferred relations are computed, so nobody votes on them.',
       yourStance: 'Your stance',

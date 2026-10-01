@@ -147,24 +147,30 @@
 .mm-graph .cm-inferred { opacity: 0.4; }
 .mm-graph .cm-edge.cm-inferred .cm-line { stroke-width: 1px; }
 .mm-graph .cm-edge.cm-inferred .cm-ink { stroke-width: 2px; }
-.mm-graph .cm-contest { fill: var(--mm-white); stroke-width: 1.5px; pointer-events: none; }
-.mm-graph .cm-hull { stroke-width: 2px; stroke-linejoin: miter; fill-opacity: 0.55; pointer-events: none; }
-.mm-graph .cm-hull-inner { stroke-width: 1px; }
+/* Clouds (area types): flat tint, 2px border in the slot colour, straight facets only (graph.ts). */
+.mm-graph .cm-cloud-line { stroke-width: 2px; stroke-linejoin: miter; stroke-linecap: butt; pointer-events: none; }
+.mm-graph .cm-cloud-border { fill-opacity: 0.55; }
+.mm-graph .cm-cloud-inner { stroke-width: 1px; }
 /* Ink underlay of light palette slots (WCAG 1.4.11): 1px of ink each side of the coloured border. */
-.mm-graph .cm-hull-ink { stroke-width: 4px; }
-.mm-graph .cm-hull-ink-inner { stroke-width: 2px; }
-.mm-graph .cm-area-tab { stroke-width: 1px; pointer-events: none; }
-.mm-graph .cm-area-label, .mm-graph text.cm-area-label { font-family: var(--mm-font-body); font-size: 11px; font-weight: 700; fill: var(--mm-ink); pointer-events: none; }
+.mm-graph .cm-cloud-ink { stroke-width: 4px; }
+.mm-graph .cm-cloud-ink.cm-cloud-inner { stroke-width: 2px; }
+.mm-graph .cm-cloud-hit { fill: none; stroke: transparent; stroke-width: 12px; stroke-linejoin: miter; pointer-events: stroke; cursor: pointer; }
+.mm-graph .cm-cloud.is-sel .cm-cloud-hit, .mm-graph .cm-cloud.is-hover .cm-cloud-hit { stroke: var(--mm-yellow); stroke-opacity: 0.55; }
 .mm-graph .cm-edge-label {
   font-family: var(--mm-font-body); font-size: 10px; fill: var(--mm-ink-70); pointer-events: none;
   paint-order: stroke; stroke: var(--mm-white); stroke-width: 4px; stroke-linejoin: round;
 }
 .mm-graph .cm-edge-label.is-on { fill: var(--mm-ink); font-weight: 700; }
+.mm-graph .cm-cloud-label, .mm-graph text.cm-cloud-label { font-family: var(--mm-font-body); font-size: 11px; font-weight: 700; fill: var(--mm-ink); pointer-events: auto; cursor: pointer; }
+/* Contested: a trailing typographic mark on the label (no shape): italic ink text (small text
+   stays ink for contrast), underlined in the red token (a 3.4:1 graphic cue on white). */
+.mm-graph .cm-contested-mark, .mm-graph text.cm-mark-probe { font-family: var(--mm-font-body); font-size: 10px; font-style: italic; font-weight: 400; fill: var(--mm-ink); text-decoration: underline; text-decoration-color: var(--mm-red); text-decoration-thickness: 1.5px; }
+.mm-graph .cm-cloud-label .cm-contested-mark { font-size: 11px; }
 .mm-graph svg.has-focus .cm-node:not(.is-on), .mm-graph svg.has-focus .cm-edge:not(.is-on):not(.is-sel) { opacity: 0.22; }
 .mm-graph svg.has-focus .cm-edge.cm-inferred:not(.is-on):not(.is-sel) { opacity: 0.12; }
-.mm-graph svg.has-focus .cm-area:not(.is-on) { opacity: 0.45; }
+.mm-graph svg.has-focus .cm-cloud:not(.is-on):not(.is-sel) { opacity: 0.45; }
 .mm-graph svg.has-focus .cm-edge-label:not(.is-on) { opacity: 0.35; }
-.mm-graph .cm-node, .mm-graph .cm-edge, .mm-graph .cm-area, .mm-graph .cm-edge-label { transition: opacity 0.25s; }
+.mm-graph .cm-node, .mm-graph .cm-edge, .mm-graph .cm-cloud, .mm-graph .cm-edge-label { transition: opacity 0.25s; }
 /* Timeline: not there yet at the slider's date (positions kept; faded, never hoverable). */
 .mm-graph svg .cm-gone { opacity: 0 !important; }
 .mm-graph svg .cm-gone, .mm-graph svg .cm-gone * { pointer-events: none !important; }
@@ -221,7 +227,7 @@
 .mm-graph-relcard-buttons .mm-button[aria-pressed='true'] { background: var(--mm-ink); color: var(--mm-white); }
 .mm-graph-relcard .mm-help { font-size: 0.8rem; margin-top: 0.35rem; }
 .mm-graph-relcard-names-title { font-weight: 700; border-top: var(--mm-rule); padding-top: 0.45rem; }
-.mm-graph-relcard-names { margin: 0.25rem 0 0; padding-left: 1.1rem; list-style: square; }
+.mm-graph-relcard-names { margin: 0.25rem 0 0; padding-left: 1.1rem; list-style: '– '; }
 .mm-graph-relcard-settle { border-top: var(--mm-rule); padding-top: 0.45rem; }
 .mm-graph-relcard-live:empty { display: none; }
 .mm-graph-relcard-live { margin-top: 0.45rem !important; font-size: 0.85rem; font-weight: 700; }

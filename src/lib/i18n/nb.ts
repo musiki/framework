@@ -326,6 +326,7 @@ export const nb: Pick<Dict, 'mm'> = {
         fromPost: 'Innlegget der den ble foreslått',
         totals: '{agree} enig · {disagree} uenig',
         contested: 'Omstridt',
+        contestedMark: ' ⁄ omstridt',
         settled: 'Diskusjonen er avsluttet',
         inferred: 'Utledet: den følger av en kjede av «{label}»-relasjoner. Utledede relasjoner beregnes, så ingen stemmer over dem.',
         yourStance: 'Ditt standpunkt',

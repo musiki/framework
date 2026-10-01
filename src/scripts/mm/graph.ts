@@ -5,30 +5,38 @@
 //
 // Layout: nodes collide on their (folded) label box; every edge label is a
 // small simulated node pulled to its link's midpoint and pushed away from the
-// other labels and the concept boxes; labels that still overlap are hidden.
+// other labels and the concept boxes; only the part of that push that runs
+// along the line is kept, so a label always sits on its line (horizontal, on a
+// white halo); labels that still overlap are hidden.
 // Zoom is semantic above 1: positions scale, boxes and text keep their size,
 // so zooming in makes room for full labels; below 1 everything shrinks
 // together, so zooming out never makes boxes collide. Level of detail: folded node labels
-// and no edge labels at low zoom; full labels on hover, on selection, at high
+// and no relation labels at low zoom; full labels on hover, on selection, at high
 // zoom, or with the "show all labels" toggle (which lifts the zoom thresholds;
-// edge labels that would sit on top of something are still left out).
+// labels that would sit on top of something are still left out).
 //
-// Typed relations (relation modeler): every relation is drawn with its type's
-// encoding, the same one as the key under the graph (relation-type-ui.ts):
-// - line types: slot colour + stroke pattern + an arrowhead per palette slot
-//   (none for symmetric types); `double` is two parallel strokes. Lines end on
-//   the concept boxes' borders; several relations between the same two
-//   concepts sit side by side.
-// - area types: a flat hull (straight sides, graph-layout.hullPolygon) around
-//   the container and its members, in the slot's tint with a 2px border in the
-//   slot colour and the label on a tab across its top edge; nested areas get
-//   more padding; members are pulled together by a weak force.
+// Typed relations (relation modeler): every relation is drawn by the rendering
+// subroutine of its type's `render` kind (the `renderers` registry; a new kind
+// is one more entry), with the same encoding as the key under the graph
+// (relation-type-ui.ts):
+// - `line`: slot colour + stroke pattern + an arrowhead per palette slot
+//   (none for symmetric types); `double` is two parallel strokes; an ink
+//   underlay under light slots. Lines end on the concept boxes' borders;
+//   several relations between the same two concepts sit side by side. The
+//   line itself (a wide transparent stroke along it) is the hit target.
+// - `area`: a cloud — a faceted region with straight sides only
+//   (graph-layout.cloudPolygon) around the container and its members, in the
+//   slot's tint with a 2px border in the slot colour (ink underlay for light
+//   slots) and its label on the outline's top edge; nested clouds get more
+//   padding; members are pulled together, other concepts pushed out. Its
+//   border and label are the hit target (the member nearest the pointer).
 // - inferred relations: thin and faint, labelled only when an end is the
 //   selected concept, never votable.
-// - agreement: line width from the net agreement (1–4px); contested
-//   relations get a broken pattern and a small square at the middle.
+// - agreement: line width from the net agreement (1–4px); a contested
+//   relation gets a broken pattern and its label a trailing typographic mark
+//   (" ⁄ contested", italic, underlined in the red token) — never a shape.
 // The type filter of the modeler table ('mm:relation-filter') hides every
-// element of a type: lines, hit targets, markers, labels, areas.
+// element of a type: lines, hit targets, markers, labels, clouds.
 // Timeline: a slider under the graph shows it as of a date (graph-layout
 // visibleAt): concepts and relations not created yet are hidden (faded without
 // reduced motion) without moving anything; Play walks through the creation
@@ -49,12 +57,12 @@
 // decides), Settle for curators.
 
 import { forceSimulation, forceLink, forceManyBody, forceX, forceY, forceCollide, type Simulation } from 'd3-force';
-import { select, type Selection } from 'd3-selection';
+import { pointer, select, type Selection } from 'd3-selection';
 import { drag } from 'd3-drag';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import {
   truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock,
-  hullPolygon, hullLabelAnchor, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
+  cloudPolygon, cloudLabelAnchor, polygonPath, slideAlong, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
   clipToBox, offsetSegment, pairSlots, cycleIndex, visibleAt, timelineDays, stepDay, dayEnd, DAY_MS,
   type Box, type AreaGroup, type Point, type VisibleAt,
 } from '../../lib/mm/graph-layout';
@@ -91,7 +99,30 @@ type RawLink = {
 type Link = {
   id: string | null; source: Node; target: Node; type: string; label: string; inferred: boolean;
   agree: number; disagree: number; settled: boolean; revealAt: string | null; createdAt: string | null;
-  rt: TypeLike | null; area: boolean; slot: number; w: number; tag: Tag;
+  rt: TypeLike | null; kind: RenderKind; slot: number;
+  /** Label width: the type label plus, when contested, the contested mark. */
+  w: number; wBase: number; tag: Tag;
+};
+/**
+ * The render kinds that have a drawing subroutine (see `renderers` in draw()); a type's `render`
+ * value picks one, anything else is drawn as a line. A new kind is one more entry here and one
+ * more renderer.
+ */
+const RENDER_KINDS = ['area', 'line'] as const; // also the drawing and label-priority order: clouds under lines
+type RenderKind = (typeof RENDER_KINDS)[number];
+const renderKind = (rt: TypeLike | null): RenderKind => ((RENDER_KINDS as readonly string[]).includes(rt?.render ?? '') ? (rt!.render as RenderKind) : 'line');
+/** A label a renderer wants shown: its element, its screen box, and whether it must stay (lit). */
+type LabelSpot = { el: SVGTextElement; box: Box; forced: boolean };
+/** A rendering subroutine for one kind of relation. */
+type Renderer = {
+  /** Encoding that follows the agreement (again after a vote). */
+  style: () => void;
+  /** Geometry at glyph scale `s`; returns the labels it would like shown (de-overlapped by render()). */
+  draw: (s: number, edgeLabels: boolean) => LabelSpot[];
+  /** Focus, hover and selection classes. */
+  paint: () => void;
+  /** Timeline: fade out what does not exist yet. */
+  timeline: () => void;
 };
 // An edge label (or, when `node` is set, a concept box acting as a fixed obstacle) in the label simulation.
 type Tag = { x: number; y: number; mx: number; my: number; r: number; fx?: number | null; fy?: number | null; node?: Node };
@@ -168,18 +199,17 @@ function draw(holder: HTMLElement): void {
     .filter((l) => byId.has(String(l.source)) && byId.has(String(l.target)) && l.source !== l.target)
     .map((l) => {
       const rt = types.get(l.type) ?? null;
-      const area = rt?.render === 'area';
       const w = measure(l.label, 'cm-edge-label') + 6;
       return {
         id: l.id ?? null, source: byId.get(String(l.source))!, target: byId.get(String(l.target))!, type: String(l.type), label: l.label,
         inferred: l.inferred === true, agree: Number(l.agree) || 0, disagree: Number(l.disagree) || 0, settled: l.settled === true,
-        revealAt: l.revealAt ?? null, createdAt: l.createdAt ?? null, rt, area, slot: 0, w, tag: { x: 0, y: 0, mx: 0, my: 0, r: (w + EDGE_H) / 4 + 2 },
+        revealAt: l.revealAt ?? null, createdAt: l.createdAt ?? null, rt, kind: renderKind(rt), slot: 0, w, wBase: w, tag: { x: 0, y: 0, mx: 0, my: 0, r: (w + EDGE_H) / 4 + 2 },
       };
     });
-  const lineLinks = links.filter((l) => !l.area);
+  const lineLinks = links.filter((l) => l.kind === 'line');
   pairSlots(lineLinks.map((l) => ({ source: l.source.id, target: l.target.id }))).forEach((slot, i) => { lineLinks[i].slot = slot; });
   const labelled = lineLinks.filter((l) => !l.inferred); // edge labels in the label simulation
-  const areaTypes = new Set([...types.values()].filter((rt) => rt.render === 'area').map((rt) => rt.slug));
+  const areaTypes = new Set([...types.values()].filter((rt) => renderKind(rt) === 'area').map((rt) => rt.slug));
   const groups: AreaGroup[] = areaGroups(links.map((l) => ({ source: l.source.id, target: l.target.id, type: l.type, inferred: l.inferred })), areaTypes);
   const neighbours = new Map<string, Set<string>>(nodes.map((n) => [n.id, new Set<string>()]));
   for (const l of links) {
@@ -221,52 +251,10 @@ function draw(holder: HTMLElement): void {
     return m ? `url(#${markerIds.get(m.id)})` : null;
   };
 
-  // Areas (under everything): hull, inner hull for `double`, label tab.
-  const areaLayer = svg.append('g').attr('class', 'cm-areas');
-  const areaG = areaLayer.selectAll<SVGGElement, AreaGroup>('g').data(groups).join('g')
-    .attr('class', 'cm-area').attr('data-type', (g) => g.type);
-  const areaTypeOf = (g: AreaGroup) => types.get(g.type)!;
-  const areaText = (g: AreaGroup) => `${byId.get(g.container)?.label ?? g.container} · ${typeLabel(areaTypeOf(g), lang).text}`;
-  const areaTextW = new Map(groups.map((g) => [g.key, measure(areaText(g), 'cm-area-label')]));
-  areaG.append('path').attr('class', 'cm-hull')
-    .style('fill', (g) => tintColor(areaTypeOf(g).color)).style('stroke', (g) => strokeColor(areaTypeOf(g).color))
-    .attr('stroke-dasharray', (g) => dashArray(areaTypeOf(g).stroke));
-  areaG.filter((g) => areaTypeOf(g).stroke === 'double').append('path').attr('class', 'cm-hull cm-hull-inner')
-    .style('fill', 'none').style('stroke', (g) => strokeColor(areaTypeOf(g).color));
-  // Ink underlay of light slots (WCAG 1.4.11): the same outline, ink, 2px wider (1px ink each side of the coloured border); drawn first.
-  const inked = areaG.filter((g) => needsInkUnderlay(areaTypeOf(g).color));
-  inked.insert('path', '.cm-hull').attr('class', 'cm-hull cm-hull-ink').style('fill', 'none').style('stroke', 'var(--mm-ink)')
-    .attr('stroke-dasharray', (g) => dashArray(areaTypeOf(g).stroke));
-  inked.filter((g) => areaTypeOf(g).stroke === 'double').insert('path', '.cm-hull').attr('class', 'cm-hull cm-hull-ink cm-hull-ink-inner')
-    .style('fill', 'none').style('stroke', 'var(--mm-ink)');
-  areaG.append('rect').attr('class', 'cm-area-tab')
-    .style('fill', (g) => tintColor(areaTypeOf(g).color)).style('stroke', (g) => strokeColor(areaTypeOf(g).color));
-  areaG.append('text').attr('class', 'cm-area-label').attr('text-anchor', 'middle').attr('dy', '0.35em')
-    .attr('lang', (g) => typeLabel(areaTypeOf(g), lang).lang).text(areaText);
-
-  // Relations: a wide transparent hit line (also the highlight band), the
-  // visible line(s), the contested square. Area relations have a hit line only.
-  const edgeLayer = svg.append('g').attr('class', 'cm-edges');
-  const edge = edgeLayer.selectAll<SVGGElement, Link>('g').data(links).join('g')
-    .attr('class', (d) => `cm-edge${d.inferred ? ' cm-inferred' : ''}${d.area ? ' cm-area-rel' : ''}`)
-    .attr('data-type', (d) => d.type);
-  edge.append('line').attr('class', 'cm-hit');
-  const lines = edge.filter((d) => !d.area);
-  // Ink underlays of light slots come first (under the coloured strokes).
-  lines.append('line').attr('class', 'cm-line cm-ink cm-ink-main');
-  lines.append('line').attr('class', 'cm-line cm-ink cm-ink-a');
-  lines.append('line').attr('class', 'cm-line cm-ink cm-ink-b');
-  lines.append('line').attr('class', 'cm-line cm-line-main');
-  lines.append('line').attr('class', 'cm-line cm-line-a');
-  lines.append('line').attr('class', 'cm-line cm-line-b');
-  lines.append('rect').attr('class', 'cm-contest').attr('width', 6).attr('height', 6);
-
-  const edgeLabelLayer = svg.append('g');
-  const edgeLabel = edgeLabelLayer.selectAll('text').data(lineLinks).join('text')
-    .attr('class', (d) => `cm-edge-label${d.inferred ? ' cm-inferred' : ''}`)
-    .attr('text-anchor', 'middle')
-    .attr('dy', '0.35em')
-    .text((d) => d.label);
+  // Layers, bottom to top: the relations (one group per render kind, clouds under lines), their
+  // labels, the concepts.
+  const relLayer = svg.append('g').attr('class', 'cm-relations');
+  const labelLayer = svg.append('g').attr('class', 'cm-labels');
   const nodeLayer = svg.append('g');
   const node = nodeLayer.selectAll<SVGAElement, Node>('a').data(nodes).join('a')
     .attr('class', (d) => `cm-node mm-st-${d.status}`)
@@ -275,33 +263,17 @@ function draw(holder: HTMLElement): void {
   node.append('rect').attr('y', -NODE_H / 2).attr('height', NODE_H);
   node.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('lang', (d) => d.lang ?? null);
 
-  /** Colour, pattern, width, arrow and contested marker of every line (again after a vote). */
-  const styleEdges = () => {
-    lines.each(function (d) {
-      const g = select(this);
-      const color = strokeColor(d.rt?.color ?? 'ink');
-      const pattern = d.rt?.stroke ?? 'solid';
-      const contested = !d.inferred && isContested(d.agree, d.disagree);
-      const w = d.inferred ? 1 : agreementWidth(d.agree, d.disagree);
-      const dash = d.inferred ? dashArray(pattern) : edgeDash(pattern, contested);
-      const double = pattern === 'double';
-      g.classed('is-contested', contested);
-      // The main line carries the arrow; for `double` it is only the arrow's carrier (the two strokes are drawn beside it).
-      g.select('.cm-line-main').style('stroke', color).attr('stroke-width', w).attr('stroke-dasharray', dash)
-        .attr('stroke-opacity', double ? 0 : null).attr('marker-end', markerOf(d.rt));
-      g.selectAll('.cm-line-a, .cm-line-b').style('stroke', color).attr('stroke-width', Math.max(1, w * 0.6))
-        .attr('stroke-dasharray', dash).attr('display', double ? null : 'none');
-      const ink = needsInkUnderlay(d.rt?.color ?? 'ink');
-      const wa = Math.max(1, w * 0.6);
-      g.select('.cm-ink-main').style('stroke', 'var(--mm-ink)').attr('stroke-width', w + 1).attr('stroke-dasharray', dash)
-        .attr('display', ink && !double ? null : 'none');
-      g.selectAll('.cm-ink-a, .cm-ink-b').style('stroke', 'var(--mm-ink)').attr('stroke-width', wa + 1)
-        .attr('stroke-dasharray', dash).attr('display', ink && double ? null : 'none');
-      g.select('.cm-contest').style('stroke', color).attr('display', contested ? null : 'none');
-      g.select('.cm-hit').attr('stroke-width', Math.max(12, w + 10));
-    });
+  /** A label's text and, when its relation is contested, the trailing typographic mark (italic, red underline; no shape). */
+  const contestedMark = S('rel.contestedMark');
+  const markW = measure(contestedMark, 'cm-mark-probe');
+  const labelText = (text: SVGTextElement, label: string, labelLang: string | null) => {
+    const sel = select(text).attr('text-anchor', 'middle').attr('dy', '0.35em');
+    sel.append('tspan').attr('class', 'cm-label-text').attr('lang', labelLang).text(label);
+    sel.append('tspan').attr('class', 'cm-contested-mark');
   };
-  styleEdges();
+  const markContested = (text: SVGTextElement, contested: boolean) => {
+    select(text).classed('is-contested', contested).select('.cm-contested-mark').text(contested ? contestedMark : '');
+  };
 
   // --- concept card ---------------------------------------------------------
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string) => {
@@ -370,7 +342,7 @@ function draw(holder: HTMLElement): void {
   const simLinks = links.filter((l) => !l.inferred);
   const sim = forceSimulation<Node>(nodes)
     .force('link', forceLink<Node, Link>(simLinks).id((d) => d.id)
-      .distance((l) => linkDistance(l.source.wFold ?? 60, l.target.wFold ?? 60, l.area ? 0 : l.w) * (small ? 0.8 : 1)))
+      .distance((l) => linkDistance(l.source.wFold ?? 60, l.target.wFold ?? 60, l.kind === 'line' ? l.w : 0) * (small ? 0.8 : 1)))
     .force('charge', forceManyBody().strength(small ? -260 : -420))
     .force('x', forceX(0).strength(0.04))
     .force('y', forceY(0).strength(small ? 0.04 : 0.08))
@@ -445,6 +417,232 @@ function draw(holder: HTMLElement): void {
     const [p, q] = segmentOf(l, s);
     return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
   };
+  // --- relation renderers (one subroutine per render kind) --------------------
+  // Shared pointer behaviour of every relation's hit target: hover opens its card after a short
+  // rest (unless one is pinned), click pins it. `pick` names the relation under the pointer.
+  const hitTarget = <D,>(sel: Selection<SVGElement, D, SVGGElement, unknown>, pick: (event: PointerEvent | MouseEvent, d: D) => Link | null) => {
+    sel
+      .on('click', (event: MouseEvent, d) => {
+        holder.focus({ preventScroll: true });
+        event.stopPropagation();
+        const l = pick(event, d);
+        if (l) openRel(l, true);
+      })
+      .on('pointerenter', (event: PointerEvent, d) => {
+        if (event.pointerType === 'touch') return;
+        const l = pick(event, d);
+        if (!l) return;
+        hoverEdge = l;
+        paintFocus();
+        if (!(relLink && relPinned)) {
+          window.clearTimeout(showTimer);
+          window.clearTimeout(hideTimer);
+          showTimer = window.setTimeout(() => { if (!pressed && hoverEdge === l) openRel(l, false); }, CARD_DELAY);
+        }
+        render();
+      })
+      .on('pointerleave', () => {
+        if (hoverEdge === null) return;
+        hoverEdge = null;
+        cardHoverOut();
+        paintFocus();
+        render();
+      });
+  };
+
+  /**
+   * `line`: the relation is its line, from border to border (side by side with the other relations
+   * of the same pair): slot colour and stroke pattern (two strokes for `double`), an arrowhead per
+   * palette slot when directed, an ink underlay under light slots, width from the agreement, the
+   * broken pattern when contested, thin and faint when inferred. A wide transparent stroke along it
+   * is the hit target (and the highlight band). Its label sits on the line, horizontal, centred on
+   * the midpoint unless the label simulation pushes it along the line.
+   */
+  const lineRenderer = (): Renderer => {
+    const layer = relLayer.append('g').attr('class', 'cm-edges');
+    const edge = layer.selectAll<SVGGElement, Link>('g').data(lineLinks).join('g')
+      .attr('class', (d) => `cm-edge${d.inferred ? ' cm-inferred' : ''}`)
+      .attr('data-type', (d) => d.type);
+    edge.append('line').attr('class', 'cm-hit');
+    // Ink underlays of light slots come first (under the coloured strokes).
+    for (const c of ['cm-ink cm-ink-main', 'cm-ink cm-ink-a', 'cm-ink cm-ink-b', 'cm-line-main', 'cm-line-a', 'cm-line-b']) edge.append('line').attr('class', `cm-line ${c}`);
+    const label = labelLayer.selectAll<SVGTextElement, Link>('text.cm-line-label').data(lineLinks).join('text')
+      .attr('class', (d) => `cm-edge-label cm-line-label${d.inferred ? ' cm-inferred' : ''}`)
+      .each(function (d) { labelText(this, d.label, d.rt ? typeLabel(d.rt, lang).lang : null); });
+    hitTarget(edge.select<SVGElement>('.cm-hit') as unknown as Selection<SVGElement, Link, SVGGElement, unknown>, (_e, d) => d);
+    const widthOf = (l: Link) => (l.inferred ? 1 : agreementWidth(l.agree, l.disagree));
+    return {
+      style: () => {
+        edge.each(function (d) {
+          const g = select(this);
+          const color = strokeColor(d.rt?.color ?? 'ink');
+          const pattern = d.rt?.stroke ?? 'solid';
+          const contested = !d.inferred && isContested(d.agree, d.disagree);
+          const w = widthOf(d);
+          const dash = d.inferred ? dashArray(pattern) : edgeDash(pattern, contested);
+          const double = pattern === 'double';
+          const ink = needsInkUnderlay(d.rt?.color ?? 'ink');
+          const wa = Math.max(1, w * 0.6);
+          g.classed('is-contested', contested);
+          // The main line carries the arrow; for `double` it is only the arrow's carrier (the two strokes are drawn beside it).
+          g.select('.cm-line-main').style('stroke', color).attr('stroke-width', w).attr('stroke-dasharray', dash)
+            .attr('stroke-opacity', double ? 0 : null).attr('marker-end', markerOf(d.rt));
+          g.selectAll('.cm-line-a, .cm-line-b').style('stroke', color).attr('stroke-width', wa)
+            .attr('stroke-dasharray', dash).attr('display', double ? null : 'none');
+          g.select('.cm-ink-main').style('stroke', 'var(--mm-ink)').attr('stroke-width', w + 1).attr('stroke-dasharray', dash)
+            .attr('display', ink && !double ? null : 'none');
+          g.selectAll('.cm-ink-a, .cm-ink-b').style('stroke', 'var(--mm-ink)').attr('stroke-width', wa + 1)
+            .attr('stroke-dasharray', dash).attr('display', ink && double ? null : 'none');
+          g.select('.cm-hit').attr('stroke-width', Math.max(12, w + 10));
+          d.w = d.wBase + (contested ? markW : 0);
+          d.tag.r = (d.w + EDGE_H) / 4 + 2;
+        });
+        label.each(function (d) { markContested(this, !d.inferred && isContested(d.agree, d.disagree)); });
+      },
+      draw: (s, edgeLabels) => {
+        const spots: LabelSpot[] = [];
+        const at = new Map<Link, [Point, Point]>();
+        edge.each(function (l) {
+          const g = select(this);
+          if (typeHidden(l.type)) { g.attr('display', 'none'); return; }
+          g.attr('display', null);
+          const [p, q] = segmentOf(l, s);
+          at.set(l, [p, q]);
+          const set = (sel: string, a: Point, b: Point) => g.selectAll(sel).attr('x1', a.x).attr('y1', a.y).attr('x2', b.x).attr('y2', b.y);
+          set('.cm-hit, .cm-line-main, .cm-ink-main', p, q);
+          if (l.rt?.stroke === 'double') {
+            const off = Math.max(1, widthOf(l) * 0.6) / 2 + 1;
+            const [a1, b1] = offsetSegment(p, q, off);
+            const [a2, b2] = offsetSegment(p, q, -off);
+            set('.cm-line-a, .cm-ink-a', a1, b1);
+            set('.cm-line-b, .cm-ink-b', a2, b2);
+          }
+        });
+        label.each(function (l) {
+          const seg = at.get(l);
+          if (!seg || linkGone(l)) return;
+          // Inferred relations are labelled only when one of their ends is the selected concept.
+          const lit = l.inferred ? isLit(l, focusId) : isLit(l, focusId) || isLit(l, hoverId) || l === relLink || l === hoverEdge;
+          if (!lit && (l.inferred || !edgeLabels)) return;
+          const size = { w: l.w * s, h: EDGE_H * s };
+          // The label simulation's push (world px, kept at glyph scale), only the part along the line.
+          const c = slideAlong(seg[0], seg[1], { x: (l.tag.x - l.tag.mx) * s, y: (l.tag.y - l.tag.my) * s }, size);
+          spots.push({ el: this, box: { ...c, ...size }, forced: lit });
+        });
+        return spots;
+      },
+      paint: () => {
+        edge.classed('is-on', (d) => isLit(d, focusId)).classed('is-hover', (d) => isLit(d, hoverId) || d === hoverEdge)
+          .classed('is-sel', (d) => d === relLink);
+        label.classed('is-on', (d) => isLit(d, focusId) || (!d.inferred && isLit(d, hoverId)) || d === hoverEdge || d === relLink);
+      },
+      timeline: () => {
+        edge.classed('cm-gone', linkGone);
+        label.classed('cm-gone', linkGone);
+      },
+    };
+  };
+
+  /**
+   * `area`: a cloud — a faceted straight-edged region (graph-layout cloudPolygon) round the
+   * container and its members, in the slot's tint with a 2px border in the slot colour and pattern
+   * (an inner border for `double`, an ink underlay for light slots, the broken pattern when one of
+   * its relations is contested). Nested clouds get more padding; members are pulled together and
+   * other concepts pushed out by the 'areas' force. Its label sits on the outline, horizontal, on
+   * the top edge (alternating with the bottom one for nested clouds). The border and the label are
+   * the hit target: they open the relation of the member nearest the pointer (E steps through the
+   * others).
+   */
+  const cloudRenderer = (): Renderer => {
+    const layer = relLayer.append('g').attr('class', 'cm-clouds');
+    const typeOf = (g: AreaGroup) => types.get(g.type)!;
+    const relsOf = new Map(groups.map((g) => [g.key, links.filter((l) => l.kind === 'area' && `${l.type}|${l.source.id}` === g.key)]));
+    const shown = (g: AreaGroup) => relsOf.get(g.key)!.filter((l) => !linkGone(l));
+    const contestedIn = (g: AreaGroup) => shown(g).some((l) => !l.inferred && isContested(l.agree, l.disagree));
+    const text = (g: AreaGroup) => `${byId.get(g.container)?.label ?? g.container} · ${typeLabel(typeOf(g), lang).text}`;
+    const textW = new Map(groups.map((g) => [g.key, measure(text(g), 'cm-cloud-label') + 6]));
+    const cloud = layer.selectAll<SVGGElement, AreaGroup>('g').data(groups).join('g')
+      .attr('class', 'cm-cloud').attr('data-type', (g) => g.type);
+    const double = (g: AreaGroup) => typeOf(g).stroke === 'double';
+    // Ink underlay of light slots (WCAG 1.4.11): the same outline, ink, 2px wider (1px ink each side of the coloured border); drawn first.
+    cloud.filter((g) => needsInkUnderlay(typeOf(g).color)).append('path').attr('class', 'cm-cloud-line cm-cloud-ink');
+    cloud.filter((g) => needsInkUnderlay(typeOf(g).color) && double(g)).append('path').attr('class', 'cm-cloud-line cm-cloud-ink cm-cloud-inner');
+    cloud.append('path').attr('class', 'cm-cloud-line cm-cloud-border')
+      .style('fill', (g) => tintColor(typeOf(g).color)).style('stroke', (g) => strokeColor(typeOf(g).color));
+    cloud.filter(double).append('path').attr('class', 'cm-cloud-line cm-cloud-border cm-cloud-inner')
+      .style('fill', 'none').style('stroke', (g) => strokeColor(typeOf(g).color));
+    cloud.selectAll<SVGPathElement, AreaGroup>('.cm-cloud-ink').style('fill', 'none').style('stroke', 'var(--mm-ink)');
+    const hit = cloud.append('path').attr('class', 'cm-cloud-hit');
+    const label = labelLayer.selectAll<SVGTextElement, AreaGroup>('text.cm-cloud-label').data(groups).join('text')
+      .attr('class', 'cm-edge-label cm-cloud-label')
+      .each(function (g) { labelText(this, text(g), typeLabel(typeOf(g), lang).lang); });
+    // The relation of the member nearest the pointer (asserted ones first).
+    const pick = (event: PointerEvent | MouseEvent, g: AreaGroup): Link | null => {
+      const [px, py] = pointer(event, svgEl);
+      const list = shown(g).filter((l) => !typeHidden(l.type));
+      const pool = list.some((l) => !l.inferred) ? list.filter((l) => !l.inferred) : list;
+      let best: Link | null = null, bd = Infinity;
+      for (const l of pool) {
+        const d = Math.hypot(t.applyX(l.target.x ?? 0) - px, t.applyY(l.target.y ?? 0) - py);
+        if (d < bd) { bd = d; best = l; }
+      }
+      return best;
+    };
+    hitTarget(hit as unknown as Selection<SVGElement, AreaGroup, SVGGElement, unknown>, pick);
+    hitTarget(label as unknown as Selection<SVGElement, AreaGroup, SVGGElement, unknown>, pick);
+    const lit = (g: AreaGroup, id: string | null) => id !== null && (g.container === id || (areaMembers(g) ?? []).includes(id));
+    const inCloud = (g: AreaGroup, l: Link | null) => !!l && l.kind === 'area' && `${l.type}|${l.source.id}` === g.key;
+    return {
+      style: () => {
+        cloud.each(function (g) {
+          const dash = edgeDash(typeOf(g).stroke, contestedIn(g));
+          select(this).classed('is-contested', contestedIn(g)).selectAll('.cm-cloud-line').attr('stroke-dasharray', dash);
+        });
+        label.each(function (g) { markContested(this, contestedIn(g)); });
+      },
+      draw: (s, edgeLabels) => {
+        const spots: LabelSpot[] = [];
+        cloud.each(function (g) {
+          const sel = select(this);
+          if (typeHidden(g.type)) { sel.attr('display', 'none'); return; }
+          sel.attr('display', null);
+          const members = areaMembers(g);
+          if (!members) return; // not there yet at the timeline's date (faded out, last shape kept)
+          const boxes = [g.container, ...members].map((id) => byId.get(id)).filter((n): n is Node => !!n).map((n) => boxOf(n, s));
+          const pad = areaPadding(g.level) * s;
+          const poly = cloudPolygon(boxes, pad);
+          const d = polygonPath(poly);
+          sel.selectAll('.cm-cloud-line:not(.cm-cloud-inner), .cm-cloud-hit').attr('d', d);
+          sel.selectAll('.cm-cloud-inner').attr('d', polygonPath(cloudPolygon(boxes, Math.max(1, pad - 4))));
+          const at = cloudLabelAnchor(poly, areaLabelSide(g.level));
+          const forced = lit(g, focusId) || lit(g, hoverId) || inCloud(g, relLink) || inCloud(g, hoverEdge);
+          if (!at || (!forced && !edgeLabels)) return;
+          const w = (textW.get(g.key) ?? 40) + (contestedIn(g) ? markW : 0);
+          const el = label.filter((x) => x === g).node();
+          if (el) spots.push({ el, box: { x: at.x, y: at.y, w: w * s, h: (EDGE_H + 2) * s }, forced });
+        });
+        return spots;
+      },
+      paint: () => {
+        cloud.classed('is-on', (g) => lit(g, focusId)).classed('is-sel', (g) => inCloud(g, relLink)).classed('is-hover', (g) => inCloud(g, hoverEdge));
+        label.classed('is-on', (g) => lit(g, focusId) || inCloud(g, relLink) || inCloud(g, hoverEdge));
+      },
+      timeline: () => {
+        cloud.classed('cm-gone', (g) => !areaMembers(g));
+        label.classed('cm-gone', (g) => !areaMembers(g));
+        // Contested is read from the relations shown at the slider's date.
+        cloud.each(function (g) { select(this).selectAll('.cm-cloud-line').attr('stroke-dasharray', edgeDash(typeOf(g).stroke, contestedIn(g))); });
+        label.each(function (g) { markContested(this, contestedIn(g)); });
+      },
+    };
+  };
+
+  /** The registry: render kind → its drawing subroutine. */
+  const renderers: Record<RenderKind, Renderer> = { area: cloudRenderer(), line: lineRenderer() };
+  const eachRenderer = (fn: (r: Renderer) => void) => { for (const k of RENDER_KINDS) fn(renderers[k]); };
+  const styleEdges = () => eachRenderer((r) => r.style());
+  styleEdges();
+
   const render = () => {
     const lod = levelOfDetail(t.k, showAll);
     const s = Math.min(1, t.k); // glyph scale
@@ -459,75 +657,18 @@ function draw(holder: HTMLElement): void {
       }
     }).attr('transform', (d) => `translate(${t.applyX(d.x ?? 0)},${t.applyY(d.y ?? 0)}) scale(${s})`);
 
-    // Areas.
-    areaG.each(function (g) {
-      const sel = select(this);
-      if (typeHidden(g.type)) { sel.attr('display', 'none'); return; }
-      sel.attr('display', null);
-      const members = areaMembers(g);
-      if (!members) return; // not there yet at the timeline's date (faded out, last shape kept)
-      const boxes = [g.container, ...members].map((id) => byId.get(id)).filter((n): n is Node => !!n).map((n) => boxOf(n, s));
-      const pad = areaPadding(g.level) * s;
-      const poly = hullPolygon(boxes, pad);
-      const d = (p: [number, number][] | null) => (p ? `M${p.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join('L')}Z` : null);
-      sel.selectAll('.cm-hull:not(.cm-hull-inner):not(.cm-hull-ink-inner)').attr('d', d(poly));
-      sel.selectAll('.cm-hull-inner, .cm-hull-ink-inner').attr('d', d(hullPolygon(boxes, Math.max(1, pad - 4))));
-      const at = hullLabelAnchor(poly, areaLabelSide(g.level));
-      const tw = (areaTextW.get(g.key) ?? 40) + 10;
-      sel.select('.cm-area-tab').attr('display', at ? null : 'none')
-        .attr('transform', at ? `translate(${at.x},${at.y}) scale(${s})` : null)
-        .attr('x', -tw / 2).attr('y', -8).attr('width', tw).attr('height', 16);
-      sel.select('.cm-area-label').attr('display', at ? null : 'none')
-        .attr('transform', at ? `translate(${at.x},${at.y}) scale(${s})` : null);
-    });
-
-    // Relations.
-    edge.each(function (l) {
-      const g = select(this);
-      if (typeHidden(l.type)) { g.attr('display', 'none'); return; }
-      g.attr('display', null);
-      const [p, q] = l.area
-        ? [clipToBox(boxOf(l.target, s), boxOf(l.source, s)), clipToBox(boxOf(l.source, s), boxOf(l.target, s))]
-        : segmentOf(l, s);
-      const set = (sel: string, a: Point, b: Point) => g.selectAll(sel).attr('x1', a.x).attr('y1', a.y).attr('x2', b.x).attr('y2', b.y);
-      set('.cm-hit', p, q);
-      if (l.area) return;
-      set('.cm-line-main, .cm-ink-main', p, q);
-      if (l.rt?.stroke === 'double') {
-        const w = l.inferred ? 1 : agreementWidth(l.agree, l.disagree);
-        const off = Math.max(1, w * 0.6) / 2 + 1;
-        const [a1, b1] = offsetSegment(p, q, off);
-        const [a2, b2] = offsetSegment(p, q, -off);
-        set('.cm-line-a, .cm-ink-a', a1, b1);
-        set('.cm-line-b, .cm-ink-b', a2, b2);
-      }
-      g.select('.cm-contest').attr('x', (p.x + q.x) / 2 - 3).attr('y', (p.y + q.y) / 2 - 3);
-    });
-
-    // Edge labels: the offset found by the label simulation is kept in screen pixels.
+    // Relations, then their labels: every renderer offers its labels (clouds first), the lit ones
+    // stay, the others are left out where they would sit on a concept or on another label.
+    const spots: LabelSpot[] = [];
+    for (const k of RENDER_KINDS) spots.push(...renderers[k].draw(s, lod.edgeLabels));
     const nodeBoxes: Box[] = nodes.filter((d) => !gone(d)).map((d) => boxOf(d, s));
-    const shown: number[] = [];
     const forced = new Set<number>();
-    const boxes: Box[] = [];
-    lineLinks.forEach((l, i) => {
-      if (typeHidden(l.type) || linkGone(l)) return;
-      // Inferred relations are labelled only when one of their ends is the selected concept.
-      const lit = l.inferred ? isLit(l, focusId) : isLit(l, focusId) || isLit(l, hoverId) || l === relLink;
-      if (!lit && (l.inferred || !lod.edgeLabels)) return;
-      if (lit) forced.add(shown.length);
-      shown.push(i);
-      const off = l.slot ? offsetSegment({ x: 0, y: 0 }, { x: t.applyX(l.target.x ?? 0) - t.applyX(l.source.x ?? 0), y: t.applyY(l.target.y ?? 0) - t.applyY(l.source.y ?? 0) }, l.slot * SLOT_GAP)[0] : { x: 0, y: 0 };
-      boxes.push({ x: t.applyX(l.tag.mx) + (l.tag.x - l.tag.mx) * s + off.x, y: t.applyY(l.tag.my) + (l.tag.y - l.tag.my) * s + off.y, w: l.w * s, h: EDGE_H * s });
+    spots.forEach((sp, i) => { if (sp.forced) forced.add(i); });
+    const hidden = hiddenByOverlap(spots.map((sp) => sp.box), nodeBoxes, forced);
+    labelLayer.selectAll('text').attr('display', 'none');
+    spots.forEach((sp, i) => {
+      if (!hidden.has(i)) select(sp.el).attr('display', null).attr('transform', `translate(${sp.box.x},${sp.box.y}) scale(${s})`);
     });
-    const hidden = hiddenByOverlap(boxes, nodeBoxes, forced);
-    const at = new Map<number, Box>();
-    shown.forEach((i, j) => { if (!hidden.has(j)) at.set(i, boxes[j]); });
-    edgeLabel
-      .attr('display', (_d, i) => (at.has(i) ? null : 'none'))
-      .attr('transform', (_d, i) => {
-        const b = at.get(i);
-        return b ? `translate(${b.x},${b.y}) scale(${s})` : null;
-      });
     positionCard();
     positionRel();
   };
@@ -891,9 +1032,6 @@ function draw(holder: HTMLElement): void {
     const near = focusId ? neighbours.get(focusId)! : null;
     svg.classed('has-focus', focusId !== null);
     node.classed('is-focus', (d) => d.id === focusId).classed('is-on', (d) => d.id === focusId || !!near?.has(d.id));
-    edge.classed('is-on', (d) => isLit(d, focusId)).classed('is-hover', (d) => isLit(d, hoverId) || d === hoverEdge);
-    areaG.classed('is-on', (g) => focusId !== null && (g.container === focusId || g.members.includes(focusId)));
-    edgeLabel.classed('is-on', (d) => isLit(d, focusId) || (!d.inferred && isLit(d, hoverId)) || d === hoverEdge);
     markSel();
   };
 
@@ -1031,7 +1169,7 @@ function draw(holder: HTMLElement): void {
   };
 
   function markSel() {
-    edge.classed('is-sel', (d) => d === relLink);
+    eachRenderer((r) => r.paint());
   }
 
   node
@@ -1055,30 +1193,6 @@ function draw(holder: HTMLElement): void {
       window.clearTimeout(raiseTimer);
       if (hoverId === null) return;
       hoverId = null;
-      cardHoverOut();
-      paintFocus();
-      render();
-    });
-  edge
-    .on('click', (event: MouseEvent, d) => {
-      holder.focus({ preventScroll: true });
-      event.stopPropagation();
-      openRel(d, true);
-    })
-    .on('pointerenter', (event: PointerEvent, d) => {
-      if (event.pointerType === 'touch') return;
-      hoverEdge = d;
-      paintFocus();
-      if (!(relLink && relPinned)) {
-        window.clearTimeout(showTimer);
-        window.clearTimeout(hideTimer);
-        showTimer = window.setTimeout(() => { if (!pressed && hoverEdge === d) openRel(d, false); }, CARD_DELAY);
-      }
-      render();
-    })
-    .on('pointerleave', () => {
-      if (hoverEdge === null) return;
-      hoverEdge = null;
       cardHoverOut();
       paintFocus();
       render();
@@ -1187,9 +1301,7 @@ function draw(holder: HTMLElement): void {
   // --- timeline -------------------------------------------------------------
   const applyTimeline = () => {
     node.classed('cm-gone', gone);
-    edge.classed('cm-gone', linkGone);
-    edgeLabel.classed('cm-gone', linkGone);
-    areaG.classed('cm-gone', (g) => !areaMembers(g));
+    eachRenderer((r) => r.timeline());
     if (relLink && linkGone(relLink)) closeRel();
     if (hoverEdge && linkGone(hoverEdge)) hoverEdge = null;
     const hovered = hoverId ? byId.get(hoverId) : null;
