@@ -97,7 +97,7 @@ test('listConceptIndex: space-scoped, concepts only, bounded, no user fields; ma
       createdAt: new Date('2026-09-01T00:00:00Z'), lastActivityAt: new Date('2026-09-02T00:00:00Z'),
       groupSlug: 'stiegler', groupTitle: 'Stiegler', groupArchived: false,
       boardSlug: 'reading', boardTitle: 'Reading', boardArchived: false, boardParentId: 'g1',
-      postCount: '3', relationTypes: [{ type: 'derives', n: 2 }, { type: 'combines', n: 1 }, { type: '', n: 4 }],
+      postCount: '3', relationCount: 3, relationTypes: [{ type: 'derives', n: 2 }, { type: 'combines', n: 1 }, { type: '', n: 4 }],
     }, {
       id: 'c2', slug: 'archive', label: 'Archive', labelNb: 'Arkiv', status: 'neologism',
       createdAt: '2026-09-03T00:00:00Z', lastActivityAt: null, groupSlug: null, boardSlug: 'stiegler', boardParentId: null,
@@ -109,6 +109,8 @@ test('listConceptIndex: space-scoped, concepts only, bounded, no user fields; ma
   assert.match(sql, /WHERE c\."spaceId" = \$1::uuid AND c\.kind = 'concept'/);
   assert.match(sql, new RegExp(`LIMIT ${CONCEPT_INDEX_LIMIT}`));
   assert.match(sql, /r\."spaceId" = c\."spaceId"/);
+  assert.match(sql, /LEFT JOIN "RelationType" t ON t\.id = r\."typeId"/);
+  assert.match(sql, /AS "relationCount"/);
   assert.doesNotMatch(sql, /"User"|email|createdBy/);
   assert.deepEqual(out[0], {
     id: 'c1', slug: 'memory', label: 'Memory', labelNb: null, status: 'discussion',

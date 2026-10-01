@@ -877,8 +877,9 @@ export async function renameConceptSlug(
       if (!updated.length) throw new ConceptError(404, 'concept not found');
       await run(
         q,
-        `INSERT INTO "ConceptSlugAlias" ("spaceId", slug, "conceptId") VALUES ($1::uuid, $2, $3::uuid)
-         ON CONFLICT ("spaceId", slug) DO NOTHING`,
+        // No ON CONFLICT: the old slug was live, so an alias with it means the
+        // invariant broke — fail (409 after rollback) rather than hide it.
+        `INSERT INTO "ConceptSlugAlias" ("spaceId", slug, "conceptId") VALUES ($1::uuid, $2, $3::uuid)`,
         [concept.spaceId, previous, concept.id],
       );
       return { slug, previous, changed: true };
@@ -989,8 +990,9 @@ export type ConceptIndexRow = {
   channel: { slug: string; title: string; archived: boolean } | null;
   /** Published posts of its discussion thread. */
   postCount: number;
-  /** Relations it takes part in (either end), per relation type slug; asserted relations only. */
+  /** Relations it takes part in (either end), per relation type slug: stated relations, never inferred ones. */
   relationTypes: Array<{ type: string; n: number }>;
+  /** All its stated relations (either end), whatever their type. */
   relationCount: number;
 };
 
@@ -1015,8 +1017,11 @@ function parseTypeCounts(raw: unknown): Array<{ type: string; n: number }> {
 
 /**
  * Every concept (kind 'concept') of the space for the index page, bounded
- * (CONCEPT_INDEX_LIMIT), alphabetical. No user fields at all. Sorting,
- * grouping and filtering happen in concepts-index.ts.
+ * (CONCEPT_INDEX_LIMIT), alphabetical. No user fields at all. Relations are
+ * the stated ones (ConceptRelation rows, either end; inference is a graph
+ * view only), counted in total and per type — LEFT JOIN on RelationType so a
+ * relation is never dropped from the count (legacy "type" text as fallback).
+ * Sorting, grouping and filtering happen in concepts-index.ts.
  */
 export async function listConceptIndex(q: QueryFn, { spaceId }: { spaceId: string }): Promise<ConceptIndexRow[]> {
   if (typeof spaceId !== 'string' || !isUuid(spaceId)) return [];
@@ -1029,13 +1034,15 @@ export async function listConceptIndex(q: QueryFn, { spaceId }: { spaceId: strin
             g.slug AS "groupSlug", g.title AS "groupTitle", g."isArchived" AS "groupArchived",
             tb.slug AS "boardSlug", tb.title AS "boardTitle", tb."isArchived" AS "boardArchived", tb."parentId" AS "boardParentId",
             (SELECT count(*) FROM "ForumPost" p WHERE p."threadId" = ct.id AND p.status = 'published')::int AS "postCount",
+            (SELECT count(*) FROM "ConceptRelation" r
+              WHERE r."spaceId" = c."spaceId" AND (r."sourceId" = c.id OR r."targetId" = c.id))::int AS "relationCount",
             COALESCE((
               SELECT json_agg(json_build_object('type', x.slug, 'n', x.n))
               FROM (
-                SELECT t.slug, count(*)::int AS n
-                FROM "ConceptRelation" r JOIN "RelationType" t ON t.id = r."typeId"
+                SELECT COALESCE(t.slug, r."type") AS slug, count(*)::int AS n
+                FROM "ConceptRelation" r LEFT JOIN "RelationType" t ON t.id = r."typeId"
                 WHERE r."spaceId" = c."spaceId" AND (r."sourceId" = c.id OR r."targetId" = c.id)
-                GROUP BY t.slug
+                GROUP BY 1
               ) x
             ), '[]'::json) AS "relationTypes"
      FROM "Concept" c
@@ -1067,7 +1074,9 @@ export async function listConceptIndex(q: QueryFn, { spaceId }: { spaceId: strin
       channel,
       postCount: Number(r.postCount) || 0,
       relationTypes,
-      relationCount: relationTypes.reduce((sum, x) => sum + x.n, 0),
+      relationCount: r.relationCount === undefined || r.relationCount === null
+        ? relationTypes.reduce((sum, x) => sum + x.n, 0)
+        : Number(r.relationCount) || 0,
     };
   });
 }

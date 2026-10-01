@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mmHandler, errorResponse, requireUuidParam, readJsonObject, conceptPatchKind, loadMmSpace, MmApiError, SPACE_SQL,
-  createWriteLimiter, apiLang,
+  createWriteLimiter, apiLang, findConceptId,
 } from './api-core.ts';
 import { ConceptError, shouldDestroyClient } from './concepts-core.ts';
 import { ForumError } from './forum-core.ts';
@@ -248,4 +248,20 @@ test('findForumId: forum id (any level), group slug (top-level only) or group/ch
   for (const bad of ['welcome', 'stiegler/nope', 'a/b/c', '/x', '', null]) {
     await assert.rejects(findForumId(q, SP, bad), (e) => e instanceof MmApiError && e.status === 404, String(bad));
   }
+});
+
+test('findConceptId: live slug first, then a rename alias (stale tabs keep working); space-scoped; else 404', async () => {
+  const calls = [];
+  const q = async (text, params) => {
+    calls.push({ text, params });
+    return { data: params[1] === 'old-name' || params[1] === 'pharmakon' ? [{ id: 'c1', rank: params[1] === 'old-name' ? 1 : 0 }] : [], error: null };
+  };
+  assert.equal(await findConceptId(q, SPACE.id, 'pharmakon'), 'c1');
+  assert.equal(await findConceptId(q, SPACE.id, 'old-name'), 'c1');
+  await assert.rejects(findConceptId(q, SPACE.id, 'nothing'), (e) => e.status === 404);
+  await assert.rejects(findConceptId(q, SPACE.id, ''), (e) => e.status === 404);
+  const sql = calls[0].text;
+  assert.match(sql, /FROM "Concept" WHERE "spaceId" = \$1::uuid AND slug = \$2 AND kind = 'concept'/);
+  assert.match(sql, /FROM "ConceptSlugAlias" a[\s\S]*c\.kind = 'concept'[\s\S]*WHERE a\."spaceId" = \$1::uuid AND a\.slug = \$2/);
+  assert.match(sql, /ORDER BY rank ASC\s+LIMIT 1/);
 });

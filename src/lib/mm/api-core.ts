@@ -250,10 +250,23 @@ export async function findForumId(q: QueryFn, spaceId: string, ref: unknown): Pr
   return r.id;
 }
 
-/** Concept id by slug in the space. */
+/**
+ * Concept id by slug in the space: its live slug, or a slug it had before a
+ * rename (alias), so a page opened before the rename keeps working.
+ */
 export async function findConceptId(q: QueryFn, spaceId: string, slug: unknown): Promise<string> {
   if (typeof slug !== 'string' || !slug || slug.length > 200) throw new MmApiError(404, 'concept not found');
-  const r = (await rows(q, `SELECT id FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2 AND kind = 'concept' LIMIT 1`, [spaceId, slug]))[0];
+  const r = (await rows(
+    q,
+    `SELECT id, 0 AS rank FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2 AND kind = 'concept'
+     UNION ALL
+     SELECT c.id, 1 AS rank FROM "ConceptSlugAlias" a
+     JOIN "Concept" c ON c.id = a."conceptId" AND c."spaceId" = a."spaceId" AND c.kind = 'concept'
+     WHERE a."spaceId" = $1::uuid AND a.slug = $2
+     ORDER BY rank ASC
+     LIMIT 1`,
+    [spaceId, slug],
+  ))[0];
   if (!r) throw new MmApiError(404, 'concept not found');
   return r.id;
 }

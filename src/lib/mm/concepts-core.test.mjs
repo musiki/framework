@@ -671,7 +671,7 @@ function renameFixture({ holders = {}, failAlias = false, rows } = {}) {
     ['FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND slug = $2', ([, slug]) => (holders[slug] ? [holders[slug]] : [])],
     ['DELETE FROM "ConceptSlugAlias"', () => []],
     ['UPDATE "Concept" SET slug', ([slug]) => [{ slug }]],
-    ['INSERT INTO "ConceptSlugAlias"', () => (failAlias ? { error: new Error('alias failed') } : [])],
+    ['INSERT INTO "ConceptSlugAlias"', () => (failAlias === 'dup' ? { error: { message: 'dup', code: '23505' } } : failAlias ? { error: new Error('alias failed') } : [])],
   ]);
 }
 
@@ -711,6 +711,11 @@ test('renameConceptSlug: unchanged is a no-op; taken by another concept (live or
   const del = back.calls.find((c) => c.text.includes('DELETE FROM "ConceptSlugAlias"'));
   assert.deepEqual(del.params, [SPACE, 'old-name', C1]);
   assert.equal(back.calls.at(-1).text, 'COMMIT');
+
+  const dup = renameFixture({ failAlias: 'dup' });
+  await rejectsStatus(renameConceptSlug(dup.q, { conceptId: C1, actorUserId: U.admin, slug: 'x-y' }), 409);
+  assert.equal(dup.calls.at(-1).text, 'ROLLBACK');
+  assert.doesNotMatch(dup.calls.find((c) => c.text.includes('INSERT INTO "ConceptSlugAlias"')).text, /ON CONFLICT/);
 
   const fail = renameFixture({ failAlias: true });
   await assert.rejects(renameConceptSlug(fail.q, { conceptId: C1, actorUserId: U.admin, slug: 'x-y' }));
