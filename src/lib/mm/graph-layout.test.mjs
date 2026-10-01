@@ -486,4 +486,9 @@ test('escapeVector: null when apart; the shortest way out otherwise, and moving 
     }
   }
   assert.equal(escapeVector({ x: 0, y: 0, w: 1, h: 1 }, null), null);
+  // A reusable result object is filled in and returned.
+  const scratch = { x: 0, y: 0, depth: 0 };
+  assert.equal(escapeVector({ x: 105, y: 30, w: 40, h: 20 }, sq, 0, scratch), scratch);
+  assert.ok(Math.abs(scratch.x - 15) < 1e-9 && Math.abs(scratch.depth - 15) < 1e-9);
+  assert.equal(escapeVector({ x: 300, y: 30, w: 40, h: 20 }, sq, 0, scratch), null);
 });

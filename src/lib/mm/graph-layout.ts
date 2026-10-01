@@ -319,9 +319,11 @@ export function pointInPolygon(p: Point, poly: [number, number][] | null): boole
  * beyond it, with its length as `depth`; null when the box (grown by `gap`)
  * does not overlap the polygon (separating-axis test on the polygon's side
  * normals and the box's axes). Used to keep concepts that are not members of
- * a cloud out of it.
+ * a cloud out of it. With `out` the result is written into it (no allocation
+ * per call; the layout calls this every tick).
  */
-export function escapeVector(box: Box, poly: [number, number][] | null, gap = 0): { x: number; y: number; depth: number } | null {
+export type Escape = { x: number; y: number; depth: number };
+export function escapeVector(box: Box, poly: [number, number][] | null, gap = 0, out?: Escape): Escape | null {
   if (!poly || poly.length < 3) return null;
   const hw = box.w / 2 + gap, hh = box.h / 2 + gap;
   // Box axes: separated when the polygon's extent misses the box's on x or y.
@@ -331,7 +333,7 @@ export function escapeVector(box: Box, poly: [number, number][] | null, gap = 0)
   let mx = 0, my = 0;
   for (const [x, y] of poly) { mx += x; my += y; }
   mx /= poly.length; my /= poly.length;
-  let best: { x: number; y: number; depth: number } | null = null;
+  let found = false, bx = 0, by = 0, bd = Infinity;
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i], b = poly[(i + 1) % poly.length];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -343,9 +345,12 @@ export function escapeVector(box: Box, poly: [number, number][] | null, gap = 0)
     const near = nx * box.x + ny * box.y - Math.abs(nx) * hw - Math.abs(ny) * hh;
     const shift = edge - near;
     if (shift <= 0) return null; // a separating side: no overlap
-    if (!best || shift < best.depth) best = { x: nx * shift, y: ny * shift, depth: shift };
+    if (shift < bd) { found = true; bx = nx * shift; by = ny * shift; bd = shift; }
   }
-  return best;
+  if (!found) return null;
+  const r = out ?? { x: 0, y: 0, depth: 0 };
+  r.x = bx; r.y = by; r.depth = bd;
+  return r;
 }
 
 /** Label side of an area at nesting `level`: odd levels on the top edge, even ones (innermost) on the bottom. */

@@ -62,7 +62,7 @@ import { drag } from 'd3-drag';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import {
   truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock,
-  cloudPolygon, cloudLabelAnchor, polygonPath, slideAlong, escapeVector, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
+  cloudPolygon, cloudLabelAnchor, polygonPath, slideAlong, escapeVector, type Escape, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
   clipToBox, offsetSegment, pairSlots, cycleIndex, visibleAt, timelineDays, stepDay, dayEnd, DAY_MS,
   type Box, type AreaGroup, type Point, type VisibleAt,
 } from '../../lib/mm/graph-layout';
@@ -141,7 +141,6 @@ const NODE_PAD_X = 8;
 const EDGE_H = 14;
 const SLOT_GAP = 7; // px between side-by-side relations of one pair
 const CLOUD_GAP = 6; // world px a concept is kept outside a cloud it does not belong to
-const AREA_CLEAR = 24; // world px an unrelated concept is kept clear of an area's reach
 const SCALE: [number, number] = [0.2, 4];
 const CARD_DELAY = 150; // hover rest before the card opens (ms)
 const CARD_GRACE = 250; // time to travel from the node to the card (ms)
@@ -334,15 +333,19 @@ function draw(holder: HTMLElement): void {
   let auto = true; // keep fitting the view until the reader zooms or pans
 
   // --- simulations --------------------------------------------------------
-  // The concepts of each area (container + members), resolved once for the 'areas' force.
+  // The concepts of each cloud (container + members), resolved once for the 'areas' attraction.
   const areaNodes = groups
     .map((g) => [g.container, ...g.members].map((id) => byId.get(id)).filter((n): n is Node => !!n))
-    .filter((ns) => ns.length >= 2)
-    .map((ns) => ({ ns, set: new Set(ns) }));
+    .filter((ns) => ns.length >= 2);
   // Clouds keep the other concepts out, in world space (folded boxes, the cloud's padding: the
-  // outline as drawn at zoom 1 and below; larger than drawn when zoomed in). Per cloud, the
-  // concepts it may hold: its container, its members, and the members of clouds nested inside it.
-  const clouds = groups.map((g) => {
+  // outline as drawn at zoom 1 and below; larger than drawn when zoomed in). Resolved once per
+  // cloud: the concepts it may hold (its container, its members, and the members of clouds nested
+  // inside it) and one reusable box per concept. `activeClouds` holds the clouds shown now (type
+  // filter, timeline) with their shown members and the shown concepts they must keep out; it is
+  // rebuilt only when the filter or the timeline changes.
+  type CloudRec = { g: AreaGroup; keep: Set<string>; pad: number };
+  type ActiveCloud = { pad: number; boxes: { n: Node; b: Box }[]; others: Node[] };
+  const cloudRecs: CloudRec[] = groups.map((g) => {
     const keep = new Set([g.container, ...g.members]);
     for (let grew = true; grew;) {
       grew = false;
@@ -351,28 +354,52 @@ function draw(holder: HTMLElement): void {
         for (const m of h.members) if (!keep.has(m)) { keep.add(m); grew = true; }
       }
     }
-    return {
-      level: g.level,
-      ns: [g.container, ...g.members].map((id) => byId.get(id)).filter((n): n is Node => !!n),
-      keep: new Set([...keep].map((id) => byId.get(id)).filter((n): n is Node => !!n)),
-    };
-  }).filter((c) => c.ns.length >= 2);
-  const worldBox = (n: Node): Box => ({ x: n.x ?? 0, y: n.y ?? 0, w: n.wFold, h: NODE_H });
-  /** Calls `fn` with every concept that overlaps a cloud it does not belong to and the shortest way out (outlines built once per call). */
-  const eachIntruder = (fn: (n: Node, out: { x: number; y: number; depth: number }) => void) => {
-    for (const c of clouds) {
-      const poly = cloudPolygon(c.ns.map(worldBox), areaPadding(c.level));
+    return { g, keep, pad: areaPadding(g.level) };
+  });
+  const boxOfNode = new Map<Node, Box>(nodes.map((n) => [n, { x: 0, y: 0, w: n.wFold, h: NODE_H }]));
+  let activeClouds: ActiveCloud[] = [];
+  const refreshClouds = () => {
+    activeClouds = [];
+    for (const c of cloudRecs) {
+      const members = typeHidden(c.g.type) ? null : areaMembers(c.g);
+      if (!members) continue;
+      const ns = [c.g.container, ...members].map((id) => byId.get(id)).filter((n): n is Node => !!n && !gone(n));
+      if (ns.length < 2) continue;
+      activeClouds.push({ pad: c.pad, boxes: ns.map((n) => ({ n, b: boxOfNode.get(n)! })), others: nodes.filter((n) => !c.keep.has(n.id) && !gone(n)) });
+    }
+  };
+  refreshClouds();
+  const escape: Escape = { x: 0, y: 0, depth: 0 };
+  /** Calls `fn` with every shown concept that overlaps a shown cloud it does not belong to and the shortest way out (`escape`, reused). */
+  const eachIntruder = (fn: (n: Node, out: Escape) => void) => {
+    for (const c of activeClouds) {
+      // The cloud's reach (its members' boxes plus padding and gap) first: no outline when nothing comes near.
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const { n, b } of c.boxes) {
+        b.x = n.x ?? 0; b.y = n.y ?? 0;
+        x0 = Math.min(x0, b.x - b.w / 2); x1 = Math.max(x1, b.x + b.w / 2);
+        y0 = Math.min(y0, b.y - b.h / 2); y1 = Math.max(y1, b.y + b.h / 2);
+      }
+      const reach = c.pad + CLOUD_GAP;
+      x0 -= reach; y0 -= reach; x1 += reach; y1 += reach;
+      let near = false;
+      for (const n of c.others) {
+        const x = n.x ?? 0, y = n.y ?? 0, hw = n.wFold / 2, hh = NODE_H / 2;
+        if (x + hw > x0 && x - hw < x1 && y + hh > y0 && y - hh < y1) { near = true; break; }
+      }
+      if (!near) continue;
+      const poly = cloudPolygon(c.boxes.map((e) => e.b), c.pad);
       if (!poly) continue;
-      for (const n of nodes) {
-        if (c.keep.has(n)) continue;
-        const out = escapeVector(worldBox(n), poly, CLOUD_GAP);
-        if (out) fn(n, out);
+      for (const n of c.others) {
+        const b = boxOfNode.get(n)!;
+        b.x = n.x ?? 0; b.y = n.y ?? 0;
+        if (escapeVector(b, poly, CLOUD_GAP, escape)) fn(n, escape);
       }
     }
   };
   /** Final hard correction: move any concept still on or inside a cloud it does not belong to just outside it. */
   const clearClouds = () => {
-    if (!clouds.length) return;
+    if (!activeClouds.length) return;
     for (let pass = 0; pass < 8; pass++) {
       let moved = false;
       eachIntruder((n, out) => {
@@ -395,30 +422,18 @@ function draw(holder: HTMLElement): void {
     .force('y', forceY(0).strength(small ? 0.04 : 0.08))
     .force('collide', forceCollide<Node>((d) => d.wFold / 2 + 10).strength(1).iterations(3))
     .force('areas', (alpha: number) => {
-      // Weak pull of an area's concepts towards their common centre, and a weak push of every
-      // other concept away from it, so a hull does not swallow unrelated concepts. For an area
-      // type that is not transitive the members of an inner area are not members of the outer
-      // one: they are pushed out of it while pulled into theirs, so an inner hull may reach
-      // beyond the outer one (accepted: the relations say exactly that).
-      for (const { ns, set } of areaNodes) {
+      // Weak pull of a cloud's concepts towards their common centre. Keeping the other concepts
+      // out is the polygon-aware 'clouds' force below. For an area type that is not transitive the
+      // members of an inner cloud are not members of the outer one, but they belong to a cloud
+      // nested in it, so the outer cloud does not push them out (an inner cloud may still reach
+      // beyond the outer one: the relations say exactly that).
+      for (const ns of areaNodes) {
         let cx = 0, cy = 0;
         for (const n of ns) { cx += n.x ?? 0; cy += n.y ?? 0; }
         cx /= ns.length; cy /= ns.length;
-        let r = 0;
         for (const n of ns) {
           n.vx = (n.vx ?? 0) + (cx - (n.x ?? 0)) * 0.07 * alpha;
           n.vy = (n.vy ?? 0) + (cy - (n.y ?? 0)) * 0.07 * alpha;
-          r = Math.max(r, Math.hypot((n.x ?? 0) - cx, (n.y ?? 0) - cy) + n.wFold / 2);
-        }
-        r += AREA_CLEAR;
-        for (const n of nodes) {
-          if (set.has(n)) continue;
-          const dx = (n.x ?? 0) - cx, dy = (n.y ?? 0) - cy;
-          const d = Math.hypot(dx, dy) || 1;
-          if (d >= r + n.wFold / 2) continue;
-          const push = ((r + n.wFold / 2 - d) / d) * 0.3 * alpha;
-          n.vx = (n.vx ?? 0) + dx * push;
-          n.vy = (n.vy ?? 0) + dy * push;
         }
       }
     })
@@ -426,7 +441,7 @@ function draw(holder: HTMLElement): void {
     // the shortest way (graph-layout escapeVector), harder the deeper it sits and not damped by alpha,
     // so it wins over the link pull of a relation to a member.
     .force('clouds', () => {
-      if (!clouds.length) return;
+      if (!activeClouds.length) return;
       eachIntruder((n, out) => {
         const k = Math.min(1, 0.35 + out.depth / 60);
         n.vx = (n.vx ?? 0) + out.x * k;
@@ -605,8 +620,8 @@ function draw(holder: HTMLElement): void {
    * `area`: a cloud — a faceted straight-edged region (graph-layout cloudPolygon) round the
    * container and its members, in the slot's tint with a 2px border in the slot colour and pattern
    * (an inner border for `double`, an ink underlay for light slots, the broken pattern when one of
-   * its relations is contested). Nested clouds get more padding; members are pulled together and
-   * other concepts pushed out by the 'areas' force. Its label sits on the outline, horizontal, on
+   * its relations is contested). Nested clouds get more padding; members are pulled together by the
+   * 'areas' force and other concepts kept out by the 'clouds' force. Its label sits on the outline, horizontal, on
    * the top edge (alternating with the bottom one for nested clouds). The border and the label are
    * the hit target: they open the relation of the member nearest the pointer (E steps through the
    * others).
@@ -615,8 +630,20 @@ function draw(holder: HTMLElement): void {
     const layer = relLayer.append('g').attr('class', 'cm-clouds');
     const typeOf = (g: AreaGroup) => types.get(g.type)!;
     const relsOf = new Map(groups.map((g) => [g.key, links.filter((l) => l.kind === 'area' && `${l.type}|${l.source.id}` === g.key)]));
-    const shown = (g: AreaGroup) => relsOf.get(g.key)!.filter((l) => !linkGone(l));
-    const contestedIn = (g: AreaGroup) => shown(g).some((l) => !l.inferred && isContested(l.agree, l.disagree));
+    // The relations shown at the slider's date and whether one of them is contested: recomputed in
+    // style() (after a vote) and timeline(), read by draw() and the hit target.
+    const shownRels = new Map<string, Link[]>();
+    const contested = new Map<string, boolean>();
+    const recount = () => {
+      for (const g of groups) {
+        const list = relsOf.get(g.key)!.filter((l) => !linkGone(l));
+        shownRels.set(g.key, list);
+        contested.set(g.key, list.some((l) => !l.inferred && isContested(l.agree, l.disagree)));
+      }
+    };
+    recount();
+    const shown = (g: AreaGroup) => shownRels.get(g.key) ?? [];
+    const contestedIn = (g: AreaGroup) => contested.get(g.key) === true;
     const text = (g: AreaGroup) => `${byId.get(g.container)?.label ?? g.container} · ${typeLabel(typeOf(g), lang).text}`;
     const textW = new Map(groups.map((g) => [g.key, measure(text(g), 'cm-cloud-label') + 6]));
     const cloud = layer.selectAll<SVGGElement, AreaGroup>('g').data(groups).join('g')
@@ -652,6 +679,7 @@ function draw(holder: HTMLElement): void {
     const inCloud = (g: AreaGroup, l: Link | null) => !!l && l.kind === 'area' && `${l.type}|${l.source.id}` === g.key;
     return {
       style: () => {
+        recount();
         cloud.each(function (g) {
           const dash = edgeDash(typeOf(g).stroke, contestedIn(g));
           select(this).classed('is-contested', contestedIn(g)).selectAll('.cm-cloud-line').attr('stroke-dasharray', dash);
@@ -689,6 +717,7 @@ function draw(holder: HTMLElement): void {
         cloud.classed('cm-gone', (g) => !areaMembers(g));
         label.classed('cm-gone', (g) => !areaMembers(g));
         // Contested is read from the relations shown at the slider's date.
+        recount();
         cloud.each(function (g) { select(this).selectAll('.cm-cloud-line').attr('stroke-dasharray', edgeDash(typeOf(g).stroke, contestedIn(g))); });
         label.each(function (g) { markContested(this, contestedIn(g)); });
       },
@@ -1354,6 +1383,7 @@ function draw(holder: HTMLElement): void {
   const applyTypeFilter = () => {
     if (relLink && typeHidden(relLink.type)) closeRel();
     if (hoverEdge && typeHidden(hoverEdge.type)) hoverEdge = null;
+    refreshClouds(); // a hidden cloud no longer keeps concepts out
     render();
   };
   filterListeners.add(applyTypeFilter);
@@ -1362,6 +1392,7 @@ function draw(holder: HTMLElement): void {
   // --- timeline -------------------------------------------------------------
   const applyTimeline = () => {
     node.classed('cm-gone', gone);
+    refreshClouds(); // only the clouds and concepts that exist at the slider's date take part
     eachRenderer((r) => r.timeline());
     if (relLink && linkGone(relLink)) closeRel();
     if (hoverEdge && linkGone(hoverEdge)) hoverEdge = null;
