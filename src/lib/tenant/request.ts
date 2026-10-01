@@ -1,13 +1,17 @@
 import type { Tenant } from './tenants.ts';
 import { resolveTenant } from './resolve.ts';
 import { isInternalMmPath, isMmPagePath, isRouteAllowed, mapMmPath } from './routes.ts';
+import { isRootSlugPath } from '../mm/slugs.ts';
 
 /**
  * `rewrite`: internal path the request must be served from (mm tenant only);
  * the middleware applies it with `next(rewrite)` so middleware does not re-run
  * on the internal path.
  */
-export type TenantDecision = { tenant: Tenant; action: 'next' | 'not-found'; rewrite?: string };
+export type TenantDecision =
+  | { tenant: Tenant; action: 'next' | 'not-found'; rewrite?: string }
+  /** Permanent redirect to `location` (path only; the caller appends the query). */
+  | { tenant: Tenant; action: 'redirect'; location: string };
 
 /**
  * `pathname` must be the raw request pathname (`new URL(request.url).pathname`:
@@ -30,6 +34,12 @@ export function decideTenantRequest(input: {
   // Real build assets (/_astro/*) are served by the static handler before SSR;
   // any /_* request reaching middleware would fall to musiki's catch-all.
   if (input.pathname.startsWith('/_')) return { tenant, action: 'not-found' };
+  // mm concept permalinks have one spelling: /<slug>/ → /<slug> (only when the
+  // stripped path is itself a root concept slug; anything else is untouched).
+  if (tenant.id === 'mm' && input.pathname.length > 2 && input.pathname.endsWith('/')) {
+    const stripped = input.pathname.slice(0, -1);
+    if (isRootSlugPath(stripped)) return { tenant, action: 'redirect', location: stripped };
+  }
   // Astro's router matches decodeURI(pathname): the allowlist must hold for
   // the raw path AND its decoded form (e.g. /api/public/%6Dm → /api/public/mm).
   let decoded: string;

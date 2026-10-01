@@ -97,7 +97,7 @@ test('mm host: root concept slugs rewrite to the concept page; odd spellings are
   const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: '/tertiary-retention' });
   assert.equal(d.action, 'next');
   assert.equal(d.rewrite, '/mm-app/concept/tertiary-retention');
-  for (const p of ['/Tertiary-retention', '/%74ertiary', '/tertiary.retention', '/tertiary-retention/', '/caf%C3%A9', '/%2e%2e']) {
+  for (const p of ['/Tertiary-retention', '/%74ertiary', '/tertiary.retention', '/caf%C3%A9', '/%2e%2e']) {
     assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).action, 'not-found', p);
   }
   assert.equal(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/tertiary-retention' }).rewrite, undefined);
@@ -176,4 +176,22 @@ test('mm host: the bare /lily mount and deeper /lily paths are not-found (never 
     assert.equal(d.rewrite, undefined, p);
   }
   assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/lily/0123456789abcdef0123456789abcdef.svg' }).action, 'next');
+});
+
+test('mm host: a root concept slug with a trailing slash redirects to the slug; nothing else does', () => {
+  assert.deepEqual(
+    (({ action, location }) => ({ action, location }))(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/x/' })),
+    { action: 'redirect', location: '/x' },
+  );
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/tertiary-retention/' }).location, '/tertiary-retention');
+  for (const p of ['/X/', '/%2e/', '/%2E/', '/./', '/x//', '/graph/', '/about/', '/dashboard/', '/x/y/', '/a--b/', '//']) {
+    assert.notEqual(decideTenantRequest({ host: 'mm.zztt.org', pathname: p }).action, 'redirect', p);
+  }
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/X/' }).action, 'not-found');
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/%2e/' }).action, 'not-found');
+  // reserved words with a slash keep their own page
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/graph/' }).rewrite, '/mm-app/graph/');
+  // other tenants never
+  assert.notEqual(decideTenantRequest({ host: 'musiki.org.ar', pathname: '/x/' }).action, 'redirect');
+  assert.notEqual(decideTenantRequest({ host: 'so.zztt.org', pathname: '/x/' }).action, 'redirect');
 });

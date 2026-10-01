@@ -35,6 +35,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
         envTenant: import.meta.env.DEV ? process.env.TENANT : undefined,
       });
   context.locals.tenant = tenantDecision.tenant;
+  if (tenantDecision.action === "redirect") {
+    // Canonical spelling (mm: /<slug>/ → /<slug>); same-origin path, query kept.
+    return context.redirect(`${tenantDecision.location}${url.search}`, 301);
+  }
   if (tenantDecision.action === "not-found") {
     // mm renders its own plain 404 (no musiki/so chrome). next(path) serves
     // the internal page without re-running this middleware.
