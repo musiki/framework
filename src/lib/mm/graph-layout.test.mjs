@@ -368,3 +368,82 @@ test('stepDay: next / previous creation day, null at the ends', () => {
   assert.equal(stepDay(steps, 10, -1), null);
   assert.equal(stepDay([], 3, 1), null);
 });
+
+import { cloudPolygon, cloudLabelAnchor, polygonPath, slideAlong } from './graph-layout.ts';
+
+/** Signed cross products of point p against every side of a polygon (all one sign: inside or on). */
+const sides = (poly, [px, py]) => poly.map(([ax, ay], i) => {
+  const [bx, by] = poly[(i + 1) % poly.length];
+  return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+});
+const insidePoly = (poly, p) => { const c = sides(poly, p); return c.every((x) => x <= 1e-6) || c.every((x) => x >= -1e-6); };
+const isConvex = (poly) => {
+  const turns = poly.map((a, i) => {
+    const b = poly[(i + 1) % poly.length], c = poly[(i + 2) % poly.length];
+    return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+  });
+  return turns.every((x) => x <= 1e-6) || turns.every((x) => x >= -1e-6);
+};
+
+test('cloudPolygon: a faceted, convex, straight-edged region round every box and its padding', () => {
+  const boxes = [{ x: 0, y: 0, w: 60, h: 26 }, { x: 160, y: 20, w: 80, h: 26 }, { x: 70, y: 120, w: 50, h: 26 }];
+  const pad = 16;
+  const poly = cloudPolygon(boxes, pad);
+  assert.ok(poly.length > hullPolygon(boxes, pad).length, 'more vertices than the plain hull');
+  assert.ok(isConvex(poly));
+  // Every box with a cut-corner padding (the box itself grown by pad, corners cut) lies inside.
+  for (const b of boxes) {
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      assert.ok(insidePoly(poly, [b.x + sx * (b.w / 2 + pad / 2), b.y + sy * (b.h / 2 + pad / 2)]), `${b.x},${b.y}`);
+      assert.ok(insidePoly(poly, [b.x + sx * b.w / 2, b.y + sy * (b.h / 2 + pad)]), 'padding above/below the box');
+    }
+  }
+  // Straight segments only in its path.
+  const d = polygonPath(poly);
+  assert.match(d, /^M[-\d.,]+(L[-\d.,]+)+Z$/);
+  assert.doesNotMatch(d, /[AQCST]/);
+  // Deterministic.
+  assert.deepEqual(cloudPolygon(boxes, pad), poly);
+});
+
+test('cloudPolygon: one box is a cut-corner octagon; empty input is null; nested padding encloses the inner cloud', () => {
+  const one = cloudPolygon([{ x: 0, y: 0, w: 20, h: 10 }], 6);
+  assert.equal(one.length, 8);
+  assert.ok(isConvex(one));
+  assert.equal(cloudPolygon([], 6), null);
+  assert.equal(cloudPolygon([{ x: NaN, y: 1 }], 6), null);
+  assert.equal(polygonPath(null), '');
+  const inner = [{ x: 0, y: 0, w: 30, h: 20 }, { x: 50, y: 40, w: 30, h: 20 }];
+  const outer = [...inner, { x: -60, y: 30, w: 30, h: 20 }];
+  const pi = cloudPolygon(inner, areaPadding(0)), po = cloudPolygon(outer, areaPadding(1));
+  for (const v of pi) assert.ok(insidePoly(po, v), `inner vertex ${v} outside the outer cloud`);
+});
+
+test('cloudLabelAnchor: on the outline straight above (or below) the middle of the cloud', () => {
+  const sq = [[0, 10], [0, 0], [20, 0], [20, 10]];
+  assert.deepEqual(cloudLabelAnchor(sq), { x: 10, y: 0 });
+  assert.deepEqual(cloudLabelAnchor(sq, 'bottom'), { x: 10, y: 10 });
+  const poly = cloudPolygon([{ x: 0, y: 0, w: 40, h: 20 }, { x: 100, y: 30, w: 40, h: 20 }], 12);
+  const top = cloudLabelAnchor(poly);
+  const ys = poly.map((p) => p[1]);
+  assert.ok(Math.abs(top.x - (Math.min(...poly.map((p) => p[0])) + Math.max(...poly.map((p) => p[0]))) / 2) < 1e-9);
+  assert.ok(top.y >= Math.min(...ys) - 1e-9 && top.y < 0, `${top.y}`);
+  assert.ok(insidePoly(poly, [top.x, top.y + 0.01]) && !insidePoly(poly, [top.x, top.y - 0.5]));
+  assert.ok(cloudLabelAnchor(poly, 'bottom').y > 30);
+  assert.equal(cloudLabelAnchor(null), null);
+});
+
+test('slideAlong: the label stays on its segment, centred unless pushed along it', () => {
+  const p = { x: 0, y: 0 }, q = { x: 100, y: 0 };
+  assert.deepEqual(slideAlong(p, q, { x: 0, y: 0 }), { x: 50, y: 0 });
+  // A push across the line is dropped; one along it moves the label, kept clear of the ends.
+  assert.deepEqual(slideAlong(p, q, { x: 0, y: 30 }), { x: 50, y: 0 });
+  assert.deepEqual(slideAlong(p, q, { x: 20, y: 30 }), { x: 70, y: 0 });
+  assert.deepEqual(slideAlong(p, q, { x: 500, y: 0 }, { w: 40, h: 10 }), { x: 80, y: 0 });
+  // Diagonal: the result is on the line.
+  const r = slideAlong({ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 10, y: -3 });
+  assert.ok(Math.abs(r.x - r.y) < 1e-9);
+  // A label longer than its line stays at the middle.
+  assert.deepEqual(slideAlong(p, { x: 10, y: 0 }, { x: 5, y: 0 }, { w: 40, h: 10 }), { x: 5, y: 0 });
+  assert.deepEqual(slideAlong(p, p, { x: 5, y: 5 }), { x: 0, y: 0 });
+});

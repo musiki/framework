@@ -194,6 +194,114 @@ export function hullLabelAnchor(poly: [number, number][] | null, side: 'top' | '
   return best;
 }
 
+/**
+ * The outline of a cloud (an `area` relation type drawn round its container
+ * and members): a faceted region with straight sides only (the brand is flat:
+ * no curves, no rounding). Each box is grown by `padding` and its corners are
+ * cut (`facet` of the padding), the convex hull of those points is taken, and
+ * every side longer than `facetLen` is split into short facets bowed slightly
+ * outwards (on a parabola over the side, so the outline stays convex and
+ * never cuts into the padding). Deterministic; null when there is nothing to
+ * wrap.
+ */
+export function cloudPolygon(boxes: HullBox[], padding: number, facet = 0.45, facetLen = Math.max(28, padding * 3)): [number, number][] | null {
+  const p = Math.max(0, padding);
+  const c = p * clamp(facet, 0, 1);
+  const pts: [number, number][] = [];
+  for (const b of boxes) {
+    if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) continue;
+    const hw = (b.w ?? 0) / 2 + p, hh = (b.h ?? 0) / 2 + p;
+    const cx = Math.min(c, hw), cy = Math.min(c, hh);
+    pts.push(
+      [b.x - hw + cx, b.y - hh], [b.x + hw - cx, b.y - hh], [b.x + hw, b.y - hh + cy], [b.x + hw, b.y + hh - cy],
+      [b.x + hw - cx, b.y + hh], [b.x - hw + cx, b.y + hh], [b.x - hw, b.y + hh - cy], [b.x - hw, b.y - hh + cy],
+    );
+  }
+  if (!pts.length) return null;
+  const hull = polygonHull(pts);
+  if (!hull) {
+    const sorted = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    return [sorted[0], sorted[sorted.length - 1]];
+  }
+  let mx = 0, my = 0;
+  for (const [x, y] of hull) { mx += x; my += y; }
+  mx /= hull.length; my /= hull.length;
+  // Exterior angle at each hull vertex: a side's bow is kept small enough that its first and last
+  // facets turn by less than half of it, so the outline stays convex at the original corners.
+  const turn = hull.map((v, i) => {
+    const a = hull[(i + hull.length - 1) % hull.length], b = hull[(i + 1) % hull.length];
+    const t1 = Math.atan2(v[1] - a[1], v[0] - a[0]), t2 = Math.atan2(b[1] - v[1], b[0] - v[0]);
+    const d = Math.abs(t2 - t1) % (2 * Math.PI);
+    return d > Math.PI ? 2 * Math.PI - d : d;
+  });
+  const out: [number, number][] = [];
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length];
+    out.push(a);
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy);
+    const n = Math.floor(len / Math.max(1, facetLen));
+    if (n < 1) continue;
+    // Outward normal: the side of the edge away from the hull's centre.
+    let nx = dy / len, ny = -dx / len;
+    if (nx * ((a[0] + b[0]) / 2 - mx) + ny * ((a[1] + b[1]) / 2 - my) < 0) { nx = -nx; ny = -ny; }
+    const ends = Math.min(turn[i], turn[(i + 1) % hull.length]);
+    const bow = Math.min(len * 0.04, p * 0.35, (len / 4) * Math.tan(ends / 2) * 0.9);
+    for (let j = 1; j <= n; j++) {
+      const t = j / (n + 1);
+      const h = bow * 4 * t * (1 - t);
+      out.push([a[0] + dx * t + nx * h, a[1] + dy * t + ny * h]);
+    }
+  }
+  return out;
+}
+
+/** SVG path of a polygon: straight segments, closed, rounded to 0.1px; '' when empty. */
+export function polygonPath(poly: [number, number][] | null): string {
+  if (!poly?.length) return '';
+  return `M${poly.map(([x, y]) => `${r1(x)},${r1(y)}`).join('L')}Z`;
+}
+
+/**
+ * Where a cloud's label sits: on its outline straight above (`top`) or below
+ * (`bottom`) the middle of its bounding box, so a horizontal label reads
+ * across that edge whatever the facets. Null when there is no outline.
+ */
+export function cloudLabelAnchor(poly: [number, number][] | null, side: 'top' | 'bottom' = 'top'): Point | null {
+  if (!poly?.length) return null;
+  let x0 = Infinity, x1 = -Infinity;
+  for (const [x] of poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+  const x = (x0 + x1) / 2;
+  let best: number | null = null;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    if ((a[0] - x) * (b[0] - x) > 0 || a[0] === b[0]) continue;
+    const y = a[1] + ((x - a[0]) / (b[0] - a[0])) * (b[1] - a[1]);
+    if (best === null || (side === 'top' ? y < best : y > best)) best = y;
+  }
+  if (best === null) return hullLabelAnchor(poly, side);
+  return { x, y: best };
+}
+
+/**
+ * Centre of a horizontal label of `size` sliding along the segment p→q: the
+ * segment's midpoint moved by the part of `offset` that runs along the
+ * segment, kept far enough from the ends that the label stays on the line.
+ * The label therefore always sits on its line, centred on the midpoint unless
+ * another label pushes it along.
+ */
+export function slideAlong(p: Point, q: Point, offset: Point, size: { w: number; h: number } = { w: 0, h: 0 }): Point {
+  const dx = q.x - p.x, dy = q.y - p.y;
+  const len = Math.hypot(dx, dy);
+  const m = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+  if (!len) return m;
+  const ux = dx / len, uy = dy / len;
+  const extent = (size.w / 2) * Math.abs(ux) + (size.h / 2) * Math.abs(uy);
+  const room = Math.max(0, len / 2 - extent);
+  const a = clamp(offset.x * ux + offset.y * uy, -room, room);
+  return { x: m.x + ux * a, y: m.y + uy * a };
+}
+
 /** Label side of an area at nesting `level`: odd levels on the top edge, even ones (innermost) on the bottom. */
 export const areaLabelSide = (level: number): 'top' | 'bottom' => (level % 2 === 1 ? 'top' : 'bottom');
 
