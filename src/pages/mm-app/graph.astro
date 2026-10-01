@@ -85,9 +85,15 @@ const REL_STRING_KEYS = [
   'withdrawn', 'slowDown', 'loading', 'close', 'typeLink',
 ] as const;
 const TL_STRING_KEYS = ['now', 'nowValue', 'play', 'pause', 'shown'] as const;
+const VIEWS = ['concepts', 'relations', 'types'] as const;
+const TYPE_CARD_KEYS = ['card', 'inverse', 'properties', 'noProperties', 'counts', 'inferred', 'link', 'close', 'selected', 'noTypes'] as const;
 const strings = clientStrings(lang, {
   ...Object.fromEntries(REL_STRING_KEYS.map((k) => [`rel.${k}`, t(lang, `mm.graph.rel.${k}` as MessageKey)])),
   ...Object.fromEntries(TL_STRING_KEYS.map((k) => [`tl.${k}`, t(lang, `mm.graph.timeline.${k}` as MessageKey)])),
+  ...Object.fromEntries(VIEWS.flatMap((v) => [[`view.${v}`, t(lang, `mm.graph.view.${v}` as MessageKey)], [`view.help.${v}`, t(lang, `mm.graph.view.help.${v}` as MessageKey)]])),
+  'view.changed': t(lang, 'mm.graph.view.changed'),
+  ...Object.fromEntries(TYPE_CARD_KEYS.map((k) => [`type.${k}`, t(lang, `mm.graph.typeCard.${k}` as MessageKey)])),
+  ...Object.fromEntries((['symmetric', 'transitive', 'hierarchical'] as const).map((p) => [`prop.${p}`, t(lang, `mm.modeler.properties.${p}`)])),
 });
 const typeJson = (rt: RelationTypeView) => JSON.stringify({
   slug: rt.slug, label: rt.label, labelNb: rt.labelNb, inverseLabel: rt.inverseLabel, inverseLabelNb: rt.inverseLabelNb, render: rt.render,
@@ -146,6 +152,18 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
       <>
         <p class="mm-visually-hidden">{t(lang, 'mm.graph.summary', { nodes: nodes.length, edges: edges.length })}</p>
         <div class="mm-graph-wrap" data-mm-graph-wrap hidden>
+          <fieldset class="mm-graph-views" data-mm-graph-views aria-describedby="mm-g-view-help">
+            <legend>{t(lang, 'mm.graph.view.label')}</legend>
+            <div class="mm-segmented">
+              {VIEWS.map((v) => (
+                <span class="mm-segmented-item">
+                  <input type="radio" name="mm-g-view" id={`mm-g-view-${v}`} value={v} checked={v === 'concepts'} aria-controls="mm-g-canvas" />
+                  <label for={`mm-g-view-${v}`}>{t(lang, `mm.graph.view.${v}` as MessageKey)}</label>
+                </span>
+              ))}
+            </div>
+          </fieldset>
+          <p class="mm-help mm-graph-view-help" id="mm-g-view-help" data-mm-graph-view-help>{t(lang, 'mm.graph.view.help.concepts')}</p>
           <div class="mm-graph-tools" role="toolbar" aria-label={t(lang, 'mm.graph.controls')} aria-controls="mm-g-canvas">
             <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-graph-act="in" aria-label={t(lang, 'mm.graph.zoomIn')} title={t(lang, 'mm.graph.zoomIn')}><span aria-hidden="true">+</span></button>
             <button type="button" class="mm-button mm-button-small mm-button-quiet" data-mm-graph-act="out" aria-label={t(lang, 'mm.graph.zoomOut')} title={t(lang, 'mm.graph.zoomOut')}><span aria-hidden="true">−</span></button>
