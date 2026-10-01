@@ -1538,7 +1538,7 @@ function draw(holder: HTMLElement): void {
   const setMode = (m: GraphView, persist = true, speak = true) => {
     radios.forEach((r) => { r.checked = r.value === m; });
     if (m === mode) return;
-    activeSim().stop();
+    activeSim().alphaTarget(0).stop(); // a drag may be in progress: never leave the old simulation heating
     savedPos.set(mode, new Map(nodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }])));
     closeRel(false);
     closeType(false);
