@@ -447,3 +447,43 @@ test('slideAlong: the label stays on its segment, centred unless pushed along it
   assert.deepEqual(slideAlong(p, { x: 10, y: 0 }, { x: 5, y: 0 }, { w: 40, h: 10 }), { x: 5, y: 0 });
   assert.deepEqual(slideAlong(p, p, { x: 5, y: 5 }), { x: 0, y: 0 });
 });
+
+import { pointInPolygon, escapeVector } from './graph-layout.ts';
+
+test('pointInPolygon: inside, outside, degenerate', () => {
+  const sq = [[0, 0], [10, 0], [10, 10], [0, 10]];
+  assert.equal(pointInPolygon({ x: 5, y: 5 }, sq), true);
+  assert.equal(pointInPolygon({ x: 15, y: 5 }, sq), false);
+  assert.equal(pointInPolygon({ x: -1, y: -1 }, sq), false);
+  const cloud = cloudPolygon([{ x: 0, y: 0, w: 60, h: 26 }, { x: 120, y: 40, w: 60, h: 26 }], 16);
+  assert.equal(pointInPolygon({ x: 60, y: 20 }, cloud), true);
+  assert.equal(pointInPolygon({ x: 60, y: 200 }, cloud), false);
+  assert.equal(pointInPolygon({ x: 0, y: 0 }, null), false);
+  assert.equal(pointInPolygon({ x: 0, y: 0 }, [[0, 0], [1, 1]]), false);
+});
+
+test('escapeVector: null when apart; the shortest way out otherwise, and moving by it clears the polygon', () => {
+  const sq = [[0, 0], [100, 0], [100, 60], [0, 60]];
+  assert.equal(escapeVector({ x: 200, y: 30, w: 40, h: 20 }, sq), null);
+  assert.equal(escapeVector({ x: 125, y: 30, w: 40, h: 20 }, sq), null); // touching edge at x = 105 > 100
+  // Overlapping the right side by 15px: out to the right.
+  const e = escapeVector({ x: 105, y: 30, w: 40, h: 20 }, sq);
+  assert.ok(Math.abs(e.x - 15) < 1e-9 && Math.abs(e.y) < 1e-9 && Math.abs(e.depth - 15) < 1e-9, JSON.stringify(e));
+  // With a gap the move goes that much further.
+  assert.ok(Math.abs(escapeVector({ x: 105, y: 30, w: 40, h: 20 }, sq, 5).depth - 20) < 1e-9);
+  // Deep inside near the top: out through the top.
+  const t = escapeVector({ x: 50, y: 12, w: 20, h: 10 }, sq);
+  assert.ok(t.y < 0 && Math.abs(t.x) < 1e-9 && Math.abs(t.depth - 17) < 1e-9, JSON.stringify(t));
+  // On a faceted cloud: after the move, no corner of the box is inside and the box no longer overlaps.
+  const cloud = cloudPolygon([{ x: 0, y: 0, w: 60, h: 26 }, { x: 140, y: 50, w: 60, h: 26 }, { x: 40, y: 120, w: 60, h: 26 }], 28);
+  for (const b of [{ x: 70, y: 60, w: 90, h: 26 }, { x: 190, y: 90, w: 80, h: 26 }, { x: -40, y: 70, w: 70, h: 26 }]) {
+    const v = escapeVector(b, cloud, 4);
+    assert.ok(v && v.depth > 0, JSON.stringify(b));
+    const moved = { ...b, x: b.x + v.x, y: b.y + v.y };
+    assert.equal(escapeVector(moved, cloud, 3.9), null, JSON.stringify(moved));
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1], [0, 0]]) {
+      assert.equal(pointInPolygon({ x: moved.x + sx * moved.w / 2, y: moved.y + sy * moved.h / 2 }, cloud), false);
+    }
+  }
+  assert.equal(escapeVector({ x: 0, y: 0, w: 1, h: 1 }, null), null);
+});

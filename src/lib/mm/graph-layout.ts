@@ -302,6 +302,52 @@ export function slideAlong(p: Point, q: Point, offset: Point, size: { w: number;
   return { x: m.x + ux * a, y: m.y + uy * a };
 }
 
+/** Whether point `p` lies inside polygon `poly` (even-odd ray casting; points on the outline may go either way). */
+export function pointInPolygon(p: Point, poly: [number, number][] | null): boolean {
+  if (!poly || poly.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > p.y) !== (yj > p.y) && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * The shortest move (along one of the polygon's outward side normals) that
+ * takes the centred `box` fully outside the CONVEX polygon `poly` and `gap`
+ * beyond it, with its length as `depth`; null when the box (grown by `gap`)
+ * does not overlap the polygon (separating-axis test on the polygon's side
+ * normals and the box's axes). Used to keep concepts that are not members of
+ * a cloud out of it.
+ */
+export function escapeVector(box: Box, poly: [number, number][] | null, gap = 0): { x: number; y: number; depth: number } | null {
+  if (!poly || poly.length < 3) return null;
+  const hw = box.w / 2 + gap, hh = box.h / 2 + gap;
+  // Box axes: separated when the polygon's extent misses the box's on x or y.
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of poly) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  if (x1 <= box.x - hw || x0 >= box.x + hw || y1 <= box.y - hh || y0 >= box.y + hh) return null;
+  let mx = 0, my = 0;
+  for (const [x, y] of poly) { mx += x; my += y; }
+  mx /= poly.length; my /= poly.length;
+  let best: { x: number; y: number; depth: number } | null = null;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!len) continue;
+    let nx = (b[1] - a[1]) / len, ny = -(b[0] - a[0]) / len;
+    if (nx * (a[0] - mx) + ny * (a[1] - my) < 0) { nx = -nx; ny = -ny; }
+    const edge = nx * a[0] + ny * a[1];
+    // The box corner furthest inside along this normal.
+    const near = nx * box.x + ny * box.y - Math.abs(nx) * hw - Math.abs(ny) * hh;
+    const shift = edge - near;
+    if (shift <= 0) return null; // a separating side: no overlap
+    if (!best || shift < best.depth) best = { x: nx * shift, y: ny * shift, depth: shift };
+  }
+  return best;
+}
+
 /** Label side of an area at nesting `level`: odd levels on the top edge, even ones (innermost) on the bottom. */
 export const areaLabelSide = (level: number): 'top' | 'bottom' => (level % 2 === 1 ? 'top' : 'bottom');
 

@@ -62,7 +62,7 @@ import { drag } from 'd3-drag';
 import { zoom, zoomIdentity, type ZoomTransform } from 'd3-zoom';
 import {
   truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock,
-  cloudPolygon, cloudLabelAnchor, polygonPath, slideAlong, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
+  cloudPolygon, cloudLabelAnchor, polygonPath, slideAlong, escapeVector, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
   clipToBox, offsetSegment, pairSlots, cycleIndex, visibleAt, timelineDays, stepDay, dayEnd, DAY_MS,
   type Box, type AreaGroup, type Point, type VisibleAt,
 } from '../../lib/mm/graph-layout';
@@ -140,6 +140,7 @@ const NODE_H = 26;
 const NODE_PAD_X = 8;
 const EDGE_H = 14;
 const SLOT_GAP = 7; // px between side-by-side relations of one pair
+const CLOUD_GAP = 6; // world px a concept is kept outside a cloud it does not belong to
 const AREA_CLEAR = 24; // world px an unrelated concept is kept clear of an area's reach
 const SCALE: [number, number] = [0.2, 4];
 const CARD_DELAY = 150; // hover rest before the card opens (ms)
@@ -338,6 +339,52 @@ function draw(holder: HTMLElement): void {
     .map((g) => [g.container, ...g.members].map((id) => byId.get(id)).filter((n): n is Node => !!n))
     .filter((ns) => ns.length >= 2)
     .map((ns) => ({ ns, set: new Set(ns) }));
+  // Clouds keep the other concepts out, in world space (folded boxes, the cloud's padding: the
+  // outline as drawn at zoom 1 and below; larger than drawn when zoomed in). Per cloud, the
+  // concepts it may hold: its container, its members, and the members of clouds nested inside it.
+  const clouds = groups.map((g) => {
+    const keep = new Set([g.container, ...g.members]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const h of groups) {
+        if (h === g || !keep.has(h.container)) continue;
+        for (const m of h.members) if (!keep.has(m)) { keep.add(m); grew = true; }
+      }
+    }
+    return {
+      level: g.level,
+      ns: [g.container, ...g.members].map((id) => byId.get(id)).filter((n): n is Node => !!n),
+      keep: new Set([...keep].map((id) => byId.get(id)).filter((n): n is Node => !!n)),
+    };
+  }).filter((c) => c.ns.length >= 2);
+  const worldBox = (n: Node): Box => ({ x: n.x ?? 0, y: n.y ?? 0, w: n.wFold, h: NODE_H });
+  /** Calls `fn` with every concept that overlaps a cloud it does not belong to and the shortest way out (outlines built once per call). */
+  const eachIntruder = (fn: (n: Node, out: { x: number; y: number; depth: number }) => void) => {
+    for (const c of clouds) {
+      const poly = cloudPolygon(c.ns.map(worldBox), areaPadding(c.level));
+      if (!poly) continue;
+      for (const n of nodes) {
+        if (c.keep.has(n)) continue;
+        const out = escapeVector(worldBox(n), poly, CLOUD_GAP);
+        if (out) fn(n, out);
+      }
+    }
+  };
+  /** Final hard correction: move any concept still on or inside a cloud it does not belong to just outside it. */
+  const clearClouds = () => {
+    if (!clouds.length) return;
+    for (let pass = 0; pass < 8; pass++) {
+      let moved = false;
+      eachIntruder((n, out) => {
+        if (n.fx != null) return; // being dragged: the reader's choice for now
+        n.x = (n.x ?? 0) + out.x;
+        n.y = (n.y ?? 0) + out.y;
+        n.vx = 0; n.vy = 0;
+        moved = true;
+      });
+      if (!moved) break;
+    }
+  };
   // Layout from asserted relations only (inferred ones would pull everything together).
   const simLinks = links.filter((l) => !l.inferred);
   const sim = forceSimulation<Node>(nodes)
@@ -374,6 +421,17 @@ function draw(holder: HTMLElement): void {
           n.vy = (n.vy ?? 0) + dy * push;
         }
       }
+    })
+    // Polygon-aware exclusion: a concept overlapping a cloud it does not belong to is pushed out along
+    // the shortest way (graph-layout escapeVector), harder the deeper it sits and not damped by alpha,
+    // so it wins over the link pull of a relation to a member.
+    .force('clouds', () => {
+      if (!clouds.length) return;
+      eachIntruder((n, out) => {
+        const k = Math.min(1, 0.35 + out.depth / 60);
+        n.vx = (n.vx ?? 0) + out.x * k;
+        n.vy = (n.vy ?? 0) + out.y * k;
+      });
     })
     .stop();
 
@@ -1275,6 +1333,7 @@ function draw(holder: HTMLElement): void {
   // --- run ----------------------------------------------------------------
   if (reduceMotion) {
     for (let i = 0; i < 300; i++) sim.tick();
+    clearClouds();
     relaxTags(120, true);
     fit(false);
   } else {
@@ -1284,6 +1343,7 @@ function draw(holder: HTMLElement): void {
       relaxTags(2);
       if (auto) fit(false); else render();
     }).on('end', () => {
+      clearClouds();
       relaxTags(80);
       if (auto) fit(false); else render();
     }).restart();
