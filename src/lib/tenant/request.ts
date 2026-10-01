@@ -49,3 +49,14 @@ export function decideTenantRequest(input: {
   }
   return { tenant, action: 'next' };
 }
+
+/**
+ * Whether the request must carry a session for musiki's /dashboard (else a
+ * redirect to /login). Only full-route tenants have that page, and only the
+ * path itself or below it: on mm a root concept slug such as /dashboards (or
+ * /dashboard, a concept page) is never guarded — mm has no /login.
+ */
+export function needsDashboardSession(tenant: Tenant, pathname: string): boolean {
+  if (tenant.routes !== 'all') return false;
+  return pathname === '/dashboard' || pathname.startsWith('/dashboard/');
+}

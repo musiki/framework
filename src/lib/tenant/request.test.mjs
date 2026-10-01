@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decideTenantRequest } from './request.ts';
+import { decideTenantRequest, needsDashboardSession } from './request.ts';
 
 test('musiki host passes through untouched', () => {
   const d = decideTenantRequest({ host: 'musiki.org.ar', pathname: '/foro' });
@@ -152,4 +152,17 @@ test('mm host: /lily/<hash>.svg passes without rewrite; so host refuses it', () 
   assert.equal(d.rewrite, undefined);
   assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/lily//x.svg' }).action, 'not-found');
   assert.equal(decideTenantRequest({ host: 'so.zztt.org', pathname: '/lily/0123456789abcdef0123456789abcdef.svg' }).action, 'not-found');
+});
+
+test('dashboard session guard: full-route tenants only, /dashboard exactly or below', () => {
+  const musiki = decideTenantRequest({ host: 'musiki.org.ar', pathname: '/' }).tenant;
+  const mm = decideTenantRequest({ host: 'mm.zztt.org', pathname: '/' }).tenant;
+  const so = decideTenantRequest({ host: 'so.zztt.org', pathname: '/' }).tenant;
+  assert.equal(needsDashboardSession(musiki, '/dashboard'), true);
+  assert.equal(needsDashboardSession(musiki, '/dashboard/x'), true);
+  for (const p of ['/dashboards', '/dashboard-notes', '/', '/cursos']) assert.equal(needsDashboardSession(musiki, p), false, p);
+  for (const p of ['/dashboard', '/dashboard/x', '/dashboards']) {
+    assert.equal(needsDashboardSession(mm, p), false, p);
+    assert.equal(needsDashboardSession(so, p), false, p);
+  }
 });

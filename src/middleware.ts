@@ -1,7 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 import { getSession } from "auth-astro/server";
 import { ensureEvalCatalogSynced } from "./lib/eval-sync";
-import { decideTenantRequest } from "./lib/tenant/request";
+import { decideTenantRequest, needsDashboardSession } from "./lib/tenant/request";
 import { DEFAULT_TENANT_ID, TENANTS } from "./lib/tenant/tenants";
 
 const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
@@ -105,7 +105,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // Protect dashboard routes
-  if (context.url.pathname.startsWith("/dashboard")) {
+  // (full-route tenants only, exact path or below: see needsDashboardSession)
+  if (needsDashboardSession(tenantDecision.tenant, context.url.pathname)) {
     if (!session) {
       return context.redirect("/login?redirect=/dashboard");
     }
