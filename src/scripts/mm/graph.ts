@@ -458,9 +458,11 @@ function draw(holder: HTMLElement): void {
 
   const obstacles: Tag[] = nodes.map((n) => ({ x: 0, y: 0, mx: 0, my: 0, r: NODE_H / 2 + 6, node: n }));
   const tags: Tag[] = [...labelled.map((l) => l.tag), ...obstacles];
+  const tagX = forceX<Tag>((d) => d.mx).strength(0.3);
+  const tagY = forceY<Tag>((d) => d.my).strength(0.3);
   const tagSim = forceSimulation<Tag>(tags)
-    .force('x', forceX<Tag>((d) => d.mx).strength(0.3))
-    .force('y', forceY<Tag>((d) => d.my).strength(0.3))
+    .force('x', tagX)
+    .force('y', tagY)
     .force('collide', forceCollide<Tag>((d) => d.r).strength(0.9).iterations(2))
     .stop();
 
@@ -473,6 +475,9 @@ function draw(holder: HTMLElement): void {
       if (reset || l.inferred) { g.x = g.mx; g.y = g.my; }
     }
     for (const o of obstacles) { o.fx = o.node!.x ?? 0; o.fy = o.node!.y ?? 0; }
+    // forceX / forceY read their targets once (on initialize): set the accessors again so the moved midpoints count.
+    tagX.x((d) => d.mx);
+    tagY.y((d) => d.my);
     tagSim.alpha(reset ? 1 : 0.3);
     for (let i = 0; i < ticks; i++) tagSim.tick();
   };
