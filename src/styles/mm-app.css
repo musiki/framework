@@ -221,6 +221,8 @@
 .mm-graph-relcard-body { margin-top: 0.5rem; font-size: 0.9rem; line-height: 1.4; }
 .mm-graph-relcard-flags { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; }
 .mm-graph-relcard-flag { font-style: italic; }
+/* Flags in the relations table under the graph: plain italic text (no boxes on relations). */
+.mm-rel-flag { font-style: italic; color: var(--mm-ink-70); margin-left: 0.4rem; }
 .mm-graph-relcard-flag.is-contested { text-decoration: underline; text-decoration-color: var(--mm-red); text-decoration-thickness: 2px; text-underline-offset: 0.2em; }
 .mm-graph-relcard-totals { font-weight: 700; }
 .mm-graph-relcard-stance { border-top: var(--mm-rule); padding-top: 0.45rem; }

@@ -315,8 +315,8 @@ const byStatus = CONCEPT_STATUSES.map((s) => ({ status: s, nodes: nodes.filter((
                         <td><a href={conceptPath(e.source)} lang={s?.lang}>{s?.text ?? e.source}</a></td>
                         <td>
                           <a href={typePath(e.type)}>{relLabel(e.type)}</a>
-                          {e.inferred && <span class="mm-badge mm-badge-quiet">{t(lang, 'mm.graph.inferredFlag')}</span>}
-                          {e.settled && <span class="mm-badge mm-badge-quiet">{t(lang, 'mm.graph.rel.settled')}</span>}
+                          {e.inferred && <span class="mm-rel-flag">{t(lang, 'mm.graph.inferredFlag')}</span>}
+                          {e.settled && <span class="mm-rel-flag">{t(lang, 'mm.graph.rel.settled')}</span>}
                         </td>
                         <td><a href={conceptPath(e.target)} lang={tt?.lang}>{tt?.text ?? e.target}</a></td>
                         <td class="mm-num">{e.inferred ? '—' : t(lang, 'mm.graph.rel.totals', { agree: e.agree, disagree: e.disagree })}</td>
