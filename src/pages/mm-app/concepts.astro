@@ -1,0 +1,212 @@
+---
+// Internal page for mm "/concepts" (middleware rewrite): every concept of
+// the space as an accessible table — label (permalink), status, forum
+// (group › channel), proposed, last activity, relations, posts. Sorting,
+// grouping and filters are GET parameters (lib/mm/concepts-index.ts), so it
+// works without JS; scripts/mm/autosubmit.ts only submits on change.
+// Server-rendered; no user fields.
+import MmLayout from '../../layouts/MmLayout.astro';
+import MmStatus from '../../components/mm/MmStatus.astro';
+import { t, type MessageKey } from '../../lib/i18n';
+import { applyMmLang } from '../../lib/mm/ui-lang';
+import { CONCEPT_STATUSES, listConceptIndex, type ConceptIndexRow } from '../../lib/mm/concepts';
+import { listRelationTypes, type RelationTypeView } from '../../lib/mm/relation-types';
+import { typeLabel, typePath } from '../../lib/mm/relation-type-ui';
+import { loadMmViewer, logPageError } from '../../lib/mm/page-data';
+import {
+  INDEX_GROUPS, INDEX_SORTS, ariaSort, filterIndex, groupIndex, indexForums, parseIndexQuery, sortIndex, sortLink, type IndexSort,
+} from '../../lib/mm/concepts-index';
+import { conceptLabel, conceptPath, formatDate, forumPath, pageErrorState } from '../../lib/mm/view';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+const q = parseIndexQuery(Astro.url.searchParams);
+
+let state: 'ok' | 'notFound' | 'unavailable' = isMm ? 'ok' : 'notFound';
+let all: ConceptIndexRow[] = [];
+let types: RelationTypeView[] = [];
+if (isMm) {
+  try {
+    const viewer = await loadMmViewer(Astro.locals);
+    [all, types] = await Promise.all([
+      listConceptIndex({ spaceId: viewer.space.id }),
+      listRelationTypes({ spaceId: viewer.space.id, includeArchived: true }),
+    ]);
+  } catch (err) {
+    logPageError('concepts', err);
+    state = pageErrorState(err);
+  }
+}
+if (state === 'notFound') Astro.response.status = 404;
+if (state === 'unavailable') Astro.response.status = 503;
+
+const L = (key: string, vars?: Record<string, string | number>) => t(lang, `mm.conceptsIndex.${key}` as MessageKey, vars);
+const rows = sortIndex(filterIndex(all, q), q.sort, q.dir, lang);
+const typeBySlug = new Map(types.map((rt) => [rt.slug, rt]));
+const groups = groupIndex(rows, q.group, { typeOrder: types.map((rt) => rt.slug), lang });
+const forums = indexForums(all, lang);
+const typeName = (slug: string) => {
+  const rt = typeBySlug.get(slug);
+  return rt ? typeLabel(rt, lang) : { text: slug, lang };
+};
+const groupTitle = (key: string): { text: string; lang?: string } => {
+  if (q.group === 'status') return { text: t(lang, `mm.status.${key}` as MessageKey) };
+  if (q.group === 'forum') return { text: key ? (forums.find((f) => f.slug === key)?.title ?? key) : L('noForum') };
+  if (q.group === 'type') return key ? typeName(key) : { text: L('noRelations') };
+  return { text: '' };
+};
+const sortName = L(`sorts.${q.sort}`);
+const dirName = L(q.dir);
+const COLUMNS: Array<{ key: IndexSort | null; label: string; num?: boolean }> = [
+  { key: 'label', label: L('colConcept') },
+  { key: 'status', label: L('colStatus') },
+  { key: 'forum', label: L('colForum') },
+  { key: 'date', label: L('colCreated') },
+  { key: 'activity', label: L('colActivity') },
+  { key: 'relations', label: L('colRelations'), num: true },
+  { key: null, label: L('colPosts'), num: true },
+];
+const filtered = Boolean(q.status || q.forum || q.type);
+const caption = (list: ConceptIndexRow[]) =>
+  list.length === 1 ? L('captionOne', { sort: sortName, dir: dirName }) : L('caption', { n: list.length, sort: sortName, dir: dirName });
+const groupCaption = (g: { key: string; rows: ConceptIndexRow[]; relations?: number }) => {
+  const name = groupTitle(g.key).text;
+  if (q.group === 'type' && g.key) return L('typeGroupCaption', { group: name, n: g.rows.length, relations: g.relations ?? 0 });
+  return g.rows.length === 1 ? L('groupCaptionOne', { group: name }) : L('groupCaption', { group: name, n: g.rows.length });
+};
+---
+{!isMm ? (
+  <html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>Not found</title></head><body><h1>Not found</h1></body></html>
+) : state !== 'ok' ? (
+  <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
+) : (
+  <MmLayout lang={lang} title={L('title')} description={L('lead')}>
+    <h1>{L('title')}</h1>
+    <p class="mm-lead">{L('lead')}</p>
+
+    <form class="mm-filters" method="get" action="/concepts" aria-label={L('controls')} data-mm-autosubmit>
+      <div class="mm-form-row">
+        <label for="mm-ci-sort">{L('sort')}</label>
+        <select id="mm-ci-sort" name="sort">
+          {INDEX_SORTS.map((s) => <option value={s} selected={s === q.sort}>{L(`sorts.${s}`)}</option>)}
+        </select>
+      </div>
+      <div class="mm-form-row">
+        <label for="mm-ci-dir">{L('dir')}</label>
+        <select id="mm-ci-dir" name="dir">
+          <option value="asc" selected={q.dir === 'asc'}>{L('asc')}</option>
+          <option value="desc" selected={q.dir === 'desc'}>{L('desc')}</option>
+        </select>
+      </div>
+      <div class="mm-form-row">
+        <label for="mm-ci-group">{L('group')}</label>
+        <select id="mm-ci-group" name="group">
+          {INDEX_GROUPS.map((g) => <option value={g} selected={g === q.group}>{L(`groups.${g}`)}</option>)}
+        </select>
+      </div>
+      <div class="mm-form-row">
+        <label for="mm-ci-status">{L('status')}</label>
+        <select id="mm-ci-status" name="status">
+          <option value="">{L('all')}</option>
+          {CONCEPT_STATUSES.map((s) => <option value={s} selected={s === q.status}>{t(lang, `mm.status.${s}` as MessageKey)}</option>)}
+        </select>
+      </div>
+      <div class="mm-form-row">
+        <label for="mm-ci-forum">{L('forum')}</label>
+        <select id="mm-ci-forum" name="forum">
+          <option value="">{L('all')}</option>
+          {forums.map((f) => <option value={f.slug} selected={f.slug === q.forum}>{f.title}</option>)}
+        </select>
+      </div>
+      <div class="mm-form-row">
+        <label for="mm-ci-type">{L('type')}</label>
+        <select id="mm-ci-type" name="type">
+          <option value="">{L('all')}</option>
+          {types.map((rt) => {
+            const l = typeLabel(rt, lang);
+            return <option value={rt.slug} selected={rt.slug === q.type} lang={l.lang}>{l.text}</option>;
+          })}
+        </select>
+      </div>
+      <div class="mm-form-actions">
+        <button class="mm-button mm-button-small" type="submit">{L('apply')}</button>
+        {(filtered || q.group !== 'none' || q.sort !== 'label' || q.dir !== 'asc') && <a href="/concepts">{L('reset')}</a>}
+      </div>
+    </form>
+
+    {!all.length ? (
+      <p class="mm-muted">{L('none')}</p>
+    ) : !rows.length ? (
+      <p class="mm-muted" role="status">{L('empty')}</p>
+    ) : (
+      groups.map((g, gi) => {
+        const title = groupTitle(g.key);
+        const headingId = `mm-ci-group-${gi}`;
+        return (
+          <section aria-labelledby={q.group === 'none' ? undefined : headingId} class="mm-ci-group">
+            {q.group !== 'none' && (
+              <h2 id={headingId} class={q.group === 'status' ? `mm-ci-heading mm-st-${g.key}` : 'mm-ci-heading'}>
+                {q.group === 'status' && <span class="mm-dot" aria-hidden="true"></span>}
+                {q.group === 'type' && g.key ? <a href={typePath(g.key)} lang={title.lang}>{title.text}</a> : <span lang={title.lang}>{title.text}</span>}
+                <span class="mm-fold-count"> · {g.rows.length}</span>
+              </h2>
+            )}
+            <div class="mm-table-wrap" tabindex="0" role="region" aria-label={q.group === 'none' ? L('title') : title.text}>
+              <table class="mm-table mm-ci-table">
+                <caption class="mm-visually-hidden">{q.group === 'none' ? caption(g.rows) : `${groupCaption(g)} ${caption(g.rows)}`}</caption>
+                <thead>
+                  <tr>
+                    {COLUMNS.map((c) => (
+                      <th scope="col" class={c.num ? 'mm-num' : undefined} aria-sort={c.key ? ariaSort(q, c.key) : undefined}>
+                        {c.key ? (
+                          <a href={sortLink(q, c.key)} aria-label={L('sortBy', { column: c.label })}>
+                            {c.label}{q.sort === c.key && <span class="mm-sort-mark" aria-hidden="true">{q.dir === 'asc' ? ' ↑' : ' ↓'}</span>}
+                          </a>
+                        ) : c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.rows.map((r) => {
+                    const l = conceptLabel(r, lang);
+                    return (
+                      <tr class={`mm-st-${r.status}`}>
+                        <th scope="row"><a href={conceptPath(r.slug)} lang={l.lang}>{l.text}</a></th>
+                        <td><span class="mm-ci-status"><span class="mm-dot" aria-hidden="true"></span>{t(lang, `mm.status.${r.status}` as MessageKey)}</span></td>
+                        <td>
+                          {r.forum ? (
+                            r.forum.archived
+                              ? <span>{r.forum.title} <span class="mm-meta">({L('archived')})</span></span>
+                              : <a href={forumPath(r.forum.slug)}>{r.forum.title}</a>
+                          ) : <span class="mm-muted">—</span>}
+                          {r.forum && r.channel && (
+                            <>
+                              <span aria-hidden="true"> › </span>
+                              {r.channel.archived
+                                ? <span>{r.channel.title}</span>
+                                : <a href={forumPath(r.forum.slug, r.channel.slug)}>{r.channel.title}</a>}
+                            </>
+                          )}
+                        </td>
+                        <td><time datetime={r.createdAt}>{formatDate(r.createdAt, lang)}</time></td>
+                        <td><time datetime={r.lastActivityAt}>{formatDate(r.lastActivityAt, lang)}</time></td>
+                        <td class="mm-num">{r.relationCount}</td>
+                        <td class="mm-num">{r.postCount > 0 ? <a href={`${conceptPath(r.slug)}#discussion`}>{r.postCount}</a> : 0}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })
+    )}
+  </MmLayout>
+)}
+
+<script>
+  import '../../scripts/mm/autosubmit.ts';
+</script>

@@ -966,3 +966,108 @@ export async function listConcepts(
     updatedAt: r.updatedAt,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Concepts index (/concepts): one row per concept with counts (public read)
+// ---------------------------------------------------------------------------
+
+/** Upper bound on the concepts index (the page renders them all on the server). */
+export const CONCEPT_INDEX_LIMIT = 2000;
+
+export type ConceptIndexRow = {
+  id: string;
+  slug: string;
+  label: string;
+  labelNb: string | null;
+  status: ConceptStatus;
+  createdAt: string;
+  /** Latest of: the concept's own update, its newest version, its newest published post. */
+  lastActivityAt: string;
+  /** The group the concept belongs to (archived: shown, never linked). */
+  forum: { slug: string; title: string; archived: boolean } | null;
+  /** The channel its discussion thread lives in, when that is a channel of the group. */
+  channel: { slug: string; title: string; archived: boolean } | null;
+  /** Published posts of its discussion thread. */
+  postCount: number;
+  /** Relations it takes part in (either end), per relation type slug; asserted relations only. */
+  relationTypes: Array<{ type: string; n: number }>;
+  relationCount: number;
+};
+
+const isoOf = (v: unknown): string => (v instanceof Date ? v.toISOString() : v ? String(v) : '');
+
+function parseTypeCounts(raw: unknown): Array<{ type: string; n: number }> {
+  let v: unknown = raw;
+  if (typeof v === 'string') {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      v = [];
+    }
+  }
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x) => x && typeof x.type === 'string' && x.type)
+    .map((x) => ({ type: String(x.type), n: Math.max(0, Number(x.n) || 0) }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
+}
+
+/**
+ * Every concept (kind 'concept') of the space for the index page, bounded
+ * (CONCEPT_INDEX_LIMIT), alphabetical. No user fields at all. Sorting,
+ * grouping and filtering happen in concepts-index.ts.
+ */
+export async function listConceptIndex(q: QueryFn, { spaceId }: { spaceId: string }): Promise<ConceptIndexRow[]> {
+  if (typeof spaceId !== 'string' || !isUuid(spaceId)) return [];
+  const rows = await run(
+    q,
+    `SELECT c.id, c.slug, c.label, c."labelNb", c.status, c."createdAt",
+            GREATEST(c."updatedAt",
+              (SELECT max(v."createdAt") FROM "ConceptVersion" v WHERE v."conceptId" = c.id),
+              (SELECT max(p."createdAt") FROM "ForumPost" p WHERE p."threadId" = ct.id AND p.status = 'published')) AS "lastActivityAt",
+            g.slug AS "groupSlug", g.title AS "groupTitle", g."isArchived" AS "groupArchived",
+            tb.slug AS "boardSlug", tb.title AS "boardTitle", tb."isArchived" AS "boardArchived", tb."parentId" AS "boardParentId",
+            (SELECT count(*) FROM "ForumPost" p WHERE p."threadId" = ct.id AND p.status = 'published')::int AS "postCount",
+            COALESCE((
+              SELECT json_agg(json_build_object('type', x.slug, 'n', x.n))
+              FROM (
+                SELECT t.slug, count(*)::int AS n
+                FROM "ConceptRelation" r JOIN "RelationType" t ON t.id = r."typeId"
+                WHERE r."spaceId" = c."spaceId" AND (r."sourceId" = c.id OR r."targetId" = c.id)
+                GROUP BY t.slug
+              ) x
+            ), '[]'::json) AS "relationTypes"
+     FROM "Concept" c
+     LEFT JOIN "ForumBoard" g ON g.id = c."forumId" AND g."spaceId" = c."spaceId"
+     LEFT JOIN "ForumThread" ct ON ct.id = c."threadId" AND ct."spaceId" = c."spaceId"
+     LEFT JOIN "ForumBoard" tb ON tb.id = ct."boardId"
+     WHERE c."spaceId" = $1::uuid AND c.kind = 'concept'
+     ORDER BY lower(c.label) ASC, c.id ASC
+     LIMIT ${CONCEPT_INDEX_LIMIT}`,
+    [spaceId],
+  );
+  return rows.map((r: any) => {
+    const relationTypes = parseTypeCounts(r.relationTypes);
+    const forum = r.groupSlug ? { slug: r.groupSlug, title: r.groupTitle, archived: r.groupArchived === true } : null;
+    // The thread's board is a channel of the group (its parent) — otherwise the group itself.
+    const channel = r.boardSlug && r.boardParentId
+      ? { slug: r.boardSlug, title: r.boardTitle, archived: r.boardArchived === true || (forum?.archived ?? false) }
+      : null;
+    const createdAt = isoOf(r.createdAt);
+    return {
+      id: r.id,
+      slug: r.slug,
+      label: r.label,
+      labelNb: r.labelNb ?? null,
+      status: r.status,
+      createdAt,
+      lastActivityAt: isoOf(r.lastActivityAt) || createdAt,
+      forum,
+      channel,
+      postCount: Number(r.postCount) || 0,
+      relationTypes,
+      relationCount: relationTypes.reduce((sum, x) => sum + x.n, 0),
+    };
+  });
+}

@@ -30,6 +30,7 @@ const LAB_URL = 'https://zzigo.github.io/mishmash-web/lab/concept-machine/';
 
 const navItems = [
   { href: '/', label: t(lang, 'mm.nav.forums'), current: publicPath === '/' || publicPath.startsWith('/f/') },
+  { href: '/concepts', label: t(lang, 'mm.nav.concepts'), current: publicPath === '/concepts' || publicPath.startsWith('/concepts/') },
   { href: '/graph', label: t(lang, 'mm.nav.graph'), current: publicPath.startsWith('/graph') },
   { href: '/about', label: t(lang, 'mm.nav.about'), current: publicPath.startsWith('/about') },
 ];

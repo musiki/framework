@@ -14,7 +14,7 @@ import type { QueryFn } from './concepts-core.ts';
 
 export { ConceptError, CONCEPT_LANGS, CONCEPT_STATUSES, RELATION_TYPES } from './concepts-core.ts';
 export type {
-  ConceptView, ConceptVersionView, ConceptRelationView, ConceptListItem, ConceptLang, ConceptStatus, RelationType,
+  ConceptView, ConceptVersionView, ConceptRelationView, ConceptListItem, ConceptIndexRow, ConceptLang, ConceptStatus, RelationType,
 } from './concepts-core.ts';
 export type { GraphNode, GraphEdge, GraphPayload } from './relations-core.ts';
 
@@ -59,6 +59,8 @@ export const getCommonsRole = (spaceId: string, userId: string | null) => core.g
 export const getConcept = ({ lang = 'en', ...args }: Omit<Parameters<typeof core.getConcept>[1], 'render'> & { lang?: MmLang }) =>
   core.getConcept(poolQ, { ...args, render: mmRendererFor(mmDefinitionRenderCache, lang) });
 export const listConcepts = (args: Parameters<typeof core.listConcepts>[1]) => core.listConcepts(poolQ, args);
+/** Every concept of the space with counts, for /concepts (bounded; no user fields). */
+export const listConceptIndex = (args: Parameters<typeof core.listConceptIndex>[1]) => core.listConceptIndex(poolQ, args);
 export const graph = (args: Parameters<typeof relations.graph>[1]) => relations.graph(poolQ, args);
 
 export const createConcept = (args: Parameters<typeof core.createConcept>[1]) =>

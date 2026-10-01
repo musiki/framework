@@ -433,3 +433,16 @@ h3 .mm-dot { margin-right: 0.45rem; }
   .mm-fold::details-content, .mm-fold-day::details-content { content-visibility: visible; display: block; }
   .mm-fold form, .mm-fold dialog { display: none; }
 }
+
+/* Concepts index (/concepts): flat table, status shown by a dot and its word. */
+.mm-ci-group { margin: 1.5rem 0 0; }
+.mm-ci-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.25rem; }
+.mm-ci-table th[scope='row'] { font-weight: 700; border-bottom: 1px solid var(--mm-ink-15); }
+.mm-ci-table thead a { text-decoration: none; color: var(--mm-ink); }
+.mm-ci-table thead a:hover, .mm-ci-table thead a:focus-visible { text-decoration: underline; text-decoration-color: var(--mm-purple); text-decoration-thickness: 2px; }
+.mm-ci-table th[aria-sort='ascending'], .mm-ci-table th[aria-sort='descending'] { background: var(--mm-ink-5); }
+.mm-ci-status { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.mm-ci-table td, .mm-ci-table th { white-space: nowrap; }
+.mm-ci-table th[scope='row'], .mm-ci-table td:nth-child(3) { white-space: normal; min-width: 9rem; }
+.mm-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.mm-table-wrap:focus-visible { outline: 3px solid var(--mm-purple-dark); outline-offset: 2px; }
