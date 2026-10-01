@@ -166,3 +166,12 @@ test('dashboard session guard: full-route tenants only, /dashboard exactly or be
     assert.equal(needsDashboardSession(so, p), false, p);
   }
 });
+
+test('mm host: the bare /lily mount and deeper /lily paths are not-found (never musiki\'s catch-all)', () => {
+  for (const p of ['/lily', '/lily/', '/lily/a/b']) {
+    const d = decideTenantRequest({ host: 'mm.zztt.org', pathname: p });
+    assert.equal(d.action, 'not-found', p);
+    assert.equal(d.rewrite, undefined, p);
+  }
+  assert.equal(decideTenantRequest({ host: 'mm.zztt.org', pathname: '/lily/0123456789abcdef0123456789abcdef.svg' }).action, 'next');
+});

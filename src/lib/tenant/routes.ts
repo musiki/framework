@@ -35,10 +35,20 @@ export const ROUTE_FAMILY_SHAPES: Partial<Record<RouteFamily, (pathname: string)
   mm: isRootSlugPath,
 };
 
+// Families whose prefix is only a mount for one level of files: the exact
+// prefix ('/lily') and deeper paths ('/lily/a/b') are not theirs — no page
+// serves them, so they would fall through to musiki's root catch-all.
+export const ROUTE_FAMILY_ONE_LEVEL: Partial<Record<RouteFamily, true>> = { lily: true };
+
+const prefixMatches = (family: RouteFamily, pathname: string, prefix: string) =>
+  ROUTE_FAMILY_ONE_LEVEL[family]
+    ? pathname.startsWith(`${prefix}/`) && pathname.length > prefix.length + 1 && !pathname.slice(prefix.length + 1).includes('/')
+    : matchesPrefix(pathname, prefix);
+
 const familyMatches = (family: RouteFamily, pathname: string) =>
   (ROUTE_FAMILY_EXACT[family] ?? []).includes(pathname) ||
   (ROUTE_FAMILY_SHAPES[family]?.(pathname) ?? false) ||
-  (ROUTE_FAMILY_PREFIXES[family].some((prefix) => matchesPrefix(pathname, prefix)) &&
+  (ROUTE_FAMILY_PREFIXES[family].some((prefix) => prefixMatches(family, pathname, prefix)) &&
     !(ROUTE_FAMILY_EXCLUDED[family] ?? []).some((prefix) => matchesPrefix(pathname, prefix)));
 
 export function isRouteAllowed(tenant: Tenant, pathname: string): boolean {

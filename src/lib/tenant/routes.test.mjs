@@ -106,10 +106,15 @@ test('every existing top-level mm path family is a reserved slug', () => {
 });
 
 test('lily family: mm serves /lily/* (rendered scores), so and its other families do not', () => {
-  for (const p of ['/lily', '/lily/0123456789abcdef0123456789abcdef.svg', '/lily/0123456789abcdef0123456789abcdef.midi']) {
+  for (const p of ['/lily/0123456789abcdef0123456789abcdef.svg', '/lily/0123456789abcdef0123456789abcdef.midi']) {
     assert.equal(isRouteAllowed(mm, p), true, p);
     assert.equal(mapMmPath(p), null, p);
     assert.equal(isRouteAllowed(so, p), false, p);
+  }
+  // one level of files only: the bare mount and deeper paths have no page (musiki's catch-all would answer)
+  for (const p of ['/lily', '/lily/', '/lily/a/b', '/lily/a/']) {
+    assert.equal(isRouteAllowed(mm, p), false, p);
+    assert.equal(mapMmPath(p), null, p);
   }
   assert.equal(isRouteAllowed(TENANTS.musiki, '/lily/0123456789abcdef0123456789abcdef.svg'), true);
 });
