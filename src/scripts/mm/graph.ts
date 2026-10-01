@@ -35,19 +35,6 @@
 // days (with reduced motion only the step buttons); it composes with the type
 // filter. Statuses and agreement are the current ones.
 //
-// View modes (the radio group above the toolbar; #view=… in the hash and the
-// reader's last choice in localStorage): "concepts" (all of the above);
-// "relations as nodes" (graph-layout reifyGraph): every relation is a small
-// square between its concepts (concept → square → concept), drawn in its
-// type's colour and pattern (tint fill for area types, ink underlay for light
-// slots), border width from the agreement, contested square, faint and dashed
-// when inferred; clicking it opens the relation card; "types as nodes"
-// (typeGraph): every relation type in use is a larger square holding its
-// sample, linked to each concept that takes part in a relation of the type
-// (width = number of those relations); clicking it opens the type card. Each
-// view keeps its own layout (built on first use, fitted after a switch); the
-// type filter and the timeline apply in all three.
-//
 // Accessibility: the SVG is decorative for assistive technology
 // (aria-hidden, nothing focusable inside); the canvas element itself is one
 // focusable group with keyboard shortcuts and a live status line, and the
@@ -69,12 +56,11 @@ import {
   truncateLabel, hiddenByOverlap, fitTransform, linkDistance, levelOfDetail, boundsOf, clamp, placeCard, shouldDock,
   hullPolygon, hullLabelAnchor, areaLabelSide, areaGroups, areaPadding, agreementWidth, isContested, edgeDash, arrowMarker, relationSentence,
   clipToBox, offsetSegment, pairSlots, cycleIndex, visibleAt, timelineDays, stepDay, dayEnd, DAY_MS,
-  reifyGraph, typeGraph, typeLinkWidth, viewFromHash, hashForView, isGraphView,
-  type Box, type AreaGroup, type Point, type VisibleAt, type GraphView,
+  type Box, type AreaGroup, type Point, type VisibleAt,
 } from '../../lib/mm/graph-layout';
 import {
-  RELATION_FILTER_EVENT, dashArray, needsInkUnderlay, sampleSpec, strokeColor, svgAttrs, tintColor, typeInverse, typeLabel, typePath,
-  typeProperties, type RelationFilterDetail, type TypeLike,
+  RELATION_FILTER_EVENT, dashArray, needsInkUnderlay, sampleSpec, strokeColor, svgAttrs, tintColor, typeLabel, typePath,
+  type RelationFilterDetail, type TypeLike,
 } from '../../lib/mm/relation-type-ui';
 import { threadPath } from '../../lib/mm/view';
 import { ApiFailure, errorText, mmApi, pageStrings } from './api';
@@ -118,37 +104,7 @@ type RelationView = {
   stances: { name: string | null; deleted: boolean; stance: 'agree' | 'disagree'; afterReveal: boolean }[] | null;
 };
 
-// View modes "relations as nodes" and "types as nodes": the extra nodes (a relation, or a relation
-// type) and the links that tie them to the concepts.
-type MNode = {
-  id: string; kind: 'relation' | 'type'; type: string; rt: TypeLike | null; inferred: boolean;
-  /** The relation a relation node stands for. */
-  link: Link | null;
-  /** A type node's links to its concepts. */
-  tlinks: MLink[];
-  size: number; label: string; labelLang: string; lw: number;
-  x?: number; y?: number; vx?: number; vy?: number; fx?: number | null; fy?: number | null;
-};
-type MLink = {
-  id: string; source: Node | MNode; target: Node | MNode; mnode: MNode; concept: Node;
-  /** from: concept → relation node; to: relation node → concept; type: concept → type node. */
-  role: 'from' | 'to' | 'type';
-  link: Link | null;
-  /** Type links: indices (into the graph's links) of the relations of the type that touch the concept. */
-  edges: number[];
-};
-type ModeView = {
-  nodes: MNode[]; links: MLink[]; sim: Simulation<Node | MNode, undefined>;
-  layer: Selection<SVGGElement, unknown, null, undefined>;
-  nodeSel: Selection<SVGGElement, MNode, SVGGElement, unknown>;
-  linkSel: Selection<SVGLineElement, MLink, SVGGElement, unknown>;
-  labelSel: Selection<SVGTextElement, MNode, SVGGElement, unknown>;
-};
-
 const FOLD_CHARS = 18;
-const REL_SQ = 18; // side of a relation node (px)
-const TYPE_SQ = 40; // side of a type node (px)
-const VIEW_KEY = 'mm-graph-view'; // localStorage: the reader's last view
 const NODE_H = 26;
 const NODE_PAD_X = 8;
 const EDGE_H = 14;
@@ -260,11 +216,6 @@ function draw(holder: HTMLElement): void {
       .append('path').attr('d', m.path).style('fill', m.color)
       .style('stroke', needsInkUnderlay(rt.color) ? 'var(--mm-ink)' : 'none').attr('stroke-width', 1).attr('stroke-linejoin', 'miter');
   }
-  // Arrowhead of the connectors in the relation / type views (ink, one for all).
-  const modeArrowId = `${holder.id || 'mm-g'}-mm-arrow-mode`;
-  defs.append('marker').attr('id', modeArrowId).attr('viewBox', '0 0 10 10').attr('refX', 10).attr('refY', 5)
-    .attr('markerWidth', 8).attr('markerHeight', 8).attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
-    .append('path').attr('d', 'M0,0L10,5L0,10Z').style('fill', 'var(--mm-ink-70)').style('stroke', 'none');
   const markerOf = (rt: TypeLike | null) => {
     const m = rt ? arrowMarker(rt) : null;
     return m ? `url(#${markerIds.get(m.id)})` : null;
@@ -408,8 +359,6 @@ function draw(holder: HTMLElement): void {
   let hoverEdge: Link | null = null;
   let edgeIdx = -1; // position in the selected concept's relations (E)
   let auto = true; // keep fitting the view until the reader zooms or pans
-  let mode: GraphView = 'concepts';
-  const relNodeOf = new Map<Link, MNode>(); // relations view: the node of each relation
 
   // --- simulations --------------------------------------------------------
   // The concepts of each area (container + members), resolved once for the 'areas' force.
@@ -493,8 +442,6 @@ function draw(holder: HTMLElement): void {
     return l.slot ? offsetSegment(p, q, l.slot * SLOT_GAP) : [p, q];
   };
   const midOf = (l: Link, s: number): Point => {
-    const m = mode === 'relations' ? relNodeOf.get(l) : null;
-    if (m) return { x: t.applyX(m.x ?? 0), y: t.applyY(m.y ?? 0) };
     const [p, q] = segmentOf(l, s);
     return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
   };
@@ -511,14 +458,6 @@ function draw(holder: HTMLElement): void {
         g.select('rect').attr('x', -w / 2).attr('width', w);
       }
     }).attr('transform', (d) => `translate(${t.applyX(d.x ?? 0)},${t.applyY(d.y ?? 0)}) scale(${s})`);
-
-    if (mode !== 'concepts') {
-      renderMode(s, lod.edgeLabels);
-      positionCard();
-      positionRel();
-      positionType();
-      return;
-    }
 
     // Areas.
     areaG.each(function (g) {
@@ -591,7 +530,6 @@ function draw(holder: HTMLElement): void {
       });
     positionCard();
     positionRel();
-    positionType();
   };
 
   const positionCard = () => {
@@ -622,14 +560,11 @@ function draw(holder: HTMLElement): void {
       return;
     }
     const s = Math.min(1, t.k);
-    const rn = mode === 'relations' ? relNodeOf.get(relLink) : null;
-    const [a, b] = rn ? [midOf(relLink, s), midOf(relLink, s)] : segmentOf(relLink, s);
+    const [a, b] = segmentOf(relLink, s);
     const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     rel.style.visibility = m.x < 0 || m.x > width || m.y < 0 || m.y > height ? 'hidden' : '';
-    // Beside the line (or the relation's node) rather than on it, so the card leaves the two concepts in view when it can.
-    const span = rn
-      ? { w: rn.size * s + 16, h: rn.size * s + 16 }
-      : { w: Math.min(Math.abs(b.x - a.x), width / 3) + 16, h: Math.min(Math.abs(b.y - a.y), height / 3) + 16 };
+    // Beside the line rather than on it, so the card leaves the two concepts in view when it can.
+    const span = { w: Math.min(Math.abs(b.x - a.x), width / 3) + 16, h: Math.min(Math.abs(b.y - a.y), height / 3) + 16 };
     const p = placeCard({ x: m.x, y: m.y, ...span }, relSize, { w: width, h: height });
     rel.style.left = `${Math.round(p.x)}px`;
     rel.style.top = `${Math.round(p.y)}px`;
@@ -637,7 +572,6 @@ function draw(holder: HTMLElement): void {
   const describe = () => {
     const ids = [baseDescribedBy];
     if (relLink && relPinned && !rel.hidden) ids.push(rel.id);
-    else if (typeSel && typePinned && !tcard.hidden) ids.push(tcard.id);
     else if (cardId !== null && cardId === focusId && !card.hidden) ids.push(card.id);
     const v = ids.filter(Boolean).join(' ');
     if (v) holder.setAttribute('aria-describedby', v); else holder.removeAttribute('aria-describedby');
@@ -646,13 +580,12 @@ function draw(holder: HTMLElement): void {
   const showCard = (id: string | null) => {
     window.clearTimeout(showTimer);
     window.clearTimeout(hideTimer);
-    const d = id && !(relLink && relPinned) && !(typeSel && typePinned) ? byId.get(id) : null;
+    const d = id && !(relLink && relPinned) ? byId.get(id) : null;
     if (!d) {
       cardId = null;
       card.hidden = true;
     } else if (cardId !== d.id || card.hidden) {
       closeRel(false);
-      closeType(false);
       cardId = d.id;
       card.className = `mm-graph-card mm-st-${d.status}`;
       cardTitle.textContent = d.label;
@@ -680,10 +613,9 @@ function draw(holder: HTMLElement): void {
     window.clearTimeout(showTimer);
     window.clearTimeout(hideTimer);
     hideTimer = window.setTimeout(() => {
-      if (overCard || overRel || overType || hoverId !== null || hoverEdge !== null || hoverType !== null) return;
+      if (overCard || overRel || hoverId !== null || hoverEdge !== null) return;
       if (relLink && !relPinned) closeRel(false);
-      if (typeSel && !typePinned) closeType(false);
-      if (!relLink && !typeSel) showCard(focusId);
+      if (!relLink) showCard(focusId);
     }, CARD_GRACE);
   };
   card.addEventListener('pointerenter', () => { overCard = true; window.clearTimeout(hideTimer); });
@@ -860,7 +792,7 @@ function draw(holder: HTMLElement): void {
     l.disagree = v.disagree;
     l.settled = v.settled;
     l.revealAt = v.revealAt ?? l.revealAt;
-    if (changed) { styleEdges(); styleModes(); render(); }
+    if (changed) { styleEdges(); render(); }
   };
   const vote = async (l: Link, stance: 'agree' | 'disagree' | null) => {
     if (!l.id || relBusy) return;
@@ -915,7 +847,6 @@ function draw(holder: HTMLElement): void {
     const pinning = pinned && !(same && relPinned);
     relLink = l;
     relPinned = pinned || (same && relPinned);
-    closeType(false);
     markSel();
     card.hidden = true;
     cardId = null;
@@ -963,7 +894,7 @@ function draw(holder: HTMLElement): void {
     edge.classed('is-on', (d) => isLit(d, focusId)).classed('is-hover', (d) => isLit(d, hoverId) || d === hoverEdge);
     areaG.classed('is-on', (g) => focusId !== null && (g.container === focusId || g.members.includes(focusId)));
     edgeLabel.classed('is-on', (d) => isLit(d, focusId) || (!d.inferred && isLit(d, hoverId)) || d === hoverEdge);
-    paintModes();
+    markSel();
   };
 
   // --- zoom / pan ---------------------------------------------------------
@@ -1001,10 +932,10 @@ function draw(holder: HTMLElement): void {
     };
     raf = requestAnimationFrame(step);
   };
-  const points = () => [...nodes, ...(mode === 'concepts' ? [] : modeViews.get(mode)?.nodes ?? [])].map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 }));
+  const points = () => nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 }));
   const fitTarget = () => {
     const widest = Math.max(...nodes.map((n) => (showAll ? n.wFull : n.wFold)));
-    const pad = mode === 'concepts' && groups.length ? areaPadding(Math.max(...groups.map((g) => g.level))) : 0; // hulls: concept view only
+    const pad = groups.length ? areaPadding(Math.max(...groups.map((g) => g.level))) : 0;
     const margin = (s: number) => ({ x: Math.min((widest / 2 + pad) * s + 12, width / 3), y: (NODE_H / 2 + pad) * s + 14 });
     const first = fitTransform(points(), width, height, margin(1), SCALE);
     // Boxes shrink with the view below 1, which leaves more room: fit again with the smaller margin.
@@ -1039,7 +970,6 @@ function draw(holder: HTMLElement): void {
     if (id !== focusId) edgeIdx = -1;
     focusId = id;
     closeRel(false);
-    closeType(false);
     const d = id ? byId.get(id) : null;
     if (d) node.filter((n) => n.id === id).each(function () { toFront(this); });
     paintFocus();
@@ -1100,494 +1030,9 @@ function draw(holder: HTMLElement): void {
     }
   };
 
-  // --- view modes: relations as nodes, types as nodes ------------------------
-  // Built on first use (graph-layout reifyGraph / typeGraph), each with its own
-  // layer, layout and saved concept positions; the concept boxes, the concept
-  // card, the relation card, the type filter and the timeline are shared.
-  const modeViews = new Map<GraphView, ModeView>();
-  const savedPos = new Map<GraphView, Map<string, Point>>();
-  const isConcept = (d: Node | MNode): d is Node => !('kind' in d);
-  const graphEdges = links.map((l) => ({ id: l.id, source: l.source.id, target: l.target.id, type: l.type, inferred: l.inferred }));
-  const typeList = (data.types ?? []).filter((rt) => types.has(rt.slug)); // legend order
-  const shownAt = (i: number) => seen === null || seen.edges.has(i);
-  /** The relations behind a type link that exist at the timeline's date. */
-  const tCount = (ml: MLink) => {
-    let asserted = 0, inferred = 0;
-    for (const i of ml.edges) if (shownAt(i)) { if (links[i].inferred) inferred++; else asserted++; }
-    return { asserted, inferred };
-  };
-  function mlinkGone(l: MLink): boolean {
-    if (l.role !== 'type') return linkGone(l.link!);
-    const c = tCount(l);
-    return c.asserted + c.inferred === 0 || gone(l.concept);
-  }
-  const mnodeGone = (d: MNode): boolean => (d.kind === 'relation' ? linkGone(d.link!) : d.tlinks.every(mlinkGone));
-  const directed = (rt: TypeLike | null) => !!rt && rt.symmetric !== true && (rt.render === 'area' || rt.arrow === true);
-  const mBox = (d: MNode, s: number): Box => ({ x: t.applyX(d.x ?? 0), y: t.applyY(d.y ?? 0), w: d.size * s, h: d.size * s });
-  /** The type's sample (relation-type-ui sampleSpec) as a nested SVG of width `w`, centred on 0,0. */
-  const sampleIn = (rt: TypeLike, w: number) => {
-    const spec = sampleSpec(rt);
-    const h = (w * spec.height) / spec.width;
-    const s = document.createElementNS(SVG_NS, 'svg');
-    s.setAttribute('viewBox', `0 0 ${spec.width} ${spec.height}`);
-    s.setAttribute('x', String(-w / 2));
-    s.setAttribute('y', String(-h / 2));
-    s.setAttribute('width', String(w));
-    s.setAttribute('height', String(h));
-    s.setAttribute('class', 'cm-msample');
-    for (const shape of spec.shapes) {
-      const e = document.createElementNS(SVG_NS, shape.tag);
-      for (const [k, v] of Object.entries(svgAttrs(shape))) e.setAttribute(k, v);
-      s.append(e);
-    }
-    return s;
-  };
-
-  const buildView = (m: 'relations' | 'types'): ModeView => {
-    const mnodes: MNode[] = [];
-    const mlinks: MLink[] = [];
-    const byMid = new Map<string, MNode>();
-    const mk = (id: string, kind: MNode['kind'], type: string, inferred: boolean, link: Link | null, size: number): MNode => {
-      const rt = types.get(type) ?? null;
-      const lab = rt ? typeLabel(rt, lang) : { text: link?.label ?? type, lang: 'en' as const };
-      const lw = measure(lab.text, kind === 'type' ? 'cm-tlabel-probe' : 'cm-edge-label') + 6;
-      const mn: MNode = { id, kind, type, rt, inferred, link, tlinks: [], size, label: lab.text, labelLang: lab.lang, lw };
-      byMid.set(id, mn);
-      mnodes.push(mn);
-      return mn;
-    };
-    if (m === 'relations') {
-      const g = reifyGraph(nodes, graphEdges);
-      for (const n of g.nodes) if (n.kind === 'relation') relNodeOf.set(links[n.edge], mk(n.id, 'relation', n.type, n.inferred, links[n.edge], REL_SQ));
-      for (const gl of g.links) {
-        const from = gl.role === 'from';
-        const mn = byMid.get(from ? gl.target : gl.source)!;
-        const concept = byId.get(from ? gl.source : gl.target)!;
-        mlinks.push({ id: gl.id, source: from ? concept : mn, target: from ? mn : concept, mnode: mn, concept, role: gl.role, link: links[gl.edge], edges: [gl.edge] });
-      }
-    } else {
-      const g = typeGraph(nodes, graphEdges, typeList);
-      for (const n of g.nodes) if (n.kind === 'type') mk(n.id, 'type', n.type, false, null, TYPE_SQ);
-      for (const gl of g.links) {
-        const mn = byMid.get(gl.target)!;
-        const concept = byId.get(gl.source)!;
-        const ml: MLink = { id: gl.id, source: concept, target: mn, mnode: mn, concept, role: 'type', link: null, edges: gl.edges };
-        mn.tlinks.push(ml);
-        mlinks.push(ml);
-      }
-    }
-    // Start each new node near its concepts (golden-angle offsets: distinct and deterministic).
-    mnodes.forEach((mn, i) => {
-      const ends = mn.kind === 'relation' ? [mn.link!.source, mn.link!.target] : mn.tlinks.map((l) => l.concept);
-      const cx = ends.reduce((a, n) => a + (n.x ?? 0), 0) / Math.max(1, ends.length);
-      const cy = ends.reduce((a, n) => a + (n.y ?? 0), 0) / Math.max(1, ends.length);
-      const r = mn.kind === 'type' ? 40 : 6;
-      mn.x = cx + Math.cos(i * 2.399963) * r;
-      mn.y = cy + Math.sin(i * 2.399963) * r;
-    });
-    // The concepts come first, so their simulation indices are the same as in the concept view's simulation.
-    const all: (Node | MNode)[] = [...nodes, ...mnodes];
-    const half = (d: Node | MNode) => (isConcept(d) ? d.wFold / 2 : d.size / 2);
-    const k = small ? 0.85 : 1;
-    const msim = forceSimulation<Node | MNode>(all)
-      .force('link', forceLink<Node | MNode, MLink>(mlinks)
-        .distance((l) => (m === 'relations' ? half(l.concept) * 0.5 + REL_SQ + 22 : half(l.concept) * 0.5 + TYPE_SQ + 60) * k)
-        .strength(m === 'types' ? 0.2 : 0.7))
-      .force('charge', forceManyBody<Node | MNode>().strength((d) => (isConcept(d) ? (small ? -240 : -380) : m === 'types' ? -700 : -110)))
-      .force('x', forceX<Node | MNode>(0).strength(0.05))
-      .force('y', forceY<Node | MNode>(0).strength(small ? 0.05 : 0.08))
-      .force('collide', forceCollide<Node | MNode>((d) => half(d) + (isConcept(d) ? 8 : 7)).strength(1).iterations(3))
-      .stop();
-
-    const layer = svg.insert<SVGGElement>('g', () => nodeLayer.node()!).attr('class', `cm-mode cm-mode-${m}`).attr('display', 'none');
-    const linkSel = layer.append('g').selectAll<SVGLineElement, MLink>('line').data(mlinks, (d) => d.id).join('line')
-      .attr('class', (d) => `cm-mlink${d.link?.inferred ? ' cm-inferred' : ''}`)
-      .attr('data-type', (d) => d.mnode.type)
-      .attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', (d) => (d.link?.inferred ? '4 3' : null))
-      .attr('marker-end', (d) => (d.role === 'to' && directed(d.mnode.rt) ? `url(#${modeArrowId})` : null));
-    const nodeSel = layer.append('g').selectAll<SVGGElement, MNode>('g').data(mnodes, (d) => d.id).join('g')
-      .attr('class', (d) => `cm-mnode cm-${d.kind === 'relation' ? 'rnode' : 'tnode'}${d.inferred ? ' cm-inferred' : ''}`)
-      .attr('data-type', (d) => d.type);
-    const labelSel = layer.append('g').selectAll<SVGTextElement, MNode>('text').data(mnodes, (d) => d.id).join('text')
-      .attr('class', (d) => `cm-mlabel${d.kind === 'type' ? ' cm-tlabel' : ''}`)
-      .attr('text-anchor', 'middle').attr('dy', '0.35em').attr('lang', (d) => d.labelLang).text((d) => d.label);
-
-    nodeSel.append('rect').attr('class', 'cm-mhit')
-      .attr('x', (d) => -(d.size / 2 + 5)).attr('y', (d) => -(d.size / 2 + 5))
-      .attr('width', (d) => d.size + 10).attr('height', (d) => d.size + 10);
-    // Relation node: fill, ink underlays (light slots), the border(s) in the type's colour and pattern, the contested square.
-    const rn = nodeSel.filter((d) => d.kind === 'relation');
-    rn.append('rect').attr('class', 'cm-msq cm-mfill');
-    rn.append('rect').attr('class', 'cm-msq cm-mink cm-mink-outer');
-    rn.append('rect').attr('class', 'cm-msq cm-mink cm-mink-inner');
-    rn.append('rect').attr('class', 'cm-msq cm-mborder cm-mborder-outer');
-    rn.append('rect').attr('class', 'cm-msq cm-mborder cm-mborder-inner');
-    rn.append('rect').attr('class', 'cm-contest').attr('x', -3).attr('y', -3).attr('width', 6).attr('height', 6);
-    // Type node: a larger flat square (ink rule; the area tint for area types) holding the type's sample.
-    const tn = nodeSel.filter((d) => d.kind === 'type');
-    tn.append('rect').attr('class', 'cm-msq')
-      .attr('x', -TYPE_SQ / 2 + 1).attr('y', -TYPE_SQ / 2 + 1).attr('width', TYPE_SQ - 2).attr('height', TYPE_SQ - 2).attr('stroke-width', 2)
-      .style('fill', (d) => (d.rt?.render === 'area' ? tintColor(d.rt.color) : 'var(--mm-white)')).style('stroke', 'var(--mm-ink)');
-    tn.each(function (d) { if (d.rt) this.append(sampleIn(d.rt, TYPE_SQ - 8)); });
-
-    nodeSel
-      .on('click', (event: MouseEvent, d) => {
-        holder.focus({ preventScroll: true });
-        event.stopPropagation();
-        if (d.kind === 'relation') openRel(d.link!, true);
-        else openType(d, true);
-      })
-      .on('pointerenter', (event: PointerEvent, d) => {
-        if (event.pointerType === 'touch') return;
-        if (d.kind === 'relation') hoverEdge = d.link; else hoverType = d;
-        paintFocus();
-        if (!(relLink && relPinned) && !(typeSel && typePinned)) {
-          window.clearTimeout(showTimer);
-          window.clearTimeout(hideTimer);
-          showTimer = window.setTimeout(() => {
-            if (pressed) return;
-            if (d.kind === 'relation' && hoverEdge === d.link) openRel(d.link!, false);
-            else if (d.kind === 'type' && hoverType === d) openType(d, false);
-          }, CARD_DELAY);
-        }
-        render();
-      })
-      .on('pointerleave', (_event: PointerEvent, d) => {
-        if (d.kind === 'relation') {
-          if (hoverEdge === null) return;
-          hoverEdge = null;
-        } else {
-          if (hoverType === null) return;
-          hoverType = null;
-        }
-        cardHoverOut();
-        paintFocus();
-        render();
-      });
-    return { nodes: mnodes, links: mlinks, sim: msim, layer, nodeSel, linkSel, labelSel };
-  };
-
-  /** Encoding of the relation nodes (again after a vote): border width from the agreement, pattern, contested square. */
-  const styleModes = () => {
-    const v = modeViews.get('relations');
-    if (!v) return;
-    v.nodeSel.filter((d) => d.kind === 'relation').each(function (d) {
-      const l = d.link!;
-      const g = select(this);
-      const slot = d.rt?.color ?? 'ink';
-      const color = strokeColor(slot);
-      const pattern = d.rt?.stroke ?? 'solid';
-      const contested = !l.inferred && isContested(l.agree, l.disagree);
-      const w = l.inferred ? 1 : agreementWidth(l.agree, l.disagree);
-      const dash = l.inferred ? dashArray(pattern) : edgeDash(pattern, contested);
-      const double = pattern === 'double';
-      const bw = double ? Math.max(1, w * 0.6) : w;
-      const inner = bw * 1.5 + 2; // inset of the second border of `double`
-      const S = d.size;
-      const sq = (sel: string, inset: number, sw: number) => g.select(sel)
-        .attr('x', -S / 2 + inset).attr('y', -S / 2 + inset)
-        .attr('width', Math.max(1, S - 2 * inset)).attr('height', Math.max(1, S - 2 * inset)).attr('stroke-width', sw);
-      const ink = needsInkUnderlay(slot);
-      sq('.cm-mfill', 0, 0).style('fill', d.rt?.render === 'area' ? tintColor(slot) : 'var(--mm-white)').style('stroke', 'none');
-      sq('.cm-mink-outer', bw / 2, bw + (double ? 1 : 2)).style('fill', 'none').style('stroke', 'var(--mm-ink)')
-        .attr('stroke-dasharray', dash).attr('display', ink ? null : 'none');
-      sq('.cm-mink-inner', inner, bw + 1).style('fill', 'none').style('stroke', 'var(--mm-ink)')
-        .attr('stroke-dasharray', dash).attr('display', ink && double ? null : 'none');
-      sq('.cm-mborder-outer', bw / 2, bw).style('fill', 'none').style('stroke', color).attr('stroke-dasharray', dash);
-      sq('.cm-mborder-inner', inner, bw).style('fill', 'none').style('stroke', color).attr('stroke-dasharray', dash)
-        .attr('display', double ? null : 'none');
-      g.select('.cm-contest').style('stroke', color).attr('display', contested ? null : 'none');
-      g.classed('is-contested', contested);
-    });
-  };
-
-  /** Timeline and type filter in the node views: what is gone, and the type links' widths from what is shown. */
-  const applyModeVisibility = () => {
-    for (const v of modeViews.values()) {
-      v.nodeSel.classed('cm-gone', mnodeGone);
-      v.labelSel.classed('cm-gone', mnodeGone);
-      v.linkSel.classed('cm-gone', mlinkGone);
-      // A type link is as wide as the relations it stands for; dashed and faint when only inferred ones remain.
-      v.linkSel.filter((l) => l.role === 'type').each(function (l) {
-        const c = tCount(l);
-        select(this).attr('stroke-width', typeLinkWidth(c.asserted)).attr('stroke-dasharray', c.asserted ? null : '4 3')
-          .classed('cm-inferred', !c.asserted);
-      });
-    }
-    if (typeSel && !tcard.hidden) fillType(typeSel);
-  };
-
-  const mnodeLit = (d: MNode): boolean => {
-    if (d.kind === 'relation') {
-      const l = d.link!;
-      return l === relLink || isLit(l, focusId) || (!l.inferred && (l === hoverEdge || isLit(l, hoverId)));
-    }
-    return d === typeSel || d === hoverType || d.tlinks.some((l) => (l.concept.id === focusId || l.concept.id === hoverId) && !mlinkGone(l));
-  };
   function markSel() {
     edge.classed('is-sel', (d) => d === relLink);
-    for (const v of modeViews.values()) {
-      v.nodeSel.classed('is-sel', (d) => (d.kind === 'relation' ? relLink !== null && d.link === relLink : d === typeSel));
-    }
   }
-  function paintModes() {
-    markSel();
-    const v = mode === 'concepts' ? null : modeViews.get(mode);
-    if (!v) return;
-    v.nodeSel
-      .classed('is-on', (d) => (d.kind === 'relation' ? isLit(d.link!, focusId) : d.tlinks.some((l) => l.concept.id === focusId)))
-      .classed('is-hover', (d) => (d.kind === 'relation' ? d.link === hoverEdge || (!d.inferred && isLit(d.link!, hoverId)) : d === hoverType));
-    v.linkSel.classed('is-on', (l) => (l.link ? isLit(l.link, focusId) : l.concept.id === focusId));
-  }
-
-  function renderMode(s: number, edgeLabels: boolean) {
-    const v = modeViews.get(mode);
-    if (!v) return;
-    v.nodeSel.attr('display', (d) => (typeHidden(d.type) ? 'none' : null))
-      .attr('transform', (d) => `translate(${t.applyX(d.x ?? 0)},${t.applyY(d.y ?? 0)}) scale(${s})`);
-    v.linkSel.each(function (l) {
-      const line = select(this);
-      if (typeHidden(l.mnode.type)) { line.attr('display', 'none'); return; }
-      line.attr('display', null);
-      const cb = boxOf(l.concept, s), mb = mBox(l.mnode, s);
-      // from / type: concept → node; to: node → concept (the arrowhead ends on the concept's border).
-      const [p, q] = l.role === 'to' ? [clipToBox(cb, mb, 2), clipToBox(mb, cb, 3)] : [clipToBox(mb, cb, 2), clipToBox(cb, mb, 2)];
-      line.attr('x1', p.x).attr('y1', p.y).attr('x2', q.x).attr('y2', q.y);
-    });
-    // Labels under the squares: types always (when there is room), relations on hover, selection or zoom.
-    const obstacles: Box[] = [
-      ...nodes.filter((d) => !gone(d)).map((d) => boxOf(d, s)),
-      ...v.nodes.filter((d) => !typeHidden(d.type) && !mnodeGone(d)).map((d) => mBox(d, s)),
-    ];
-    const cand: MNode[] = [];
-    const boxes: Box[] = [];
-    const forced = new Set<number>();
-    for (const d of v.nodes) {
-      if (typeHidden(d.type) || mnodeGone(d)) continue;
-      const lit = mnodeLit(d);
-      if (!lit && !(d.kind === 'type' || (edgeLabels && !d.inferred))) continue;
-      if (lit) forced.add(cand.length);
-      cand.push(d);
-      const h = (d.kind === 'type' ? 15 : 13) * s;
-      // Just under the square, clear of it by more than the overlap test's 1px gap whatever the zoom.
-      boxes.push({ x: t.applyX(d.x ?? 0), y: t.applyY(d.y ?? 0) + (d.size / 2) * s + 3 + h / 2, w: d.lw * s, h });
-    }
-    const hidden = hiddenByOverlap(boxes, obstacles, forced);
-    const at = new Map<MNode, Box>();
-    cand.forEach((d, i) => { if (!hidden.has(i)) at.set(d, boxes[i]); });
-    v.labelSel
-      .attr('display', (d) => (at.has(d) ? null : 'none'))
-      .attr('transform', (d) => {
-        const b = at.get(d);
-        return b ? `translate(${b.x},${b.y}) scale(${s})` : null;
-      })
-      .classed('is-on', mnodeLit);
-  }
-
-  // --- type card (built with textContent / createElement only) ----------------
-  const tcard = el('div', 'mm-graph-card mm-graph-relcard mm-graph-typecard');
-  tcard.id = `${holder.id || 'mm-g-canvas'}-typecard`;
-  tcard.hidden = true;
-  tcard.setAttribute('role', 'group');
-  tcard.setAttribute('aria-label', S('type.card'));
-  const tClose = el('button', 'mm-textbutton mm-graph-card-close', S('type.close'));
-  tClose.type = 'button';
-  const tTitle = el('p', 'mm-graph-card-title');
-  const tType = el('p', 'mm-graph-relcard-type');
-  const tBody = el('div', 'mm-graph-relcard-body');
-  tcard.append(tClose, tTitle, tType, tBody);
-  holder.append(tcard);
-  let typeSel: MNode | null = null;
-  let typePinned = false;
-  let typeSize = { w: 0, h: 0 };
-  let overType = false;
-  let hoverType: MNode | null = null;
-  tcard.addEventListener('pointerenter', () => { overType = true; window.clearTimeout(hideTimer); });
-  tcard.addEventListener('pointerleave', () => { overType = false; cardHoverOut(); });
-
-  /** A dictionary string with `{label}` filled by an element carrying the label's own language. */
-  const withLabel = (target: HTMLElement, key: string, text: string, textLang: string) => {
-    const [pre, post = ''] = S(key).split('{label}');
-    const span = el('span', '', text);
-    span.lang = textLang;
-    const box = el('span'); // one child, so a flex parent (the card link) does not space the parts apart
-    box.append(pre, span, post);
-    target.replaceChildren(box);
-  };
-  function fillType(d: MNode) {
-    const rt = d.rt;
-    const title = el('span', '', d.label);
-    title.lang = d.labelLang;
-    tTitle.replaceChildren(title);
-    tType.replaceChildren();
-    if (rt) tType.append(sample(rt));
-    const inv = rt ? typeInverse(rt, lang) : null;
-    if (inv) {
-      const span = el('span');
-      withLabel(span, 'type.inverse', inv.text, inv.lang);
-      tType.append(span);
-    }
-    const props = rt ? typeProperties(rt) : [];
-    const parts: HTMLElement[] = [
-      el('p', '', props.length ? S('type.properties', { list: props.map((p) => S(`prop.${p}`)).join(', ') }) : S('type.noProperties')),
-    ];
-    // Counts as of the timeline's date: each relation once (it touches two concepts).
-    let asserted = 0, inferred = 0;
-    for (const i of new Set(d.tlinks.flatMap((l) => l.edges))) if (shownAt(i)) { if (links[i].inferred) inferred++; else asserted++; }
-    const concepts = d.tlinks.filter((l) => !mlinkGone(l)).length;
-    parts.push(el('p', 'mm-graph-relcard-totals',
-      `${S('type.counts', { relations: asserted, concepts })}${inferred ? ` ${S('type.inferred', { n: inferred })}` : ''}`));
-    if (rt) {
-      const a = el('a', 'mm-graph-card-link');
-      withLabel(a, 'type.link', d.label, d.labelLang);
-      a.href = typePath(rt.slug);
-      parts.push(a);
-    }
-    tBody.replaceChildren(...parts);
-    typeSize = { w: tcard.offsetWidth, h: tcard.offsetHeight };
-    positionType();
-  }
-  function positionType() {
-    if (!typeSel || tcard.hidden) return;
-    const dock = shouldDock(width);
-    tcard.classList.toggle('is-docked', dock);
-    if (dock) {
-      tcard.style.left = tcard.style.top = '';
-      tcard.style.visibility = '';
-      return;
-    }
-    const b = mBox(typeSel, Math.min(1, t.k));
-    tcard.style.visibility = b.x < 0 || b.x > width || b.y < 0 || b.y > height ? 'hidden' : '';
-    const p = placeCard({ ...b, w: b.w + 10, h: b.h + 10 }, typeSize, { w: width, h: height });
-    tcard.style.left = `${Math.round(p.x)}px`;
-    tcard.style.top = `${Math.round(p.y)}px`;
-  }
-  /** Opens the type card (pinned: stays until closed; otherwise follows the hover). */
-  const openType = (d: MNode, pinned: boolean) => {
-    window.clearTimeout(showTimer);
-    window.clearTimeout(hideTimer);
-    const same = typeSel === d && !tcard.hidden;
-    closeRel(false);
-    typeSel = d;
-    typePinned = pinned || (same && typePinned);
-    card.hidden = true;
-    cardId = null;
-    if (!same) {
-      tcard.hidden = false;
-      tcard.classList.toggle('is-docked', shouldDock(width));
-      fillType(d);
-    }
-    // Docked at the bottom (phone width): keep the type's square above the card.
-    if (!same && shouldDock(width)) {
-      const mx = t.applyX(d.x ?? 0), my = t.applyY(d.y ?? 0);
-      const room = height - typeSize.h;
-      const offX = mx < 0 || mx > width;
-      if (my > room - NODE_H || my < NODE_H || offX) {
-        auto = false;
-        moveTo({ k: t.k, x: offX ? t.x + width / 2 - mx : t.x, y: t.y + Math.max(NODE_H, room / 2) - my });
-      }
-    }
-    describe();
-    paintFocus();
-    render();
-  };
-  function closeType(restore = true) {
-    if (!typeSel) return;
-    typeSel = null;
-    typePinned = false;
-    tcard.hidden = true;
-    markSel();
-    if (restore) showCard(focusId);
-    describe();
-  }
-  tClose.addEventListener('click', () => {
-    closeType();
-    holder.focus({ preventScroll: true });
-    render();
-  });
-  /** E in the types view: step through the relation types the selected concept takes part in. */
-  const stepType = (dir: 1 | -1) => {
-    const list = (modeViews.get('types')?.nodes ?? [])
-      .filter((d) => !typeHidden(d.type) && d.tlinks.some((l) => l.concept.id === focusId && !mlinkGone(l)));
-    if (!list.length) {
-      if (status) status.textContent = S('type.noTypes');
-      return;
-    }
-    const i = cycleIndex(list.length, typeSel ? list.indexOf(typeSel) : -1, dir);
-    const d = list[i];
-    openType(d, true);
-    const mx = t.applyX(d.x ?? 0), my = t.applyY(d.y ?? 0);
-    if (!shouldDock(width) && (mx < 20 || mx > width - 20 || my < 20 || my > height - 20)) {
-      auto = false;
-      moveTo({ k: t.k, x: t.x + width / 2 - mx, y: t.y + height / 2 - my });
-    }
-    if (status) status.textContent = S('type.selected', { label: d.label, n: i + 1, total: list.length });
-  };
-
-  const activeSim = (): Simulation<Node, undefined> | Simulation<Node | MNode, undefined> =>
-    (mode === 'concepts' ? sim : modeViews.get(mode)!.sim);
-  const radios = [...(wrap?.querySelectorAll<HTMLInputElement>('input[name="mm-g-view"]') ?? [])];
-  const viewHelp = wrap?.querySelector<HTMLElement>('[data-mm-graph-view-help]') ?? null;
-  /**
-   * Switches the view: stops the current layout and keeps its concept positions, shows the new
-   * view's layer (built and laid out on first use, starting from the current positions), restores
-   * its concept positions when it has been shown before, and fits it in. `persist` records the
-   * choice in the hash and (per reader) in localStorage.
-   */
-  const setMode = (m: GraphView, persist = true, speak = true) => {
-    radios.forEach((r) => { r.checked = r.value === m; });
-    if (m === mode) return;
-    activeSim().alphaTarget(0).stop(); // a drag may be in progress: never leave the old simulation heating
-    savedPos.set(mode, new Map(nodes.map((n) => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }])));
-    closeRel(false);
-    closeType(false);
-    window.clearTimeout(showTimer);
-    window.clearTimeout(hideTimer);
-    hoverEdge = null;
-    hoverType = null;
-    mode = m;
-    const pos = savedPos.get(m);
-    for (const n of nodes) {
-      const p = pos?.get(n.id);
-      if (p) { n.x = p.x; n.y = p.y; }
-      n.vx = 0; n.vy = 0; n.fx = null; n.fy = null;
-    }
-    const conceptLayers = m === 'concepts' ? null : 'none';
-    areaLayer.attr('display', conceptLayers);
-    edgeLayer.attr('display', conceptLayers);
-    edgeLabelLayer.attr('display', conceptLayers);
-    let fresh = false;
-    if (m !== 'concepts' && !modeViews.has(m)) {
-      modeViews.set(m, buildView(m));
-      fresh = true;
-      styleModes();
-      applyModeVisibility();
-    }
-    for (const [k, v] of modeViews) v.layer.attr('display', k === m ? null : 'none');
-    const next = activeSim();
-    auto = true;
-    if (m === 'concepts') relaxTags(80, true);
-    if (fresh) {
-      if (reduceMotion) for (let i = 0; i < 300; i++) next.tick();
-      else {
-        for (let i = 0; i < 40; i++) next.tick();
-        const step = () => { if (auto) fit(false); else render(); };
-        modeViews.get(m)!.sim.on('tick', step).on('end', step).restart();
-      }
-    } else if (!reduceMotion && next.alpha() > next.alphaMin()) next.restart();
-    paintFocus();
-    fit(!fresh);
-    if (viewHelp) viewHelp.textContent = S(`view.help.${m}`);
-    if (speak && status) status.textContent = S('view.changed', { view: S(`view.${m}`) });
-    if (persist) {
-      try { window.localStorage.setItem(VIEW_KEY, m); } catch { /* storage unavailable: the hash still records it */ }
-      const h = hashForView(window.location.hash, m);
-      try {
-        window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${h ? `#${h}` : ''}`);
-      } catch { /* sandboxed: ignore */ }
-    }
-  };
 
   node
     .on('click', (event: MouseEvent, d) => {
@@ -1602,7 +1047,7 @@ function draw(holder: HTMLElement): void {
       hoverId = d.id;
       window.clearTimeout(raiseTimer);
       raiseTimer = window.setTimeout(() => { if (!pressed && hoverId === d.id) toFront(this); }, 150);
-      if (!(relLink && relPinned) && !(typeSel && typePinned)) cardHoverIn(d.id);
+      if (!(relLink && relPinned)) cardHoverIn(d.id);
       paintFocus();
       render();
     })
@@ -1641,7 +1086,6 @@ function draw(holder: HTMLElement): void {
   svg.on('click', (event: MouseEvent) => {
     if (event.target !== svgEl) return;
     if (relLink) { closeRel(); render(); return; }
-    if (typeSel) { closeType(); render(); return; }
     if (focusId) setFocus(null);
   });
 
@@ -1649,7 +1093,7 @@ function draw(holder: HTMLElement): void {
   // Nothing inside the aria-hidden SVG keeps focus: a clicked concept hands it to the canvas.
   holder.addEventListener('focusin', (event) => {
     const target = event.target as globalThis.Node;
-    if (event.target !== holder && !card.contains(target) && !rel.contains(target) && !tcard.contains(target)) holder.focus({ preventScroll: true });
+    if (event.target !== holder && !card.contains(target) && !rel.contains(target)) holder.focus({ preventScroll: true });
   });
   holder.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -1657,7 +1101,6 @@ function draw(holder: HTMLElement): void {
       // Inside a card only Escape is ours (Enter/Space act on links and buttons natively).
       if (event.key !== 'Escape') return;
       if (relLink) closeRel();
-      else if (typeSel) closeType();
       else if (cardId) { hoverId = null; setFocus(null); }
       else return;
       holder.focus({ preventScroll: true });
@@ -1679,12 +1122,10 @@ function draw(holder: HTMLElement): void {
       case 'ArrowLeft': case 'ArrowUp': step(-1); break;
       case 'e': case 'E':
         if (!focusId) return;
-        if (mode === 'types') stepType(event.shiftKey ? -1 : 1);
-        else stepEdge(event.shiftKey ? -1 : 1);
+        stepEdge(event.shiftKey ? -1 : 1);
         break;
       case 'Escape':
         if (relLink) { closeRel(); render(); break; }
-        if (typeSel) { closeType(); render(); break; }
         if (!focusId && !cardId) return;
         hoverId = null;
         setFocus(null);
@@ -1738,9 +1179,6 @@ function draw(holder: HTMLElement): void {
   const applyTypeFilter = () => {
     if (relLink && typeHidden(relLink.type)) closeRel();
     if (hoverEdge && typeHidden(hoverEdge.type)) hoverEdge = null;
-    if (typeSel && typeHidden(typeSel.type)) closeType();
-    if (hoverType && typeHidden(hoverType.type)) hoverType = null;
-    applyModeVisibility();
     render();
   };
   filterListeners.add(applyTypeFilter);
@@ -1754,9 +1192,6 @@ function draw(holder: HTMLElement): void {
     areaG.classed('cm-gone', (g) => !areaMembers(g));
     if (relLink && linkGone(relLink)) closeRel();
     if (hoverEdge && linkGone(hoverEdge)) hoverEdge = null;
-    applyModeVisibility();
-    if (typeSel && mnodeGone(typeSel)) closeType();
-    if (hoverType && mnodeGone(hoverType)) hoverType = null;
     const hovered = hoverId ? byId.get(hoverId) : null;
     if (hovered && gone(hovered)) hoverId = null;
     const focused = focusId ? byId.get(focusId) : null;
@@ -1824,30 +1259,6 @@ function draw(holder: HTMLElement): void {
     setDay(days.last);
   }
 
-  // --- view selector ----------------------------------------------------------
-  // The view comes from the hash (#view=relations), else from the reader's last choice, else concepts.
-  let initial: GraphView = viewFromHash(window.location.hash) ?? 'concepts';
-  if (!viewFromHash(window.location.hash)) {
-    try {
-      const stored = window.localStorage.getItem(VIEW_KEY);
-      if (isGraphView(stored)) initial = stored;
-    } catch { /* storage unavailable */ }
-  }
-  if (initial !== 'concepts') {
-    // Settle the concept view first, so switching back to it finds a finished layout.
-    sim.stop();
-    for (let i = 0; i < 260; i++) sim.tick();
-    relaxTags(80, true);
-    setMode(initial, false, false);
-  }
-  radios.forEach((r) => {
-    r.addEventListener('change', () => { if (r.checked && isGraphView(r.value)) setMode(r.value); });
-  });
-  window.addEventListener('hashchange', () => {
-    const v = viewFromHash(window.location.hash);
-    if (v && v !== mode) setMode(v);
-  });
-
   node.call(
     drag<HTMLAnchorElement | SVGAElement, Node>()
       .clickDistance(4)
@@ -1855,7 +1266,7 @@ function draw(holder: HTMLElement): void {
       .on('start', (event, d) => {
         auto = false;
         if (reduceMotion) return;
-        if (!event.active) activeSim().alphaTarget(0.2).restart();
+        if (!event.active) sim.alphaTarget(0.2).restart();
         d.fx = d.x;
         d.fy = d.y;
       })
@@ -1871,7 +1282,7 @@ function draw(holder: HTMLElement): void {
       })
       .on('end', (event, d) => {
         if (reduceMotion) return;
-        if (!event.active) activeSim().alphaTarget(0);
+        if (!event.active) sim.alphaTarget(0);
         d.fx = null;
         d.fy = null;
       }),
@@ -1885,7 +1296,6 @@ function draw(holder: HTMLElement): void {
       svg.attr('viewBox', `0 0 ${width} ${height}`);
       if (!card.hidden) cardSize = { w: card.offsetWidth, h: card.offsetHeight };
       if (!rel.hidden) relSize = { w: rel.offsetWidth, h: rel.offsetHeight };
-      if (!tcard.hidden) typeSize = { w: tcard.offsetWidth, h: tcard.offsetHeight };
       if (auto) fit(false); else render();
     }).observe(holder);
   }
