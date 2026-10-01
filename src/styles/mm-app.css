@@ -186,7 +186,7 @@
 .mm-graph .cm-mnode.cm-inferred { opacity: 0.45; }
 .mm-graph .cm-mlabel { font-family: var(--mm-font-body); font-size: 10px; fill: var(--mm-ink-70); pointer-events: none; paint-order: stroke; stroke: var(--mm-white); stroke-width: 4px; stroke-linejoin: round; }
 .mm-graph .cm-mlabel.is-on { fill: var(--mm-ink); font-weight: 700; }
-.mm-graph .cm-tnode .cm-mlabel, .mm-graph text.cm-tlabel-probe { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 12px; fill: var(--mm-ink); }
+.mm-graph .cm-tlabel, .mm-graph text.cm-tlabel-probe { font-family: var(--mm-font-display); font-weight: var(--mm-display-weight); font-size: 12px; fill: var(--mm-ink); }
 .mm-graph svg.has-focus .cm-mnode:not(.is-on):not(.is-sel), .mm-graph svg.has-focus .cm-mlink:not(.is-on) { opacity: 0.22; }
 .mm-graph svg.has-focus .cm-mlabel:not(.is-on) { opacity: 0.35; }
 .mm-graph .cm-mnode, .mm-graph .cm-mlink, .mm-graph .cm-mlabel { transition: opacity 0.25s; }
