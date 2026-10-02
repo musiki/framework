@@ -59,8 +59,8 @@ test('dates', () => {
 });
 
 test('paths are encoded', () => {
-  assert.equal(forumPath('stiegler'), '/f/stiegler');
-  assert.equal(threadPath('stiegler', '0b7c'), '/f/stiegler/t/0b7c');
+  assert.equal(forumPath('stiegler'), '/stiegler');
+  assert.equal(threadPath('stiegler', '0b7c'), '/stiegler/t/0b7c');
   assert.equal(conceptPath('café'), '/c/caf%C3%A9');
   assert.equal(conceptPath('a/b'), '/c/a%2Fb');
   assert.equal(conceptPath('pharmakon'), '/pharmakon');
@@ -105,17 +105,24 @@ test('page error state: domain 404 → notFound, anything else → unavailable',
 
 test('channel paths: group, channel, group-level and channel threads; encoded', async () => {
   const { boardPath, boardThreadPath, boardMatchesPath, forumCrumbs } = await import('./view.ts');
-  assert.equal(forumPath('stiegler'), '/f/stiegler');
-  assert.equal(forumPath('stiegler', 'welcome'), '/f/stiegler/welcome');
-  assert.equal(threadPath('stiegler', 'abc'), '/f/stiegler/t/abc');
-  assert.equal(threadPath('stiegler', 'abc', 'technics-and-time'), '/f/stiegler/technics-and-time/t/abc');
+  assert.equal(forumPath('stiegler'), '/stiegler');
+  assert.equal(forumPath('stiegler', 'welcome'), '/stiegler/welcome');
+  assert.equal(threadPath('stiegler', 'abc'), '/stiegler/t/abc');
+  assert.equal(threadPath('stiegler', 'abc', 'technics-and-time'), '/stiegler/technics-and-time/t/abc');
+  // slugs that cannot live at the root keep /f/ (reserved group, odd spelling, reserved channel "t")
   assert.equal(forumPath('a b', 'c/d'), '/f/a%20b/c%2Fd');
+  assert.equal(forumPath('help'), '/f/help');
+  assert.equal(forumPath('help', 'x'), '/f/help/x');
+  assert.equal(forumPath('stiegler', 't'), '/f/stiegler/t');
+  assert.equal(forumPath('stiegler', 'A b'), '/f/stiegler/A%20b');
+  assert.equal(threadPath('graph', 'abc'), '/f/graph/t/abc');
+  assert.equal(forumPath('stiegler', 'graph'), '/stiegler/graph');
   const group = { slug: 'stiegler', title: 'Stiegler', parent: null };
   const channel = { slug: 'welcome', title: 'Welcome', parent: { slug: 'stiegler', title: 'Stiegler' } };
-  assert.equal(boardPath(group), '/f/stiegler');
-  assert.equal(boardPath(channel), '/f/stiegler/welcome');
-  assert.equal(boardThreadPath(group, 't1'), '/f/stiegler/t/t1');
-  assert.equal(boardThreadPath(channel, 't1'), '/f/stiegler/welcome/t/t1');
+  assert.equal(boardPath(group), '/stiegler');
+  assert.equal(boardPath(channel), '/stiegler/welcome');
+  assert.equal(boardThreadPath(group, 't1'), '/stiegler/t/t1');
+  assert.equal(boardThreadPath(channel, 't1'), '/stiegler/welcome/t/t1');
 
   assert.equal(boardMatchesPath(group, 'stiegler'), true);
   assert.equal(boardMatchesPath(channel, 'stiegler', 'welcome'), true);
@@ -128,12 +135,12 @@ test('channel paths: group, channel, group-level and channel threads; encoded', 
   assert.equal(boardMatchesPath(null, 'stiegler'), false);
 
   assert.deepEqual(forumCrumbs(channel, 'Session 1'), [
-    { label: 'Stiegler', href: '/f/stiegler' },
-    { label: 'Welcome', href: '/f/stiegler/welcome' },
+    { label: 'Stiegler', href: '/stiegler' },
+    { label: 'Welcome', href: '/stiegler/welcome' },
     { label: 'Session 1', href: null },
   ]);
-  assert.deepEqual(forumCrumbs(channel), [{ label: 'Stiegler', href: '/f/stiegler' }, { label: 'Welcome', href: null }]);
-  assert.deepEqual(forumCrumbs(group, 'T'), [{ label: 'Stiegler', href: '/f/stiegler' }, { label: 'T', href: null }]);
+  assert.deepEqual(forumCrumbs(channel), [{ label: 'Stiegler', href: '/stiegler' }, { label: 'Welcome', href: null }]);
+  assert.deepEqual(forumCrumbs(group, 'T'), [{ label: 'Stiegler', href: '/stiegler' }, { label: 'T', href: null }]);
 });
 
 test('definitionExcerpt: plain text from markdown (no fences, math delimiters, links or HTML), capped', async () => {
@@ -172,4 +179,24 @@ test('conceptThreadRedirect: permalink + query kept + from=thread, never a fragm
   assert.equal(conceptThreadRedirect('pharmakon', '?from=x&lang=en'), '/pharmakon?from=thread&lang=en');
   assert.equal(conceptThreadRedirect('graph'), '/c/graph?from=thread');
   assert.doesNotMatch(conceptThreadRedirect('a-b', '?q=%23x'), /#/);
+});
+
+test('legacyForumRedirect: root canonical paths with the query kept; /f/ canonical paths stay', async () => {
+  const { legacyForumRedirect, forumPath, threadPath } = await import('./view.ts');
+  assert.equal(legacyForumRedirect(forumPath('stiegler')), '/stiegler');
+  assert.equal(legacyForumRedirect(forumPath('stiegler', 'tt1'), '?lang=nb&threads=type'), '/stiegler/tt1?lang=nb&threads=type');
+  assert.equal(legacyForumRedirect(threadPath('stiegler', 'abc'), '?'), '/stiegler/t/abc');
+  assert.equal(legacyForumRedirect(forumPath('help')), null);
+  assert.equal(legacyForumRedirect(forumPath('stiegler', 't')), null);
+  assert.doesNotMatch(legacyForumRedirect('/stiegler', '?q=%23x'), /#/);
+});
+
+test('root board paths built by view.ts have the router\'s root shapes', async () => {
+  const { forumPath, threadPath } = await import('./view.ts');
+  const { parseRootPath } = await import('./slugs.ts');
+  const T = '0b7c1a2e-3f4d-4a5b-8c6d-7e8f9a0b1c2d';
+  assert.equal(parseRootPath(forumPath('stiegler'))?.kind, 'slug');
+  assert.equal(parseRootPath(forumPath('stiegler', 'tt1'))?.kind, 'board');
+  assert.equal(parseRootPath(threadPath('stiegler', T))?.kind, 'thread');
+  assert.equal(parseRootPath(threadPath('stiegler', T, 'tt1'))?.kind, 'thread');
 });

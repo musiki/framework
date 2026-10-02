@@ -2,7 +2,7 @@
 // view.test.mjs): which definition a reader sees in their language, labels,
 // safe source links, dates and public paths.
 
-import { isRootSlug } from './slugs.ts';
+import { isRootChannelSlug, isRootSlug } from './slugs.ts';
 
 export type ViewLang = 'en' | 'nb' | 'nn';
 type Versioned = { definition: string; lang: string };
@@ -106,12 +106,31 @@ export function groupByDay<V extends { createdAt: string }>(
   return groups;
 }
 
-/** /f/<group> or, with a channel, /f/<group>/<channel>. */
+/**
+ * Public path of a forum board: at the root, /<group> or /<group>/<channel>
+ * (concepts and groups share the root namespace, slugs.ts parseRootPath).
+ * A group (or channel) whose slug cannot live there — a reserved word, an
+ * odd spelling — keeps /f/<group>[/<channel>], where its pages are still
+ * served (mirrors conceptPath's /c/ fallback).
+ */
 export const forumPath = (slug: string, channel?: string | null) =>
-  `/f/${encodeURIComponent(slug)}${channel ? `/${encodeURIComponent(channel)}` : ''}`;
-/** /f/<group>/t/<id> (group-level thread) or /f/<group>/<channel>/t/<id>. */
+  isRootSlug(slug) && (!channel || isRootChannelSlug(channel))
+    ? `/${slug}${channel ? `/${channel}` : ''}`
+    : `/f/${encodeURIComponent(slug)}${channel ? `/${encodeURIComponent(channel)}` : ''}`;
+/** <board path>/t/<id>: /<group>/t/<id> (group-level thread) or /<group>/<channel>/t/<id>. */
 export const threadPath = (forumSlug: string, threadId: string, channel?: string | null) =>
   `${forumPath(forumSlug, channel)}/t/${encodeURIComponent(threadId)}`;
+
+/**
+ * Where an old /f/… URL of a board or thread goes: its canonical path with the
+ * request's query kept, or null when the canonical path is itself under /f/
+ * (a slug that cannot live at the root: the old URL is still the page).
+ */
+export function legacyForumRedirect(canonical: string, search = ''): string | null {
+  if (canonical.startsWith('/f/')) return null;
+  const query = new URLSearchParams(search).toString();
+  return query ? `${canonical}?${query}` : canonical;
+}
 
 /** A board as the cores return it: a group (parent null) or a channel (parent = its group). */
 export type BoardRef = { slug: string; title?: string; parent?: { slug: string; title?: string } | null };
@@ -123,7 +142,7 @@ export const boardThreadPath = (b: BoardRef, threadId: string) =>
   b.parent ? threadPath(b.parent.slug, threadId, b.slug) : threadPath(b.slug, threadId);
 
 /**
- * Whether the URL segments (/f/<group>[/<channel>]) name board `b`. A
+ * Whether the URL segments (/<group>[/<channel>], or the same under /f/) name board `b`. A
  * group-level URL only matches a group, a channel URL only that channel of
  * that group; anything else is a 404 on the page.
  */

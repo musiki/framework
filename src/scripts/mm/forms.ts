@@ -6,7 +6,8 @@
 //     reload        reload the page
 //     reload-post   reload at #post-<response.post.id>
 //     go-thread     go to <data-forum-path>/t/<response.threadId> (the board's
-//                   public path: /f/<group> or /f/<group>/<channel>)
+//                   public path: /<group> or /<group>/<channel>, or the same
+//                   under /f/ for slugs that cannot live at the root)
 //     go-concept    go to the concept's permalink (response.path: /<slug>, or
 //                   /c/<slug> for an older slug; propose and rename answer it)
 //   Errors (429 included) show in the form's [data-mm-form-status]; a concept
@@ -19,6 +20,7 @@
 
 import { mmApi, errorText, flash, pageStrings, reloadAt, ApiFailure } from './api.ts';
 import { slugErrorKind } from '../../lib/mm/client-core.ts';
+import { parseRootPath } from '../../lib/mm/slugs.ts';
 
 function formBody(form: HTMLFormElement): Record<string, string> {
   const body: Record<string, string> = {};
@@ -37,8 +39,11 @@ function after(then: string | undefined, result: any, el: HTMLElement): void {
       return;
     case 'go-thread': {
       const base = el.dataset.forumPath ?? '';
-      // Only a same-site /f/… path (built server-side by boardPath) is followed.
-      if (result?.threadId && /^\/f\/[^/?#]+(\/[^/?#]+)?$/.test(base)) {
+      // Only a same-site board path (built server-side by boardPath) is followed:
+      // a root board (/<group>, /<group>/<channel>) or an old-style /f/… one.
+      const root = parseRootPath(base);
+      const isBoard = root?.kind === 'slug' || root?.kind === 'board' || /^\/f\/[^/?#]+(\/[^/?#]+)?$/.test(base);
+      if (result?.threadId && isBoard) {
         window.location.assign(`${base}/t/${encodeURIComponent(result.threadId)}`);
         return;
       }

@@ -1,10 +1,8 @@
 ---
-// Internal page for the old mm URL "/f/<group>/<channel>/t/<thread id>"
-// (middleware rewrite): a thread of a channel. It answers 301 to the thread's
-// root path "/<group>/<channel>/t/<id>" (query kept) — or, for a concept's
-// discussion thread, to /<concept slug>?from=thread, for a relation type's to
-// /r/<type slug>?from=thread. The thread must be in THAT channel of THAT
-// group, else 404; slugs that cannot live at the root are still served here.
+// Internal page for the mm root path "/<group>/<channel>/t/<thread id>"
+// (middleware rewrite): a thread of a channel. The thread must be in THAT
+// channel of THAT group, else 404. A concept's discussion thread answers 301
+// to /<concept slug>?from=thread, a relation type's to /r/<type slug>?from=thread.
 // Rendering: components/mm/MmThreadPage.astro.
 import MmThreadPage from '../../../../../../components/mm/MmThreadPage.astro';
 import { applyMmLang } from '../../../../../../lib/mm/ui-lang';
@@ -14,7 +12,7 @@ export const prerender = false;
 const isMm = Astro.locals.tenant?.id === 'mm';
 const lang = applyMmLang(Astro);
 const { state, view, redirect } = await loadThreadPage(
-  Astro.locals, isMm, lang, String(Astro.params.forum ?? ''), String(Astro.params.channel ?? ''), String(Astro.params.thread ?? ''), Astro.url.search, true,
+  Astro.locals, isMm, lang, String(Astro.params.group ?? ''), String(Astro.params.channel ?? ''), String(Astro.params.thread ?? ''), Astro.url.search,
 );
 if (redirect) return Astro.redirect(redirect, 301);
 if (state === 'notFound') Astro.response.status = 404;

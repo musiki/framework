@@ -18,9 +18,11 @@ interface Props {
   noindex?: boolean;
   /** Canonical path of the page (e.g. a concept's permalink /<slug>). */
   canonical?: string;
+  /** Header section the page belongs to when its path does not say it (boards and threads live at the root). */
+  section?: 'forums';
 }
 
-const { lang, title, description, noindex = false, canonical } = Astro.props;
+const { lang, title, description, noindex = false, canonical, section } = Astro.props;
 const siteName = t(lang, 'mm.siteName');
 const pageTitle = title ? `${title} · ${siteName}` : siteName;
 const metaDescription = description ?? t(lang, 'mm.tagline');
@@ -31,7 +33,7 @@ const initial = userName.slice(0, 1).toUpperCase();
 const LAB_URL = 'https://zzigo.github.io/mishmash-web/lab/concept-machine/';
 
 const navItems = [
-  { href: '/', label: t(lang, 'mm.nav.forums'), current: publicPath === '/' || publicPath.startsWith('/f/') },
+  { href: '/', label: t(lang, 'mm.nav.forums'), current: section === 'forums' || publicPath === '/' || publicPath.startsWith('/f/') },
   { href: '/concepts', label: t(lang, 'mm.nav.concepts'), current: publicPath === '/concepts' || publicPath.startsWith('/concepts/') },
   { href: '/graph', label: t(lang, 'mm.nav.graph'), current: publicPath.startsWith('/graph') },
   { href: '/about', label: t(lang, 'mm.nav.about'), current: publicPath.startsWith('/about') },

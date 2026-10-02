@@ -1,4 +1,4 @@
-// Order of a board's thread list (/f/<group>, /f/<group>/<channel>): by date
+// Order of a board's thread list (/<group>, /<group>/<channel>): by date
 // (pinned first, then latest activity — the order listThreads returns) or by
 // type (concepts, relations, posts; date order kept inside each group).
 // A GET parameter (?threads=type), so it works without JS. Pure module.

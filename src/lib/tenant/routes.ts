@@ -1,5 +1,5 @@
 import type { RouteFamily, Tenant } from './tenants.ts';
-import { isRootSlugPath } from '../mm/slugs.ts';
+import { parseRootPath } from '../mm/slugs.ts';
 
 export const ROUTE_FAMILY_PREFIXES: Record<RouteFamily, string[]> = {
   studio: ['/studio'],
@@ -28,11 +28,14 @@ export const ROUTE_FAMILY_EXCLUDED: Partial<Record<RouteFamily, string[]>> = {
   'api:public': ['/api/public/mm'],
 };
 
-// Single-segment paths a family owns by shape: on mm, a root concept
-// permalink /<slug> (slug format, not a reserved word — src/lib/mm/slugs.ts).
-// The raw path must already be canonical: escapes, uppercase or dots never match.
+// Paths a family owns by shape: on mm, the root namespace shared by concepts
+// and forums — /<slug> (a concept permalink or a forum group), /<group>/<channel>,
+// /<group>/t/<thread id>, /<group>/<channel>/t/<thread id> (slug format, first
+// segment not a reserved word — src/lib/mm/slugs.ts parseRootPath). The raw
+// path must already be canonical: escapes, uppercase, dots, empty segments or
+// a trailing slash never match.
 export const ROUTE_FAMILY_SHAPES: Partial<Record<RouteFamily, (pathname: string) => boolean>> = {
-  mm: isRootSlugPath,
+  mm: (pathname) => parseRootPath(pathname) !== null,
 };
 
 // Families whose prefix is only a mount for one level of files: the exact
@@ -76,24 +79,38 @@ export function isInternalMmPath(pathname: string): boolean {
   return matchesPrefix(p, MM_INTERNAL_PREFIX);
 }
 
-/** Internal page of a root concept permalink: /<slug> → /mm-app/concept/<slug>. */
-export const MM_CONCEPT_MOUNT = `${MM_INTERNAL_PREFIX}/concept`;
+/**
+ * Internal page of a one-segment root path: /<slug> → /mm-app/root/<slug>
+ * (a concept permalink or a forum group; the page resolves which).
+ */
+export const MM_ROOT_MOUNT = `${MM_INTERNAL_PREFIX}/root`;
+/**
+ * Internal pages of the root board paths: /<group>/<channel>[/t/<id>] and
+ * /<group>/t/<id> → /mm-app/b/… (the same segments).
+ */
+export const MM_BOARD_MOUNT = `${MM_INTERNAL_PREFIX}/b`;
 
 /**
  * Maps a public mm path to its internal page path, or null when the path is
- * not an mm page (APIs, auth, anything else). A root concept slug
- * ('/pharmakon') maps to the concept page ('/mm-app/concept/pharmakon'). Takes the raw (still
- * percent-encoded) pathname and never decodes it: the router decodes params
- * exactly once, so '/f/%2561' keeps the param '%61'.
- *   '/' → '/mm-app/', '/f/stiegler' → '/mm-app/f/stiegler', '/cursos' → null
+ * not an mm page (APIs, auth, anything else). Purely syntactic (no database):
+ * a one-segment root slug ('/pharmakon', '/stiegler') maps to the root page
+ * ('/mm-app/root/pharmakon'), which resolves concept or group; the deeper root
+ * board shapes map under '/mm-app/b'. Takes the raw (still percent-encoded)
+ * pathname and never decodes it: the router decodes params exactly once, so
+ * '/f/%2561' keeps the param '%61'.
+ *   '/' → '/mm-app/', '/stiegler/tt1' → '/mm-app/b/stiegler/tt1',
+ *   '/f/stiegler' → '/mm-app/f/stiegler' (a 301 to /stiegler), '/cursos' → null
  */
 export function mapMmPath(pathname: string): string | null {
   if (!isMmPagePath(pathname)) return null;
+  const root = parseRootPath(pathname);
   const target = pathname === '/'
     ? `${MM_INTERNAL_PREFIX}/`
-    : isRootSlugPath(pathname)
-      ? `${MM_CONCEPT_MOUNT}${pathname}`
-      : `${MM_INTERNAL_PREFIX}${pathname}`;
+    : root?.kind === 'slug'
+      ? `${MM_ROOT_MOUNT}${pathname}`
+      : root
+        ? `${MM_BOARD_MOUNT}${pathname}`
+        : `${MM_INTERNAL_PREFIX}${pathname}`;
   // Defence in depth: the target must stay under the mount after URL
   // normalisation (dot segments, including %2e forms).
   let normalized: string;
@@ -105,7 +122,7 @@ export function mapMmPath(pathname: string): string | null {
   return matchesPrefix(normalized, MM_INTERNAL_PREFIX) ? target : null;
 }
 
-/** True when the path belongs to the public mm page family (`/` exactly, /f, /c, …, or a root concept slug). */
+/** True when the path belongs to the public mm page family (`/` exactly, /f, /c, …, or a root shape: concept, group, board, thread). */
 export function isMmPagePath(pathname: string): boolean {
   return familyMatches('mm', pathname);
 }

@@ -1,0 +1,23 @@
+---
+// Internal page for a one-segment mm root path "/<slug>" (middleware rewrite;
+// routing: src/lib/tenant/routes.ts mapMmPath, slug rules: lib/mm/slugs.ts).
+// Concepts and forum groups share the root: a live concept renders its page;
+// else a forum group renders its board page; else a slug a curator renamed
+// away 301-redirects to the concept's current permalink; anything else is a
+// 404 (lib/mm/concept-page.ts loadConceptPage, slugs.ts resolveRootSlug).
+// Rendering: components/mm/MmConceptPage.astro / MmBoardPage.astro.
+import MmConceptPage from '../../../components/mm/MmConceptPage.astro';
+import MmBoardPage from '../../../components/mm/MmBoardPage.astro';
+import { applyMmLang } from '../../../lib/mm/ui-lang';
+import { loadConceptPage } from '../../../lib/mm/concept-page';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+const data = await loadConceptPage(Astro.locals, isMm, lang, String(Astro.params.slug ?? ''), 'root', Astro.url.search);
+if (data.redirect) return Astro.redirect(data.redirect, 301);
+const state = data.board ? data.board.state : data.state;
+if (state === 'notFound') Astro.response.status = 404;
+if (state === 'unavailable') Astro.response.status = 503;
+---
+{data.board ? <MmBoardPage lang={lang} isMm={isMm} data={data.board} /> : <MmConceptPage lang={lang} isMm={isMm} data={data} />}

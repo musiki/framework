@@ -50,8 +50,10 @@ test('mapMmPath: /r never escapes the mount and /rx is not /r', () => {
   assert.equal(mapMmPath('/r/../../cursos'), null);
   assert.equal(mapMmPath('/r/%2e%2e/%2E%2E/cursos'), null);
   // single slug-shaped segments are concept permalinks, never the /r family
-  for (const p of ['/rx', '/relations', '/r-types']) assert.equal(mapMmPath(p), `/mm-app/concept${p}`, p);
-  for (const p of ['/rx/y', '/relations/x']) assert.equal(mapMmPath(p), null, p);
+  for (const p of ['/rx', '/relations', '/r-types']) assert.equal(mapMmPath(p), `/mm-app/root${p}`, p);
+  // two slug segments are a root board path (group/channel), never the /r family
+  for (const p of ['/rx/y', '/relations/x']) assert.equal(mapMmPath(p), `/mm-app/b${p}`, p);
+  for (const p of ['/rx/y/z', '/relations/x/']) assert.equal(mapMmPath(p), null, p);
 });
 
 test('mm (no api:public family) is refused /api/public/instruments and so data', () => {
@@ -78,21 +80,21 @@ test('mm allows / exactly, its page prefixes, its apis and auth', () => {
   for (const p of ['/x', '/fx', '/cx', '/rx', '/relations', '/graphs', '/aboutx',
     '/joinx', '/adminx', '/lilyx', '/pharmakon', '/tertiary-retention', '/a1-b2']) {
     assert.equal(isRouteAllowed(mm, p), true, p);
-    assert.equal(mapMmPath(p), `/mm-app/concept${p}`, p);
+    assert.equal(mapMmPath(p), `/mm-app/root${p}`, p);
   }
 });
 
 test('root concept slugs: canonical spelling only, reserved words never', () => {
-  assert.equal(mapMmPath('/pharmakon'), '/mm-app/concept/pharmakon');
+  assert.equal(mapMmPath('/pharmakon'), '/mm-app/root/pharmakon');
   for (const p of ['/Pharmakon', '/PHARMAKON', '/%70harmakon', '/pharmakon%2F', '/pharm%C3%A1kon', '/pharmakon.json',
-    '/.', '/..', '/%2e%2e', '/pharmakon/', '/pharmakon/x', '/-pharmakon', '/pharma--kon', `/${'a'.repeat(201)}`]) {
+    '/.', '/..', '/%2e%2e', '/pharmakon/', '/pharmakon/x/y', '/-pharmakon', '/pharma--kon', `/${'a'.repeat(201)}`]) {
     assert.equal(mapMmPath(p), null, p);
   }
-  assert.equal(mapMmPath(`/${'a'.repeat(200)}`), `/mm-app/concept/${'a'.repeat(200)}`);
+  assert.equal(mapMmPath(`/${'a'.repeat(200)}`), `/mm-app/root/${'a'.repeat(200)}`);
   // reserved words keep their own pages (or 404), never the concept page
   for (const w of RESERVED_SLUGS) {
     const target = mapMmPath(`/${w}`);
-    assert.ok(target === null || !target.startsWith('/mm-app/concept/'), w);
+    assert.ok(target === null || !target.startsWith('/mm-app/root/'), w);
   }
   assert.equal(mapMmPath('/concepts'), '/mm-app/concepts');
   assert.equal(mapMmPath('/graph'), '/mm-app/graph');
@@ -134,11 +136,11 @@ test('mapMmPath maps public mm pages to the internal mount', () => {
   assert.equal(mapMmPath('/join'), '/mm-app/join');
   assert.equal(mapMmPath('/admin/members'), '/mm-app/admin/members');
   assert.equal(mapMmPath('/concepts'), '/mm-app/concepts');
-  assert.equal(mapMmPath('/pharmakon'), '/mm-app/concept/pharmakon');
+  assert.equal(mapMmPath('/pharmakon'), '/mm-app/root/pharmakon');
 });
 
 test('mapMmPath returns null for everything else', () => {
-  for (const p of ['', '//', '/cursos/x', '/fx/y', '/aboutx/', '/api/mm/concepts', '/api/public/mm/concepts.json',
+  for (const p of ['', '//', '/cursos/x', '/fx/y/z', '/aboutx/', '/api/mm/concepts', '/api/public/mm/concepts.json',
     '/api/auth/session', '/studio', '/mm-app', '/mm-app/f']) {
     assert.equal(mapMmPath(p), null, p);
   }
@@ -220,4 +222,42 @@ test('mapMmPath maps channel paths (group, group/channel, both thread forms) ver
   // dot segments cannot climb out of the mount
   assert.equal(mapMmPath('/f/stiegler/%2e%2e/%2e%2e/%2e%2e/x'), null);
   assert.equal(isMmPagePath('/f/stiegler/welcome/t/x'), true);
+});
+
+const TID = '0b7c1a2e-3f4d-4a5b-8c6d-7e8f9a0b1c2d';
+
+test('mm root board shapes: allowed and mapped under /mm-app/b; group at the root page', () => {
+  const cases = [
+    ['/stiegler', '/mm-app/root/stiegler'],
+    ['/stiegler/tt1', '/mm-app/b/stiegler/tt1'],
+    [`/stiegler/t/${TID}`, `/mm-app/b/stiegler/t/${TID}`],
+    [`/stiegler/tt1/t/${TID}`, `/mm-app/b/stiegler/tt1/t/${TID}`],
+    // a channel may be named like a reserved root word: it is a second segment
+    ['/stiegler/graph', '/mm-app/b/stiegler/graph'],
+  ];
+  for (const [p, target] of cases) {
+    assert.equal(isRouteAllowed(mm, p), true, p);
+    assert.equal(mapMmPath(p), target, p);
+  }
+});
+
+test('mm root board shapes: everything else is refused (raw and encoded spellings)', () => {
+  const refused = [
+    '/stiegler/', '/stiegler/tt1/', `/stiegler/t/${TID}/`, '/stiegler//tt1', '//stiegler/tt1', '/stiegler/t',
+    '/stiegler/tt1/t', `/stiegler/t/${TID.toUpperCase()}`, '/stiegler/t/123', `/stiegler/tt1/t/${TID}/x`,
+    '/stiegler/tt1/x/y', '/Stiegler/tt1', '/stiegler/Tt1', '/%73tiegler/tt1', '/stiegler/%74t1', '/stiegler/tt1%2Ft',
+    `/stiegler/%74/${TID}`, '/stiegler/a.b', '/stiegler/..', '/stiegler/%2e%2e', '/stiegler/-x',
+    // reserved first segments: musiki pages, internal mount, assets, other families
+    '/cursos/x', '/dashboard/x', '/slides/x', '/mm-app/x', '/_astro/x', '/_x/y', '/api/x', '/auth/x', '/mm/x', '/lily/a/b',
+    '/fonts/x', '/vendor/x/y', '/concept/x', '/not-found/x', `/studio/t/${TID}`,
+  ];
+  for (const p of refused) {
+    assert.equal(isRouteAllowed(mm, p), false, p);
+    assert.equal(mapMmPath(p), null, p);
+  }
+  // so and its families never see them
+  for (const p of ['/stiegler/tt1', `/stiegler/t/${TID}`]) assert.equal(isRouteAllowed(so, p), false, p);
+  // the prefixed families keep their own trees
+  assert.equal(mapMmPath('/graph/x'), '/mm-app/graph/x');
+  assert.equal(mapMmPath('/f/stiegler/tt1'), '/mm-app/f/stiegler/tt1');
 });

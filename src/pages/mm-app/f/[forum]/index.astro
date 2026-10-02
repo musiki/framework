@@ -1,18 +1,22 @@
 ---
-// Internal page for mm "/f/<group>" (middleware rewrite; never reachable as
-// /mm-app/… by URL). A group: description, bibliography, its channels, its
-// own threads, its concepts. A forum without channels renders exactly the
-// forum page it always did. Rendering: components/mm/MmBoardPage.astro; data:
+// Internal page for the old mm URL "/f/<group>" (middleware rewrite). Groups
+// live at the root now: an existing group answers 301 to "/<group>" (query
+// kept). A group whose slug cannot live at the root (a reserved word, view.ts
+// forumPath) — or whose slug a live concept holds — is still served here.
+// A group: description, bibliography, its channels, its own threads, its
+// concepts. Rendering: components/mm/MmBoardPage.astro; data:
 // lib/mm/board-pages.ts. A missing forum renders the mm 404 inline, a data
 // failure the "unavailable" state.
 import MmBoardPage from '../../../../components/mm/MmBoardPage.astro';
 import { applyMmLang } from '../../../../lib/mm/ui-lang';
-import { loadBoardPage } from '../../../../lib/mm/board-pages';
+import { legacyBoardRedirect, loadBoardPage } from '../../../../lib/mm/board-pages';
 export const prerender = false;
 
 const isMm = Astro.locals.tenant?.id === 'mm';
 const lang = applyMmLang(Astro);
 const data = await loadBoardPage(Astro.locals, isMm, String(Astro.params.forum ?? ''), null);
+const moved = await legacyBoardRedirect(data, Astro.url.search);
+if (moved) return Astro.redirect(moved, 301);
 if (data.state === 'notFound') Astro.response.status = 404;
 if (data.state === 'unavailable') Astro.response.status = 503;
 ---

@@ -5,7 +5,7 @@ import { listConcepts } from '../../../../../../lib/mm/concepts';
 
 export const prerender = false;
 
-// Public: a channel by path (/f/<group>/<channel>): the channel (effective
+// Public: a channel by path (/<group>/<channel>): the channel (effective
 // public settings, `parent` = its group), its threads and concepts born there.
 export const GET = mmRoute({ tag: 'mm:channel' }, async ({ params }, { space, userId }) => {
   const found = await getForumByPath({ spaceId: space.id, group: String(params.slug || ''), channel: String(params.channel || '') });

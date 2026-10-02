@@ -1,17 +1,19 @@
 ---
-// Internal page for mm "/f/<group>/<channel>" (middleware rewrite). A channel
-// of a group: breadcrumbs group › channel, then the forum page (threads,
-// bibliography — the group's unless overridden —, concepts born here). A
-// channel of another group, an archived one, or the reserved slug "t"
-// (/f/<group>/t without a thread) is a 404.
+// Internal page for the old mm URL "/f/<group>/<channel>" (middleware
+// rewrite). Channels live at the root now: an existing channel answers 301 to
+// "/<group>/<channel>" (query kept); one whose slugs cannot live at the root
+// (view.ts forumPath) is still served here. A channel of another group, an
+// archived one, or the reserved slug "t" (/f/<group>/t without a thread) is a 404.
 import MmBoardPage from '../../../../../components/mm/MmBoardPage.astro';
 import { applyMmLang } from '../../../../../lib/mm/ui-lang';
-import { loadBoardPage } from '../../../../../lib/mm/board-pages';
+import { legacyBoardRedirect, loadBoardPage } from '../../../../../lib/mm/board-pages';
 export const prerender = false;
 
 const isMm = Astro.locals.tenant?.id === 'mm';
 const lang = applyMmLang(Astro);
 const data = await loadBoardPage(Astro.locals, isMm, String(Astro.params.forum ?? ''), String(Astro.params.channel ?? ''));
+const moved = await legacyBoardRedirect(data, Astro.url.search);
+if (moved) return Astro.redirect(moved, 301);
 if (data.state === 'notFound') Astro.response.status = 404;
 if (data.state === 'unavailable') Astro.response.status = 503;
 ---

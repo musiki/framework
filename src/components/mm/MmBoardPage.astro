@@ -1,6 +1,7 @@
 ---
-// Full mm page for a forum board: a group (/f/<group>) or one of its
-// channels (/f/<group>/<channel>). The calling page loads the data
+// Full mm page for a forum board: a group (/<group>) or one of its
+// channels (/<group>/<channel>); /f/… for slugs that cannot live at the root
+// (view.ts forumPath). The calling page loads the data
 // (src/lib/mm/board-pages.ts) and sets the status; this renders it.
 //   Group page: description, bibliography, channels (thread counts, latest
 //   activity), the group's own threads (announcements), the group's concepts
@@ -60,7 +61,7 @@ const conceptsTitle = hasChannels ? t(lang, 'mm.forum.groupConceptsTitle') : t(l
 ) : state !== 'ok' || !forum ? (
   <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
 ) : (
-  <MmLayout lang={lang} title={isChannel && group ? `${forum.title} · ${group.title}` : forum.title} description={forum.description ?? undefined}>
+  <MmLayout lang={lang} title={isChannel && group ? `${forum.title} · ${group.title}` : forum.title} description={forum.description ?? undefined} canonical={boardPath(forum)} section="forums">
     <div data-mm-i18n={strings}>
       {isChannel && <MmBreadcrumbs label={t(lang, 'mm.forum.breadcrumb')} crumbs={crumbs} />}
       <h1>{forum.title}</h1>

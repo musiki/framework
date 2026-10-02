@@ -1,6 +1,7 @@
 ---
-// Full mm page for a thread with its posts, at /f/<group>/t/<thread> (a
-// thread of the group itself) or /f/<group>/<channel>/t/<thread>. The calling
+// Full mm page for a thread with its posts, at /<group>/t/<thread> (a
+// thread of the group itself) or /<group>/<channel>/t/<thread> (/f/… for
+// slugs that cannot live at the root, view.ts forumPath). The calling
 // page loads the data (lib/mm/board-pages.ts loadThreadPage, which 404s a
 // thread requested under a board it does not belong to) and sets the status.
 // Post bodies are rendered ONLY from the core's sanitized `bodyHtml`
@@ -21,7 +22,7 @@ import type { ThreadView } from '../../lib/mm/forum';
 import { threadClientStrings } from '../../lib/mm/page-strings';
 import type { PageState } from '../../lib/mm/board-pages';
 import type { MmLang } from '../../lib/mm/ui-lang';
-import { conceptPath, displayName, formatDate, forumCrumbs } from '../../lib/mm/view';
+import { boardThreadPath, conceptPath, displayName, formatDate, forumCrumbs } from '../../lib/mm/view';
 
 interface Props {
   lang: MmLang;
@@ -43,7 +44,7 @@ const crumbs = thread?.forum ? forumCrumbs(thread.forum, thread.title) : [];
 ) : state !== 'ok' || !thread ? (
   <MmStatus lang={lang} kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
 ) : (
-  <MmLayout lang={lang} title={thread.title}>
+  <MmLayout lang={lang} title={thread.title} canonical={thread.forum ? boardThreadPath(thread.forum, thread.id) : undefined} section="forums">
     <div data-mm-i18n={strings}>
       <MmBreadcrumbs label={t(lang, 'mm.forum.breadcrumb')} crumbs={crumbs} />
       <h1>{thread.title}</h1>

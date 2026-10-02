@@ -1,0 +1,19 @@
+---
+// Internal page for the mm root board path "/<group>/<channel>" (middleware
+// rewrite; shape: lib/mm/slugs.ts parseRootPath). A channel of a group:
+// breadcrumbs group › channel, then the forum page. A channel of another
+// group or an archived one is a 404. The group itself is served at "/<group>"
+// (src/pages/mm-app/root/[slug].astro). Rendering: components/mm/MmBoardPage.astro;
+// data: lib/mm/board-pages.ts.
+import MmBoardPage from '../../../../../components/mm/MmBoardPage.astro';
+import { applyMmLang } from '../../../../../lib/mm/ui-lang';
+import { loadBoardPage } from '../../../../../lib/mm/board-pages';
+export const prerender = false;
+
+const isMm = Astro.locals.tenant?.id === 'mm';
+const lang = applyMmLang(Astro);
+const data = await loadBoardPage(Astro.locals, isMm, String(Astro.params.group ?? ''), String(Astro.params.channel ?? ''));
+if (data.state === 'notFound') Astro.response.status = 404;
+if (data.state === 'unavailable') Astro.response.status = 503;
+---
+<MmBoardPage lang={lang} isMm={isMm} data={data} />
