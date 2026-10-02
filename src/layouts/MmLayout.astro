@@ -1,7 +1,8 @@
 ---
 // Shell of the MishMash Concept Machine (tenant mm): MishMash identity
 // (tokens in src/styles/mm-brand.css), header nav, en/nb switch, footer
-// with the MishMash, NMH and NordArt logos in one row, then credits and links.
+// with two credit groups in one row (MishMash logo + "Built for", NMH and
+// NordArt logos + "Developed at"; stacked on phones), then links.
 // No external requests: fonts and images are served from /mm/. Nothing in
 // here mentions musiki. Pages resolve `lang` in their own frontmatter with
 // applyMmLang (cookies cannot be set once the layout streams).
@@ -243,6 +244,12 @@ const navItems = [
   .mm-footer-inner { display: grid; gap: 1rem; padding-top: 1.5rem; padding-bottom: 1.5rem; font-size: 0.9rem; }
   .mm-footer-credits { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem 3rem; }
   .mm-footer-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; }
+  /* Wide screens: both groups on one row; each text wraps beside its logos rather than the row breaking. */
+  @media (min-width: 60rem) {
+    .mm-footer-credits { flex-wrap: nowrap; }
+    .mm-footer-group { flex: 0 1 auto; flex-wrap: nowrap; min-width: 0; }
+    .mm-footer-group .mm-footer-logos { flex: none; flex-wrap: nowrap; }
+  }
   .mm-footer-logos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; }
   .mm-footer-logos a { display: block; }
   .mm-footer-logos a:hover { background: none; }
