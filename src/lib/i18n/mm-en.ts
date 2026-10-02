@@ -153,8 +153,6 @@ export const mmEn = {
     posts: '{n} posts',
     postsOne: '1 post',
     startedBy: 'Started by {name}',
-    conceptThread: 'Discussion of the concept {label}',
-    relationTypeThread: 'Discussion of the relation {label}',
     orderLabel: 'Order',
     order: { date: 'Date', type: 'Type' },
     kind: { concept: 'Concept', relation: 'Relation', post: 'Posts' },

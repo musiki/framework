@@ -43,6 +43,9 @@
 .mm-order a { text-decoration: none; border-bottom: 2px solid transparent; }
 .mm-order a[aria-current='true'] { border-bottom-color: var(--mm-ink); font-weight: 700; }
 .mm-thread-list > li.mm-thread-item { display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); align-items: start; }
+.mm-thread-title { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.5rem; }
+.mm-thread-title .mm-badge { font-size: 0.75rem; }
+.mm-thread-item .mm-meta { margin: 0.2rem 0 0; }
 .mm-thread-kind { display: inline-flex; padding-top: 0.45rem; color: var(--mm-ink); }
 .mm-thread-kind svg { fill: currentColor; stroke: currentColor; stroke-width: 1.6; }
 .mm-thread-kind .mm-glyph-open { fill: none; }

@@ -156,8 +156,6 @@ export const nb: Pick<Dict, 'mm'> = {
       posts: '{n} innlegg',
       postsOne: '1 innlegg',
       startedBy: 'Startet av {name}',
-      conceptThread: 'Diskusjon av begrepet {label}',
-      relationTypeThread: 'Diskusjon av relasjonen {label}',
       orderLabel: 'Rekkefølge',
       order: { date: 'Dato', type: 'Type' },
       kind: { concept: 'Begrep', relation: 'Relasjon', post: 'Innlegg' },
