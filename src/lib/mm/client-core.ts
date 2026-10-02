@@ -71,16 +71,17 @@ export function apiErrorMessage(
   return lead;
 }
 
-export type SlugErrorKind = 'taken' | 'reserved' | 'format' | 'length' | 'required';
+export type SlugErrorKind = 'taken' | 'forum' | 'reserved' | 'format' | 'length' | 'required';
 
 /**
  * Concept slug forms (propose, rename): the API's slug errors (concepts-core
- * cleanCustomSlug / 409 'concept slug already exists') get their own
- * localized message instead of the generic lead; null for anything else.
+ * cleanCustomSlug / 409 'concept slug already exists' / 409 'concept slug is
+ * a forum address') get their own localized message instead of the generic
+ * lead; null for anything else.
  */
 export function slugErrorKind(status: number, apiMessage: unknown): SlugErrorKind | null {
   if (typeof apiMessage !== 'string') return null;
-  if (status === 409) return /slug already exists/i.test(apiMessage) ? 'taken' : null;
+  if (status === 409) return /slug already exists/i.test(apiMessage) ? 'taken' : /forum address/i.test(apiMessage) ? 'forum' : null;
   if (status !== 400 || !/slug/i.test(apiMessage)) return null;
   if (/reserved word/i.test(apiMessage)) return 'reserved';
   if (/characters/i.test(apiMessage) && /\d+.\d+/.test(apiMessage)) return 'length';
@@ -89,7 +90,7 @@ export function slugErrorKind(status: number, apiMessage: unknown): SlugErrorKin
   return null;
 }
 
-export type AdminErrorKind = 'lastAdmin' | 'self' | 'slugTaken';
+export type AdminErrorKind = 'lastAdmin' | 'self' | 'slugTaken' | 'slugConcept' | 'slugReserved';
 
 /**
  * Admin page: the 409s the admin APIs return for a reason the admin can act
@@ -97,7 +98,11 @@ export type AdminErrorKind = 'lastAdmin' | 'self' | 'slugTaken';
  * localized message instead of the generic "changed in the meantime".
  */
 export function adminErrorKind(status: number, apiMessage: unknown): AdminErrorKind | null {
-  if (status !== 409 || typeof apiMessage !== 'string') return null;
+  if (typeof apiMessage !== 'string') return null;
+  // A forum group's address is a root slug (forum-core createForum): never a reserved word.
+  if (status === 400) return /reserved word/i.test(apiMessage) && /forum address/i.test(apiMessage) ? 'slugReserved' : null;
+  if (status !== 409) return null;
+  if (/used by a concept/i.test(apiMessage)) return 'slugConcept';
   if (/at least one admin/i.test(apiMessage)) return 'lastAdmin';
   if (/your own membership/i.test(apiMessage)) return 'self';
   if (/slug already exists/i.test(apiMessage)) return 'slugTaken';

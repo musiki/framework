@@ -82,3 +82,45 @@ test('musiki top-level pages are reserved', () => {
     assert.equal(isRootSlugPath(`/${w}`), false, w);
   }
 });
+
+const TID = '0b7c1a2e-3f4d-4a5b-8c6d-7e8f9a0b1c2d';
+
+test('parseRootPath: concept/group, channel, group thread, channel thread', async () => {
+  const { parseRootPath, isRootPath } = await import('./slugs.ts');
+  assert.deepEqual(parseRootPath('/stiegler'), { kind: 'slug', slug: 'stiegler' });
+  assert.deepEqual(parseRootPath('/stiegler/tt1'), { kind: 'board', group: 'stiegler', channel: 'tt1' });
+  assert.deepEqual(parseRootPath(`/stiegler/t/${TID}`), { kind: 'thread', group: 'stiegler', channel: null, thread: TID });
+  assert.deepEqual(parseRootPath(`/stiegler/tt1/t/${TID}`), { kind: 'thread', group: 'stiegler', channel: 'tt1', thread: TID });
+  for (const p of ['/stiegler', '/stiegler/tt1', `/stiegler/t/${TID}`, `/a-b/c-d/t/${TID}`]) assert.ok(isRootPath(p), p);
+});
+
+test('parseRootPath refuses every other shape and spelling', async () => {
+  const { parseRootPath } = await import('./slugs.ts');
+  const refused = [
+    '', '/', 'stiegler', '//stiegler', '/stiegler/', '/stiegler//tt1', '/stiegler/tt1/', `/stiegler/t/${TID}/`,
+    '/stiegler/t', `/stiegler/t/${TID.toUpperCase()}`, '/stiegler/t/not-a-uuid', `/stiegler/tt1/t/${TID}/x`,
+    `/stiegler/tt1/x/${TID}`, '/stiegler/tt1/extra', '/Stiegler/tt1', '/stiegler/TT1', '/%73tiegler/tt1',
+    '/stiegler/%74t1', `/stiegler/%74/${TID}`, '/stiegler/t%2F1', '/stiegler/a.b', '/stiegler/..', '/./tt1',
+    // first segment reserved: mm families, musiki pages, internal mount, static folders
+    '/f/stiegler', '/f/stiegler/tt1', `/f/stiegler/t/${TID}`, '/c/x', '/r/derives', '/graph/x', '/api/mm', '/lily/x',
+    '/mm-app/x', '/dashboard/x', '/cursos/x', '/_astro/x', '/fonts/x', '/admin/x',
+    `/stiegler/t/${TID}/t/${TID}`, `/a/b/c/d/e`, null, 7,
+  ];
+  for (const p of refused) assert.equal(parseRootPath(p), null, String(p));
+});
+
+test('reserved channel slug "t" is the forum core\'s', async () => {
+  const { RESERVED_CHANNEL_SLUGS, isRootChannelSlug } = await import('./slugs.ts');
+  const forum = await import('./forum-core.ts');
+  assert.deepEqual([...forum.RESERVED_CHANNEL_SLUGS], [...RESERVED_CHANNEL_SLUGS]);
+  assert.equal(isRootChannelSlug('t'), false);
+  assert.ok(isRootChannelSlug('graph'), 'a channel may be called like a reserved root word: it is a second segment');
+});
+
+test('resolveRootSlug: live concept, then group, then alias, else nothing', async () => {
+  const { resolveRootSlug } = await import('./slugs.ts');
+  assert.equal(resolveRootSlug({ concept: true, group: true, alias: true }), 'concept');
+  assert.equal(resolveRootSlug({ concept: false, group: true, alias: true }), 'group');
+  assert.equal(resolveRootSlug({ concept: false, group: false, alias: true }), 'alias');
+  assert.equal(resolveRootSlug({ concept: false, group: false, alias: false }), 'none');
+});

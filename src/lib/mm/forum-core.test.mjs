@@ -183,6 +183,8 @@ const ownEmailsRoute = (emails = { [U.curator]: ['owner@uni.no'] }) => [
   ([userId]) => (emails[userId] ?? []).map((email) => ({ email })),
 ];
 
+const insertBoardRow = ['INSERT INTO "ForumBoard"', (p) => [{ id: FORUM, slug: p[1], title: p[2], description: p[3], isArchived: false, settings: JSON.parse(p[5]), parentId: p[6] }]];
+
 test('createForum: curator creates a space forum (no course), settings stored', async () => {
   const { q, calls } = fakeQuery([
     memberRoute,
@@ -219,6 +221,38 @@ test('createForum: permission, validation, slug conflicts', async () => {
   await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: null, title: 'Technics' }), 401);
   await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'ab' }), 400);
   await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Technics', settings: { ownerEmail: 'x' } }), 400);
+});
+
+test('createForum: a group lives at the root — never a reserved word, a concept slug or a rename alias', async () => {
+  // reserved words (typed or from the title): 400 before any write
+  for (const input of [{ title: 'Help' }, { title: 'Anything', slug: 'graph' }, { title: 'Dashboard' }]) {
+    const f = fakeQuery([memberRoute, ['SELECT id FROM "ForumBoard"', () => []]]);
+    await assert.rejects(createForum(f.q, { spaceId: SPACE, actorUserId: U.curator, ...input }),
+      (e) => e instanceof ForumError && e.status === 400 && /reserved word/.test(e.message) && /forum address/.test(e.message));
+    assert.ok(!f.calls.some((c) => c.text === 'BEGIN'), JSON.stringify(input));
+  }
+  // a live concept or an alias holds the slug: 409 under the concepts' slug lock, nothing inserted
+  for (const holder of ['concept', 'alias']) {
+    const f = fakeQuery([
+      memberRoute,
+      [/SELECT 1 FROM "Concept" WHERE "spaceId" = \$1::uuid AND slug = \$2 AND kind = 'concept'\s+UNION ALL\s+SELECT 1 FROM "ConceptSlugAlias"/,
+        ([sid, slug]) => (sid === SPACE && slug === 'technics' ? [{ '?column?': holder }] : [])],
+      ['SELECT id FROM "ForumBoard"', () => []],
+      insertBoardRow,
+    ]);
+    await assert.rejects(createForum(f.q, { spaceId: SPACE, actorUserId: U.curator, title: 'Technics' }),
+      (e) => e instanceof ForumError && e.status === 409 && /used by a concept/.test(e.message));
+    const texts = f.calls.map((c) => c.text);
+    const at = (needle) => texts.findIndex((t) => t.includes(needle));
+    assert.ok(at('BEGIN') < at('pg_advisory_xact_lock') && at('pg_advisory_xact_lock') < at('FROM "ConceptSlugAlias"'));
+    assert.deepEqual(f.calls[at('pg_advisory_xact_lock')].params, [`mm-concept-slug:${SPACE}`]);
+    assert.equal(at('INSERT INTO "ForumBoard"'), -1);
+    assert.equal(texts.at(-1), 'ROLLBACK');
+  }
+  // free: one transaction, committed
+  const ok = fakeQuery([memberRoute, ['SELECT id FROM "ForumBoard"', () => []], insertBoardRow]);
+  assert.equal((await createForum(ok.q, { spaceId: SPACE, actorUserId: U.curator, title: 'Simondon' })).slug, 'simondon');
+  assert.equal(ok.calls.at(-1).text, 'COMMIT');
 });
 
 test('updateForum: partial update, settings merged with jsonb (null clears), space-pinned', async () => {
@@ -871,6 +905,11 @@ test('createForum with parentId: a channel of an active group; sibling slug chec
   await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Bad', parentId: 'x' }), 400);
   await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.member, title: 'Welcome', parentId: GROUP }), 403);
   await rejectsStatus(createForum(q, { spaceId: SPACE, actorUserId: U.curator, title: 'Uuid', slug: id(5) }), 400);
+
+  // a channel is a second segment: a reserved root word is fine, and concepts are not consulted
+  const graphCh = fakeQuery([memberRoute, boardRoute(BOARDS), ['SELECT id FROM "ForumBoard"', () => []], insertBoard]);
+  assert.equal((await createForum(graphCh.q, { spaceId: SPACE, actorUserId: U.curator, title: 'Graph', parentId: GROUP })).slug, 'graph');
+  assert.ok(!graphCh.calls.some((c) => c.text.includes('"ConceptSlugAlias"') || c.text.includes('pg_advisory_xact_lock')));
 
   // archived group: no new channels
   const archived = fakeQuery([memberRoute, boardRoute({ [GROUP]: forumRow({ isArchived: true }) })]);

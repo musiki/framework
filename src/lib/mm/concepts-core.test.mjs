@@ -54,7 +54,7 @@ function fakeQuery(routes) {
     return { data: [], error: null };
   };
   const texts = () => calls.map((c) => c.text.trim().split(/\s+/).slice(0, 3).join(' '));
-  return { q, calls, texts };
+  return { q, calls, texts, routes };
 }
 
 const DISS_SPACE = id(3);
@@ -664,6 +664,25 @@ test('createConcept: a typed slug is used as is, under the lock; taken (live or 
   assert.equal((await createConcept(auto.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'Pharmakon', definition: 'D', slug: '  ' })).slug, 'pharmakon');
 });
 
+test('createConcept: concepts and forum groups share the root — a group slug is 409 (typed) or skipped (automatic)', async () => {
+  const groupRoute = (slugs) => [/SELECT 1 FROM "ForumBoard" WHERE "spaceId" = \$1::uuid AND "parentId" IS NULL AND slug = \$2/,
+    ([sid, slug]) => (sid === SPACE && slugs.includes(slug) ? [{ '?column?': 1 }] : [])];
+  const typed = fakeQuery([groupRoute(['stiegler']), ...createFixture().routes]);
+  await assert.rejects(
+    createConcept(typed.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'Stiegler', definition: 'D', slug: 'stiegler' }),
+    (e) => e instanceof ConceptError && e.status === 409 && /forum address/.test(e.message) && !/slug already exists/.test(e.message),
+  );
+  assert.equal(typed.calls.at(-1).text, 'ROLLBACK');
+  assert.ok(!typed.calls.some((c) => c.text.includes('INSERT INTO "ForumThread"')));
+
+  // automatic slugs: the suffix search covers group slugs too (top-level boards only)
+  const auto = createFixture({ taken: ['stiegler'] });
+  const out = await createConcept(auto.q, { spaceId: SPACE, forumId: FORUM, actorUserId: U.member, label: 'Stiegler', definition: 'D' });
+  assert.equal(out.slug, 'stiegler-2');
+  const taken = auto.calls.find((c) => c.text.includes('SELECT slug FROM "Concept"'));
+  assert.match(taken.text, /UNION\s+SELECT slug FROM "ForumBoard" WHERE "spaceId" = \$1::uuid AND "parentId" IS NULL AND \(slug = \$2 OR slug LIKE \$3\)/);
+});
+
 function renameFixture({ holders = {}, failAlias = false, rows } = {}) {
   return fakeQuery([
     memberRoute,
@@ -711,6 +730,16 @@ test('renameConceptSlug: unchanged is a no-op; taken by another concept (live or
   const del = back.calls.find((c) => c.text.includes('DELETE FROM "ConceptSlugAlias"'));
   assert.deepEqual(del.params, [SPACE, 'old-name', C1]);
   assert.equal(back.calls.at(-1).text, 'COMMIT');
+
+  // a forum group's address: 409, nothing written
+  const group = fakeQuery([
+    [/SELECT 1 FROM "ForumBoard" WHERE "spaceId" = \$1::uuid AND "parentId" IS NULL AND slug = \$2/, ([, slug]) => (slug === 'stiegler' ? [{ x: 1 }] : [])],
+    ...renameFixture().routes,
+  ]);
+  await assert.rejects(renameConceptSlug(group.q, { conceptId: C1, actorUserId: U.admin, slug: 'stiegler' }),
+    (e) => e instanceof ConceptError && e.status === 409 && /forum address/.test(e.message));
+  assert.equal(group.calls.at(-1).text, 'ROLLBACK');
+  assert.ok(!group.calls.some((c) => c.text.includes('UPDATE "Concept" SET slug')));
 
   const dup = renameFixture({ failAlias: 'dup' });
   await rejectsStatus(renameConceptSlug(dup.q, { conceptId: C1, actorUserId: U.admin, slug: 'x-y' }), 409);

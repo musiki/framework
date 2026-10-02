@@ -35,7 +35,8 @@ export const getForumRef = (args: Parameters<typeof core.getForumRef>[1]) => cor
 export const authorizeOwnerLibraries = (args: Parameters<typeof core.authorizeOwnerLibraries>[1]) =>
   core.authorizeOwnerLibraries(poolQ, args);
 export const listForumsAdmin = (args: Parameters<typeof core.listForumsAdmin>[1]) => core.listForumsAdmin(poolQ, args);
-export const createForum = (args: Parameters<typeof core.createForum>[1]) => core.createForum(poolQ, args);
+/** One transaction on one client (the root slug check runs under the concepts' slug lock). */
+export const createForum = (args: Parameters<typeof core.createForum>[1]) => onClient((q) => core.createForum(q, args));
 export const updateForum = (args: Parameters<typeof core.updateForum>[1]) => core.updateForum(poolQ, args);
 export const reorderChannels = (args: Parameters<typeof core.reorderChannels>[1]) => core.reorderChannels(poolQ, args);
 export const listThreads = (args: Parameters<typeof core.listThreads>[1]) => core.listThreads(poolQ, args);

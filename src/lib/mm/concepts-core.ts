@@ -186,9 +186,30 @@ export function cleanCustomSlug(raw: unknown): string {
   return checked.slug;
 }
 
-/** Serializes slug allocation (create, rename) per space for the transaction's lifetime. */
+/**
+ * Serializes root slug allocation per space for the transaction's lifetime:
+ * concept create / rename, and forum group create (forum-core), since
+ * concepts and groups share the root namespace (/<slug>).
+ */
 const SLUG_LOCK_SQL = 'SELECT pg_advisory_xact_lock(hashtext($1))';
 const slugLockKey = (spaceId: string) => `mm-concept-slug:${spaceId}`;
+export const lockRootSlugs = (q: QueryFn, spaceId: string) => run(q, SLUG_LOCK_SQL, [slugLockKey(spaceId)]);
+
+/** The 409 message when a concept slug is a forum group's address (client-core slugErrorKind: 'forum'). */
+export const SLUG_IS_FORUM_MESSAGE = 'concept slug is a forum address';
+
+/**
+ * Whether a forum group of the space (archived ones too: they can come back)
+ * has `slug`: groups live at /<slug> like concepts, so a concept may not take it.
+ */
+async function groupHoldsSlug(q: QueryFn, spaceId: string, slug: string): Promise<boolean> {
+  const rows = await run(
+    q,
+    `SELECT 1 FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND "parentId" IS NULL AND slug = $2 LIMIT 1`,
+    [spaceId, slug],
+  );
+  return rows.length > 0;
+}
 
 /**
  * Whether `slug` is in use in the space: a live concept slug (any kind) or an
@@ -378,14 +399,18 @@ export async function createConcept(
       let slug: string;
       if (customSlug) {
         if (await slugHolder(q, spaceId, customSlug)) throw new ConceptError(409, 'concept slug already exists');
+        if (await groupHoldsSlug(q, spaceId, customSlug)) throw new ConceptError(409, SLUG_IS_FORUM_MESSAGE);
         slug = customSlug;
       } else {
-        // Live slugs and rename aliases are taken; reserved words never become automatic slugs.
+        // Live slugs, rename aliases and forum group slugs are taken; reserved
+        // words never become automatic slugs.
         const taken = await run(
           q,
           `SELECT slug FROM "Concept" WHERE "spaceId" = $1::uuid AND (slug = $2 OR slug LIKE $3)
            UNION
-           SELECT slug FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND (slug = $2 OR slug LIKE $3)`,
+           SELECT slug FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND (slug = $2 OR slug LIKE $3)
+           UNION
+           SELECT slug FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND "parentId" IS NULL AND (slug = $2 OR slug LIKE $3)`,
           [spaceId, base, `${base}-%`],
         );
         slug = uniqueSlug(base, [...taken.map((r: any) => r.slug), ...RESERVED_SLUGS]);
@@ -471,7 +496,7 @@ export type ConceptView = {
   forum: { id: string; slug: string; title: string } | null;
   /**
    * Where its discussion thread lives: the thread's group slug and, when the
-   * thread is in a channel, the channel (for /f/<group>/<channel>/t/<id>).
+   * thread is in a channel, the channel (for /<group>/<channel>/t/<id>).
    * Null when there is no thread (or it lost its board).
    */
   origin: { groupSlug: string; channel: { slug: string; title: string } | null } | null;
@@ -864,6 +889,7 @@ export async function renameConceptSlug(
       if (holder && !(holder.alias && holder.conceptId === concept.id)) {
         throw new ConceptError(409, 'concept slug already exists');
       }
+      if (await groupHoldsSlug(q, concept.spaceId, slug)) throw new ConceptError(409, SLUG_IS_FORUM_MESSAGE);
       if (holder) {
         await run(q, `DELETE FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND slug = $2 AND "conceptId" = $3::uuid`, [
           concept.spaceId, slug, concept.id,

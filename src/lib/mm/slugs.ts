@@ -68,6 +68,68 @@ export function isRootSlugPath(pathname: unknown): boolean {
   return isRootSlug(pathname.slice(1));
 }
 
+/**
+ * Channel slugs a channel can never have: /<group>/t/<thread id> is a thread
+ * of the group itself (forum-core re-exports this list).
+ */
+export const RESERVED_CHANNEL_SLUGS = ['t'] as const;
+
+/** Whether `slug` can be the second segment of a root board path (/<group>/<channel>). */
+export const isRootChannelSlug = (slug: unknown): slug is string =>
+  hasSlugFormat(slug) && slug.length <= ROUTE_SLUG_MAX && !(RESERVED_CHANNEL_SLUGS as readonly string[]).includes(slug);
+
+/** A thread id in a root path: a canonical (lowercase) uuid. */
+const ROUTE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * What a root path of the mm host names, by shape only (no database):
+ *   /<x>                         'slug'   a concept permalink or a forum group
+ *   /<group>/<channel>           'board'  a channel of a group
+ *   /<group>/t/<thread id>       'thread' a thread of the group itself
+ *   /<group>/<channel>/t/<id>    'thread' a thread of a channel
+ * The first segment is a root slug (isRootSlug: format, not reserved), the
+ * channel a root channel slug (not "t"), the thread id a lowercase uuid.
+ * Raw = still percent-encoded: any escape, uppercase letter, dot, empty
+ * segment ('//') or trailing slash fails, so only the canonical spelling routes.
+ */
+export type RootPath =
+  | { kind: 'slug'; slug: string }
+  | { kind: 'board'; group: string; channel: string }
+  | { kind: 'thread'; group: string; channel: string | null; thread: string };
+
+export function parseRootPath(pathname: unknown): RootPath | null {
+  if (typeof pathname !== 'string' || !pathname.startsWith('/') || pathname.length > 600) return null;
+  const parts = pathname.slice(1).split('/');
+  if (parts.length > 4 || parts.some((p) => p === '')) return null;
+  const [group, ...rest] = parts;
+  if (!isRootSlug(group)) return null;
+  if (rest.length === 0) return { kind: 'slug', slug: group };
+  if (rest.length === 1) return isRootChannelSlug(rest[0]) ? { kind: 'board', group, channel: rest[0] } : null;
+  if (rest.length === 2) {
+    return rest[0] === 't' && ROUTE_UUID_RE.test(rest[1]) ? { kind: 'thread', group, channel: null, thread: rest[1] } : null;
+  }
+  const [channel, t, thread] = rest;
+  return isRootChannelSlug(channel) && t === 't' && ROUTE_UUID_RE.test(thread) ? { kind: 'thread', group, channel, thread } : null;
+}
+
+/** Whether a raw request pathname has one of the root shapes (parseRootPath). */
+export const isRootPath = (pathname: unknown): boolean => parseRootPath(pathname) !== null;
+
+/**
+ * What a one-segment root path /<x> shows, given what the space holds under
+ * that slug: a live concept first (existing permalinks keep their meaning),
+ * else a forum group, else a concept's rename alias (301 to the concept),
+ * else nothing (404). Concept and group slugs share the namespace and are
+ * kept apart on write (concepts-core, forum-core); this order only decides
+ * for data that predates that rule.
+ */
+export function resolveRootSlug(held: { concept: boolean; group: boolean; alias: boolean }): 'concept' | 'group' | 'alias' | 'none' {
+  if (held.concept) return 'concept';
+  if (held.group) return 'group';
+  if (held.alias) return 'alias';
+  return 'none';
+}
+
 export type SlugProblem = 'required' | 'format' | 'length' | 'reserved';
 
 /**

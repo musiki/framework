@@ -7,7 +7,7 @@
 
 import { mmApi, errorText, pageStrings, ApiFailure } from './api.ts';
 import { adminErrorKind, libraryPickerOptions, type PickerLibrary } from '../../lib/mm/client-core.ts';
-import { formatDate } from '../../lib/mm/view.ts';
+import { formatDate, forumPath } from '../../lib/mm/view.ts';
 
 type Role = 'admin' | 'curator' | 'member' | 'guest';
 const ALL_ROLES: Role[] = ['admin', 'curator', 'member', 'guest'];
@@ -57,6 +57,8 @@ function errorMessage(err: unknown): string {
     if (kind === 'lastAdmin') return S('members.lastAdmin');
     if (kind === 'self') return S('members.self');
     if (kind === 'slugTaken') return S('forums.slugTaken');
+    if (kind === 'slugConcept') return S('forums.slugConcept');
+    if (kind === 'slugReserved') return S('forums.slugReserved');
   }
   return errorText(err);
 }
@@ -614,7 +616,7 @@ function initForums(): void {
       if (add.getAttribute('aria-expanded') === 'true') return close();
       const form = cloneForm(channelTpl, `-${n}`);
       form.setAttribute('aria-label', S('forums.addChannelLabel', { title: group.title }));
-      form.querySelector<HTMLElement>('[data-channel-slug-help]')!.textContent = S('forums.channelSlugHelp', { group: group.slug });
+      form.querySelector<HTMLElement>('[data-channel-slug-help]')!.textContent = S('forums.channelSlugHelp', { group: forumPath(group.slug) });
       const picker = attachLibraryPicker(form);
       form.querySelector<HTMLDetailsElement>('[data-bib-override]')!.addEventListener('toggle', () => void picker.refresh());
       form.querySelector<HTMLButtonElement>('[data-cancel]')!.addEventListener('click', () => {
@@ -720,12 +722,9 @@ function initForums(): void {
     const title = h('p', { class: 'mm-admin-forum-title' }, h('strong', { text: forum.title }));
     if (forum.isArchived) title.append(' ', h('span', { class: 'mm-badge mm-badge-quiet', text: S('forums.archived') }));
     const meta = h('p', { class: 'mm-meta' });
-    const address = group
-      ? S('forums.channelAddress', { group: group.slug, slug: forum.slug })
-      : S('forums.address', { slug: forum.slug });
-    const href = group
-      ? `/f/${encodeURIComponent(group.slug)}/${encodeURIComponent(forum.slug)}`
-      : `/f/${encodeURIComponent(forum.slug)}`;
+    // The public path is the address (a root path, or /f/… for a slug that cannot live at the root).
+    const href = group ? forumPath(group.slug, forum.slug) : forumPath(forum.slug);
+    const address = href;
     meta.append(forum.isArchived || group?.isArchived
       ? h('span', { text: address })
       : h('a', { href, text: address }));

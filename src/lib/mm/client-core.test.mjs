@@ -51,6 +51,10 @@ test('admin 409 reasons map to their own messages', () => {
   assert.equal(adminErrorKind(409, 'the space must keep at least one admin'), 'lastAdmin');
   assert.equal(adminErrorKind(409, 'you cannot change or remove your own membership'), 'self');
   assert.equal(adminErrorKind(409, 'a forum with this slug already exists'), 'slugTaken');
+  assert.equal(adminErrorKind(409, 'this address is used by a concept'), 'slugConcept');
+  assert.equal(adminErrorKind(400, '"help" is a reserved word and cannot be a forum address'), 'slugReserved');
+  assert.equal(adminErrorKind(400, 'invalid slug'), null);
+  assert.equal(slugErrorKind(409, 'concept slug is a forum address'), 'forum');
   assert.equal(adminErrorKind(409, 'something else'), null);
   assert.equal(adminErrorKind(400, 'the space must keep at least one admin'), null);
   assert.equal(adminErrorKind(409, undefined), null);

@@ -16,10 +16,11 @@
 // (forum.ts binds musiki's renderForumMarkdown: KaTeX, LilyPond, @citekey).
 
 import { can, type MmAction } from './policy.ts';
-import { forumBibliographyKey, getCommonsRole, withTransaction, type QueryFn } from './concepts-core.ts';
+import { forumBibliographyKey, getCommonsRole, lockRootSlugs, withTransaction, type QueryFn } from './concepts-core.ts';
 import { isUuid, isValidEmail, normalizeEmail, type CommonsRole } from '../tenant/space-roles.ts';
 import { slugify } from '../site/frontmatter.ts';
 import { publicName } from './view.ts';
+import { RESERVED_CHANNEL_SLUGS, isReservedSlug } from './slugs.ts';
 
 export type { QueryFn };
 
@@ -309,8 +310,8 @@ export function effectiveSettings(own: unknown, parent: unknown): ForumSettings 
   return out;
 }
 
-/** Reserved channel slug: /f/<group>/t/<thread> is a thread of the group itself. */
-export const RESERVED_CHANNEL_SLUGS = ['t'] as const;
+/** Reserved channel slug: /<group>/t/<thread> is a thread of the group itself (slugs.ts). */
+export { RESERVED_CHANNEL_SLUGS };
 
 /** What anyone may see about a forum's bibliography: never the owner email or library id. */
 export function publicSettings(raw: unknown): { zoteroCollection: string | null; hasBibliography: boolean } {
@@ -436,7 +437,7 @@ export async function getForum(q: QueryFn, { spaceId, slug }: { spaceId: string;
 
 /**
  * Public: a group by slug and optionally one of its channels by slug (the
- * path /f/<group>[/<channel>]). Null when the group is missing/archived, or
+ * path /<group>[/<channel>]). Null when the group is missing/archived, or
  * when `channel` is given and is not an active channel OF THAT GROUP.
  */
 export async function getForumByPath(
@@ -553,7 +554,11 @@ export async function listForumsAdmin(
  * Curators/admins: a top-level forum ("group"), or — with `parentId` — a
  * channel of a group. One level only: the parent must be an active top-level
  * forum of the space. Slugs are unique among siblings (groups per space,
- * channels per group); the channel slug "t" is reserved. A channel's
+ * channels per group); the channel slug "t" is reserved. A group lives at
+ * the root (/<slug>), a namespace it shares with the concepts: its slug is
+ * never a reserved word (400) nor a live concept's slug or rename alias (409,
+ * checked under the concepts' slug lock — `q` must be one client).
+ * One transaction. A channel's
  * bibliography override is checked against the settings it would otherwise
  * inherit (a curator cannot pair a library id with a group owner that is not
  * theirs).
@@ -583,6 +588,9 @@ export async function createForum(
     parent = await loadSpaceForum(q, spaceId, input.parentId);
     if (parent.parentId) throw new ForumError(400, 'channels cannot have channels');
     if (isReservedChannelSlug(slug)) throw new ForumError(400, `the channel slug "${slug}" is reserved`);
+  } else if (isReservedSlug(slug)) {
+    // A group lives at the root (/<slug>), like a concept: never a reserved word.
+    throw new ForumError(400, `"${slug.slice(0, 40)}" is a reserved word and cannot be a forum address`);
   }
   await assertBibliographyAllowed(q, role, input.actorUserId as string, patch, {
     own: {}, parent: parent ? parent.settings ?? {} : null,
@@ -590,22 +598,38 @@ export async function createForum(
   const settings: ForumSettings = {};
   for (const [k, v] of Object.entries(patch)) if (v) settings[k as ForumSettingsKey] = v;
 
-  const taken = await run(
-    q,
-    `SELECT id FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND slug = $2 AND "parentId" IS NOT DISTINCT FROM $3::uuid LIMIT 1`,
-    [spaceId, slug, parent?.id ?? null],
-  );
-  if (taken.length) throw new ForumError(409, parent ? 'a channel with this slug already exists in this forum' : 'a forum with this slug already exists');
   try {
-    const rows = await run(
-      q,
-      `INSERT INTO "ForumBoard" ("spaceId", slug, title, description, "createdByUserId", settings, "parentId")
-       VALUES ($1::uuid, $2, $3, $4, $5::uuid, $6::jsonb, $7::uuid)
-       RETURNING ${ADMIN_COLUMNS}`,
-      [spaceId, slug, title, description, input.actorUserId, JSON.stringify(settings), parent?.id ?? null],
-    );
-    if (!rows.length) throw new ForumError(500, 'forum insert returned nothing');
-    return toAdminView(rows[0]);
+    return await withTransaction(q, async () => {
+      if (!parent) {
+        // Groups and concepts share the root (/<slug>): under the concepts'
+        // slug lock, a live concept or a rename alias keeps its address.
+        await lockRootSlugs(q, spaceId);
+        const held = await run(
+          q,
+          `SELECT 1 FROM "Concept" WHERE "spaceId" = $1::uuid AND slug = $2 AND kind = 'concept'
+           UNION ALL
+           SELECT 1 FROM "ConceptSlugAlias" WHERE "spaceId" = $1::uuid AND slug = $2
+           LIMIT 1`,
+          [spaceId, slug],
+        );
+        if (held.length) throw new ForumError(409, 'this address is used by a concept');
+      }
+      const taken = await run(
+        q,
+        `SELECT id FROM "ForumBoard" WHERE "spaceId" = $1::uuid AND slug = $2 AND "parentId" IS NOT DISTINCT FROM $3::uuid LIMIT 1`,
+        [spaceId, slug, parent?.id ?? null],
+      );
+      if (taken.length) throw new ForumError(409, parent ? 'a channel with this slug already exists in this forum' : 'a forum with this slug already exists');
+      const rows = await run(
+        q,
+        `INSERT INTO "ForumBoard" ("spaceId", slug, title, description, "createdByUserId", settings, "parentId")
+         VALUES ($1::uuid, $2, $3, $4, $5::uuid, $6::jsonb, $7::uuid)
+         RETURNING ${ADMIN_COLUMNS}`,
+        [spaceId, slug, title, description, input.actorUserId, JSON.stringify(settings), parent?.id ?? null],
+      );
+      if (!rows.length) throw new ForumError(500, 'forum insert returned nothing');
+      return toAdminView(rows[0]);
+    });
   } catch (err) {
     if (isUniqueViolation(err)) throw new ForumError(409, 'a forum with this slug already exists');
     if ((err as { code?: unknown })?.code === '23514') throw new ForumError(400, 'invalid channel');
