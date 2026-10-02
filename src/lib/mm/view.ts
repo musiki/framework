@@ -155,14 +155,18 @@ export function forumCrumbs(b: BoardRef & { title: string }, current: string | n
 export const conceptPath = (slug: string) => (isRootSlug(slug) ? `/${slug}` : `/c/${encodeURIComponent(slug)}`);
 
 /**
- * Where an old URL of a concept's discussion thread goes: the concept page
- * with the request's query kept and from=thread added (no fragment).
+ * Where an old URL of an item's discussion thread goes: the item's page
+ * (`path`, a same-origin path built from a validated slug) with the request's
+ * query kept and from=thread added (no fragment).
  */
-export function conceptThreadRedirect(slug: string, search = ''): string {
+export function threadRedirect(path: string, search = ''): string {
   const params = new URLSearchParams(search);
   params.set('from', 'thread');
-  return `${conceptPath(slug)}?${params.toString()}`;
+  return `${path}?${params.toString()}`;
 }
+
+/** The concept page for an old URL of its discussion thread (threadRedirect). */
+export const conceptThreadRedirect = (slug: string, search = '') => threadRedirect(conceptPath(slug), search);
 
 /**
  * A user's name as it may appear publicly: trimmed, and never anything that

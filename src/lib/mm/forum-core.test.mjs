@@ -445,6 +445,16 @@ test('listPosts: rendered bodies, moves, votes, adopted marker, display names on
   assert.ok(!/u\.email/.test(sel.text), 'never selects User.email');
 });
 
+test('listPosts: a relation type definition thread names its type (never alongside a concept)', async () => {
+  const rt = await listPosts(postsDb({ conceptSlug: null, conceptLabel: null, relationTypeSlug: 'contains', relationTypeLabel: 'contains' }).q, {
+    spaceId: SPACE, threadId: THREAD,
+  });
+  assert.equal(rt.thread.concept, null);
+  assert.deepEqual(rt.thread.relationType, { slug: 'contains', label: 'contains' });
+  const plain = await listPosts(postsDb().q, { spaceId: SPACE, threadId: THREAD });
+  assert.equal(plain.thread.relationType, null);
+});
+
 test('listPosts: moderators see hidden bodies; anonymous gets read-only view', async () => {
   const mod = await listPosts(postsDb().q, { spaceId: SPACE, threadId: THREAD, viewerUserId: U.curator });
   assert.equal(mod.posts[1].body, 'Hidden reply');

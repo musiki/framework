@@ -159,6 +159,13 @@ test('groupByDay: consecutive versions of the same UTC day share a group, order 
   assert.equal(dayKey(null), '');
 });
 
+test('threadRedirect: any item page (e.g. a relation type) + query kept + from=thread', async () => {
+  const { threadRedirect } = await import('./view.ts');
+  assert.equal(threadRedirect('/r/contains'), '/r/contains?from=thread');
+  assert.equal(threadRedirect('/r/contains', '?lang=nb&threads=type'), '/r/contains?lang=nb&threads=type&from=thread');
+  assert.doesNotMatch(threadRedirect('/r/a', '?q=%23x'), /#/);
+});
+
 test('conceptThreadRedirect: permalink + query kept + from=thread, never a fragment', () => {
   assert.equal(conceptThreadRedirect('pharmakon'), '/pharmakon?from=thread');
   assert.equal(conceptThreadRedirect('pharmakon', '?lang=nb'), '/pharmakon?lang=nb&from=thread');

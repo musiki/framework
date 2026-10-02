@@ -869,6 +869,8 @@ export type ThreadView = {
     /** The thread's board (a group or a channel) and, for a channel, its group. */
     forum: (ForumRef & { parent: ForumRef | null }) | null;
     concept: { slug: string; label: string } | null;
+    /** The relation type whose definition this thread discusses (its page /r/<slug> carries it). */
+    relationType: { slug: string; label: string } | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -929,7 +931,8 @@ export async function listPosts(
             (b."isArchived" OR COALESCE(pb."isArchived", false)) AS "forumArchived",
             b.settings AS "forumSettings",
             pb.id AS "parentId", pb.slug AS "parentSlug", pb.title AS "parentTitle", pb.settings AS "parentSettings",
-            c.slug AS "conceptSlug", c.label AS "conceptLabel"
+            c.slug AS "conceptSlug", c.label AS "conceptLabel",
+            rtype.slug AS "relationTypeSlug", rtype.label AS "relationTypeLabel"
      FROM "ForumThread" t
      LEFT JOIN "User" u ON u.id = t."createdByUserId"
      LEFT JOIN "ForumBoard" b ON b.id = t."boardId" AND b."spaceId" = t."spaceId"
@@ -939,6 +942,11 @@ export async function listPosts(
        WHERE c."threadId" = t.id AND c."spaceId" = t."spaceId" AND c.kind = 'concept'
        ORDER BY c."createdAt" ASC, c.id ASC LIMIT 1
      ) c ON true
+     LEFT JOIN LATERAL (
+       SELECT rt.slug, rt.label FROM "Concept" rc JOIN "RelationType" rt ON rt."conceptId" = rc.id
+       WHERE rc."threadId" = t.id AND rc."spaceId" = t."spaceId" AND rc.kind = 'relation-type'
+       ORDER BY rc."createdAt" ASC, rc.id ASC LIMIT 1
+     ) rtype ON true
      WHERE t.id = $1::uuid AND t."spaceId" = $2::uuid
      LIMIT 1`,
     [threadId, spaceId],
@@ -1032,6 +1040,7 @@ export async function listPosts(
           }
         : null,
       concept: t.conceptSlug ? { slug: t.conceptSlug, label: t.conceptLabel } : null,
+      relationType: !t.conceptSlug && t.relationTypeSlug ? { slug: t.relationTypeSlug, label: t.relationTypeLabel } : null,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
     },

@@ -3,7 +3,9 @@
 // the space's vocabulary. Label / other way, the sample of its encoding,
 // logical properties, mappings, usage count, the definition (ONLY through the
 // core's sanitized `definitionHtml`, same renderer as concepts) with its
-// credited versions, the link to its discussion thread, and the relations of
+// credited versions, its discussion (the type's definition thread, shown and
+// answered here with MmThreadPosts, like a concept page's Discussion; the
+// thread's own URLs 301 here, lib/mm/board-pages.ts), and the relations of
 // this type (links to the concepts, agreement totals only). Curators/admins:
 // edit the type (MmRelationTypeForm) and write a new definition version
 // (PATCH /api/mm/relation-types/<slug> {definition, lang}). Archived types
@@ -13,11 +15,14 @@ import MmLayout from '../../../layouts/MmLayout.astro';
 import MmStatus from '../../../components/mm/MmStatus.astro';
 import MmRelationSample from '../../../components/mm/MmRelationSample.astro';
 import MmRelationTypeForm from '../../../components/mm/MmRelationTypeForm.astro';
+import MmThreadPosts from '../../../components/mm/MmThreadPosts.astro';
 import { t } from '../../../lib/i18n';
 import { applyMmLang, langSwitchHref } from '../../../lib/mm/ui-lang';
 import { can } from '../../../lib/mm/policy';
 import { loadMmViewer, logPageError, type MmViewer } from '../../../lib/mm/page-data';
-import { clientStrings } from '../../../lib/mm/page-strings';
+import { threadClientStrings } from '../../../lib/mm/page-strings';
+import { listPosts, type ThreadView } from '../../../lib/mm/forum';
+import { FOLD_DEFAULT_OPEN, sectionId } from '../../../lib/mm/fold';
 import {
   getRelationType, listRelationsOfType, type RelationTypeDetail, type TypeRelationItem,
 } from '../../../lib/mm/relation-types';
@@ -25,7 +30,7 @@ import { TYPE_RELATIONS_LIMIT } from '../../../lib/mm/relation-types-core';
 import { typeInverse, typeLabel, typePath } from '../../../lib/mm/relation-type-ui';
 import { propertyNames, sampleDescription } from '../../../lib/mm/relation-type-text';
 import {
-  conceptLabel, conceptPath, definitionExcerpt, displayName, formatDate, pickDefinition, threadPath, pageErrorState,
+  conceptLabel, conceptPath, definitionExcerpt, displayName, formatDate, pickDefinition, pageErrorState,
 } from '../../../lib/mm/view';
 export const prerender = false;
 
@@ -37,6 +42,7 @@ let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
 let viewer: MmViewer | null = null;
 let type: RelationTypeDetail | null = null;
 let relations: TypeRelationItem[] = [];
+let discussion: ThreadView | null = null;
 
 if (!isMm || !slug || slug.length > 48) state = 'notFound';
 else {
@@ -44,7 +50,19 @@ else {
     viewer = await loadMmViewer(Astro.locals);
     type = await getRelationType({ spaceId: viewer.space.id, slug, viewerUserId: viewer.userId, lang });
     if (!type) state = 'notFound';
-    else relations = await listRelationsOfType({ spaceId: viewer.space.id, slug: type.slug });
+    else {
+      const c = type.concept;
+      const [rels, thread] = await Promise.all([
+        listRelationsOfType({ spaceId: viewer.space.id, slug: type.slug }),
+        // listPosts is null for an archived thread or board: the discussion is closed.
+        c?.threadId && !c.originArchived
+          ? listPosts({ spaceId: viewer.space.id, threadId: c.threadId, viewerUserId: viewer.userId, lang })
+          : Promise.resolve(null),
+      ]);
+      relations = rels;
+      // Only the type's own definition thread is shown as its discussion.
+      discussion = thread && thread.thread.relationType?.slug === type.slug ? thread : null;
+    }
   } catch (err) {
     logPageError('relation-type', err);
     state = pageErrorState(err);
@@ -63,15 +81,12 @@ const props = type ? propertyNames(lang, type) : [];
 const concept = type?.concept ?? null;
 const pick = concept ? pickDefinition(concept.current, lang) : null;
 const shown = pick?.version ?? null;
-// Not linked when the thread's board is archived (its pages are 404s).
-const discussion = concept?.threadId && concept.origin && !concept.originArchived
-  ? threadPath(concept.origin.groupSlug, concept.threadId, concept.origin.channel?.slug ?? null)
-  : null;
+const hasThread = Boolean(concept?.threadId);
 const langName = (l: string | null) =>
   l === 'nb' ? t(lang, 'mm.common.langNb') : l === 'nn' ? t(lang, 'mm.common.langNn') : t(lang, 'mm.common.langEn');
 const selfPath = type ? typePath(type.slug) : '/';
 const apiSlug = type ? encodeURIComponent(type.slug) : '';
-const strings = clientStrings(lang);
+const strings = threadClientStrings(lang, null);
 const editData = type ? JSON.stringify({
   slug: type.slug, label: type.label, labelNb: type.labelNb, inverseLabel: type.inverseLabel, inverseLabelNb: type.inverseLabelNb,
   render: type.render, stroke: type.stroke, arrow: type.arrow, color: type.color, symmetric: type.symmetric,
@@ -146,8 +161,24 @@ const editData = type ? JSON.stringify({
         )}
         {pick?.alternate === 'nb' && <p><a href={langSwitchHref(selfPath, 'nb')} hreflang="nb" lang="nb">{t(lang, 'mm.concept.readNb')}</a></p>}
         {pick?.alternate === 'en' && <p><a href={langSwitchHref(selfPath, 'en')} hreflang="en" lang="en">{t(lang, 'mm.concept.readEn')}</a></p>}
-        {discussion && <p><a class="mm-more" href={discussion}>{t(lang, 'mm.relationType.discussionLink')}</a></p>}
       </section>
+
+      {hasThread && (
+        <details class="mm-fold mm-rt-discussion" id={sectionId('discussion')} data-mm-fold="discussion" open={FOLD_DEFAULT_OPEN.discussion}>
+          <summary><h2>{t(lang, 'mm.relationType.discussionTitle')}{discussion && <span class="mm-fold-count"> · {discussion.posts.filter((p) => p.status === 'published').length}</span>}</h2></summary>
+          <div class="mm-fold-body">
+            {discussion ? (
+              <>
+                <p class="mm-help">{t(lang, 'mm.relationType.discussionLead')}</p>
+                {discussion.thread.isLocked && <p class="mm-note">{t(lang, 'mm.thread.locked')}</p>}
+                <MmThreadPosts lang={lang} view={discussion} level={3} />
+              </>
+            ) : (
+              <p class="mm-muted">{t(lang, 'mm.relationType.discussionClosed')}</p>
+            )}
+          </div>
+        </details>
+      )}
 
       {canManage && concept && (
         <section aria-labelledby="mm-rt-edit-def" class="mm-panel">
@@ -241,5 +272,8 @@ const editData = type ? JSON.stringify({
 
 <script>
   import '../../../scripts/mm/forms.ts';
+  import '../../../scripts/mm/composer.ts';
+  import '../../../scripts/mm/thread.ts';
+  import '../../../scripts/mm/fold.ts';
   import '../../../scripts/mm/relation-types.ts';
 </script>
