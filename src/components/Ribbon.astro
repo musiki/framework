@@ -5,6 +5,7 @@ import { isElevatedGlobalRole } from '../lib/roles';
 import { buildCourseHref } from '../lib/course-routing';
 import { getSession } from 'auth-astro/server';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { t } from '../lib/i18n';
 
 interface Props {
   courseId?: string;
@@ -56,7 +57,11 @@ let ribbonAvatarSource = ribbonUserImage
 const hasVivo = Boolean(performativeRoomHref);
 const badgeLabel = activeCourseCode.slice(0, 4) || '···';
 const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseId)}` : '/dashboard';
-const brand = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).brand;
+const tenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
+const brand = tenant.brand;
+const locale = tenant.locale;
+// The UNTREF / public-university button and its modal belong to musiki only.
+const showUntref = tenant.id === 'musiki';
 const docsBaseUrl = String(brand.docsUrl).replace(/\/$/, '');
 
 // Get all courses from the content collection
@@ -131,7 +136,7 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
 <nav class="ribbon" aria-label="Navegación principal">
 
   <!-- Brand logo -->
-  <a href="/" class="ribbon-item ribbon-item--logo" aria-label="musiki26 — inicio" title="Inicio">
+  <a href="/" class="ribbon-item ribbon-item--logo" aria-label={t(locale, 'ribbon.homeLabel', { name: brand.logoAlt })} title={t(locale, 'ribbon.home')}>
     <img src={brand.logo} alt={brand.logoAlt} />
     <span class="ribbon-beacon" aria-hidden="true"></span>
   </a>
@@ -248,8 +253,8 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
       type="button"
       class="ribbon-item ribbon-item--mobile-visible ribbon-mobile-primary ribbon-mobile-primary--forum"
       data-sidebar-toggle="right"
-      aria-label="Foro"
-      title="Foro"
+      aria-label={t(locale, 'header.forum')}
+      title={t(locale, 'header.forum')}
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -261,8 +266,8 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
   {!isPublicReaderMode && (
     <span
       class="ribbon-item ribbon-item--inactive"
-      aria-label="Actividad (próximamente)"
-      title="Actividad (próximamente)"
+      aria-label={t(locale, 'ribbon.activitySoon')}
+      title={t(locale, 'ribbon.activitySoon')}
       aria-disabled="true"
     >
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -279,8 +284,8 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     type="button"
     class="ribbon-item"
     id="ribbon-theme-toggle"
-    aria-label="Cambiar tema"
-    title="Cambiar tema claro/oscuro"
+    aria-label={t(locale, 'ribbon.changeTheme')}
+    title={t(locale, 'ribbon.changeThemeTitle')}
   >
     <!-- sun (shown in dark mode) -->
     <svg class="ribbon-theme-sun" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -297,8 +302,8 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     type="button"
     class="ribbon-item ribbon-item--circle"
     data-page-info-toggle
-    aria-label="Info y metadatos"
-    title="Info (⌘/Ctrl + i)"
+    aria-label={t(locale, 'ribbon.infoMetadata')}
+    title={t(locale, 'ribbon.infoTitle')}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
@@ -311,8 +316,8 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     type="button"
     class="ribbon-item ribbon-item--circle"
     data-progress-toggle
-    aria-label="Progreso del recorrido"
-    title="Progreso (recorrido)"
+    aria-label={t(locale, 'ribbon.progressPath')}
+    title={t(locale, 'ribbon.progressTitle')}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <circle cx="6" cy="18" r="2.4" stroke="currentColor" stroke-width="2"/>
@@ -422,7 +427,7 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
       type="button"
       class="ribbon-item ribbon-item--tuning"
       id="ribbon-tuning-btn"
-      aria-label="Abrir Centauro (Microafinación)"
+      aria-label={t(locale, 'ribbon.openCentauro')}
       title="Centauro"
     >
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto;">
@@ -435,7 +440,8 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
   <div class="ribbon-spacer"></div>
   <div class="ribbon-divider"></div>
 
-  <!-- UNTREF / Universidad Pública -->
+  <!-- UNTREF / Universidad Pública (musiki only) -->
+  {showUntref && (
   <div class="ribbon-untref-container">
     <button
       type="button"
@@ -448,6 +454,7 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
       <img src="/logos/logo-untref.svg" alt="UNTREF" class="ribbon-untref-logo" />
     </button>
   </div>
+  )}
 
   <!-- Course switcher badge/dropdown trigger -->
   {!isPublicReaderMode && (
@@ -455,21 +462,22 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
       type="button"
       class="ribbon-item ribbon-item--badge"
       id="ribbon-courses-btn"
-      aria-label={`Mis cursos — curso activo: ${badgeLabel}`}
+      aria-label={t(locale, 'ribbon.myCoursesActive', { code: badgeLabel })}
       aria-haspopup="listbox"
       aria-expanded="false"
-      title="Mis cursos"
+      title={t(locale, 'ribbon.myCourses')}
     >
       {badgeLabel}
     </button>
   )}
 
   <!-- About -->
-  <a href="/about" class="ribbon-about" aria-label="Acerca de musiki26">·</a>
+  <a href="/about" class="ribbon-about" aria-label={t(locale, 'ribbon.about', { name: brand.logoAlt })}>·</a>
 
 </nav>
 
-<!-- Modal for Universidad Pública -->
+<!-- Modal for Universidad Pública (musiki only) -->
+{showUntref && (
 <dialog id="untref-modal" class="untref-modal">
   <div class="untref-modal-content">
     <div class="untref-modal-header">
@@ -480,11 +488,12 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     </div>
   </div>
 </dialog>
+)}
 
 <!-- Course switcher menu -->
 {!isPublicReaderMode && (
   <div class="ribbon-courses-menu" id="ribbon-courses-menu" role="listbox">
-    <div class="ribbon-courses-menu-header">Mis Cursos</div>
+    <div class="ribbon-courses-menu-header">{t(locale, 'ribbon.myCoursesHeader')}</div>
     <div class="ribbon-courses-list">
       {userCourses.map(c => (
         <a href={c.href} class={`ribbon-courses-item ${c.id === courseId ? 'is-active' : ''}`} role="option" aria-selected={c.id === courseId}>
@@ -493,11 +502,11 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
         </a>
       ))}
       {userCourses.length === 0 && (
-        <span class="ribbon-courses-menu-empty">No tienes cursos activos</span>
+        <span class="ribbon-courses-menu-empty">{t(locale, 'ribbon.noActiveCourses')}</span>
       )}
     </div>
     <div class="ribbon-courses-menu-footer">
-      <a href="/cursos">Ver todos los cursos</a>
+      <a href="/cursos">{t(locale, 'ribbon.viewAllCourses')}</a>
     </div>
   </div>
 )}

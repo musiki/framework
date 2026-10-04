@@ -8,8 +8,11 @@ import { execSync } from 'node:child_process';
 import { SignOut } from 'auth-astro/components';
 import { getSession } from 'auth-astro/server';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { t } from '../lib/i18n';
 
-const brand = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).brand;
+const tenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
+const brand = tenant.brand;
+const locale = tenant.locale;
 
 const buildCommit = (() => {
   try {
@@ -191,7 +194,7 @@ const resolvedActiveCourseId = normalizeCourseId(
 	activeCourseIdFromCandidates || resolvedActiveCourse?.courseId || '',
 );
 const resolvedActiveCourseLabel = resolvedActiveCourse?.title || '';
-const courseMenuLabel = resolvedActiveCourseLabel || 'Cursos';
+const courseMenuLabel = resolvedActiveCourseLabel || t(locale, 'header.courses');
 const activeCourseHref = resolvedActiveCourse
 	? `/${encodeCoursePath(resolvedActiveCourse.pathSegment || resolvedActiveCourse.courseId)}`
 	: '/cursos';
@@ -218,8 +221,8 @@ const withActiveCourse = (href: string) => {
 				href="/"
 				id="header-brand-link"
 				class="brand-link"
-				title="musiki26"
-				aria-label="musiki26"
+				title={brand.logoAlt}
+				aria-label={brand.logoAlt}
 				data-build-state="unknown"
 				data-commit={buildCommit}
 			>
@@ -227,8 +230,8 @@ const withActiveCourse = (href: string) => {
 			</a>
 		</h2>
 		<div class="internal-links">
-			<HeaderLink href="/about">Acerca</HeaderLink>
-			{user && <HeaderLink href={withActiveCourse('/dashboard')}>Dashboard</HeaderLink>}
+			<HeaderLink href="/about">{t(locale, 'header.about')}</HeaderLink>
+			{user && <HeaderLink href={withActiveCourse('/dashboard')}>{t(locale, 'header.dashboard')}</HeaderLink>}
 			{
 				user && (
 					enrolledCourses.length > 0 ? (
@@ -239,7 +242,7 @@ const withActiveCourse = (href: string) => {
 								id="course-menu-trigger-label"
 								aria-haspopup="menu"
 								aria-expanded="false"
-								aria-label={resolvedActiveCourseLabel ? `Ir a ${resolvedActiveCourseLabel}` : 'Ir a Cursos'}
+								aria-label={resolvedActiveCourseLabel ? t(locale, 'header.goTo', { name: resolvedActiveCourseLabel }) : t(locale, 'header.goToCourses')}
 							>
 								<span class="course-menu-trigger-label">{courseMenuLabel}</span>
 							</a>
@@ -249,7 +252,7 @@ const withActiveCourse = (href: string) => {
 								id="course-menu-button"
 								aria-haspopup="menu"
 								aria-expanded="false"
-								aria-label={resolvedActiveCourseLabel ? `Abrir selector de cursos. Curso activo: ${resolvedActiveCourseLabel}` : 'Abrir selector de cursos'}
+								aria-label={resolvedActiveCourseLabel ? t(locale, 'header.openCoursesSelectorActive', { name: resolvedActiveCourseLabel }) : t(locale, 'header.openCoursesSelector')}
 							>
 								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 									<polyline points="6 9 12 15 18 9"></polyline>
@@ -268,7 +271,7 @@ const withActiveCourse = (href: string) => {
 							</div>
 						</div>
 					) : (
-						<HeaderLink href="/cursos">Cursos</HeaderLink>
+						<HeaderLink href="/cursos">{t(locale, 'header.courses')}</HeaderLink>
 					)
 				)
 			}
@@ -278,10 +281,10 @@ const withActiveCourse = (href: string) => {
 						id="header-right-sidebar-toggle"
 						type="button"
 						class="header-forum-toggle"
-						title="Abrir foros (⌘/Ctrl + Shift + \\)"
-						aria-label="Abrir foros"
+						title={`${t(locale, 'header.openForums')} (⌘/Ctrl + Shift + \\\\)`}
+						aria-label={t(locale, 'header.openForums')}
 					>
-						Foro
+						{t(locale, 'header.forum')}
 					</button>
 				) : null
 			}
@@ -292,8 +295,8 @@ const withActiveCourse = (href: string) => {
 					<button
 						id="presentation-toggle"
 						class="presentation-toggle-btn"
-						title="Abrir presentacion (Ctrl+E)"
-						aria-label="Abrir presentacion"
+						title={`${t(locale, 'header.openPresentation')} (Ctrl+E)`}
+						aria-label={t(locale, 'header.openPresentation')}
 						data-href={normalizedPresentationHref}
 					>
 						<svg viewBox="0 0 24 24" aria-hidden="true" width="24" height="24">
@@ -315,8 +318,8 @@ const withActiveCourse = (href: string) => {
 									id="header-live-interaction-toggle"
 									type="button"
 									class="header-activity-led-btn header-activity-led-btn--interaction"
-									title="Abrir interacción en vivo"
-									aria-label="Abrir interacción en vivo"
+									title={t(locale, 'header.liveInteraction')}
+									aria-label={t(locale, 'header.liveInteraction')}
 									data-course-id={resolvedActiveCourseId}
 									hidden
 								>
@@ -327,8 +330,8 @@ const withActiveCourse = (href: string) => {
 									id="performative-room-toggle"
 									type="button"
 									class="header-activity-led-btn header-activity-led-btn--room"
-									title="Abrir sala performativa (Alt+Shift+L)"
-									aria-label="Abrir sala performativa"
+									title={`${t(locale, 'header.openRoom')} (Alt+Shift+L)`}
+									aria-label={t(locale, 'header.openRoom')}
 									data-course-id={resolvedActiveCourseId}
 									data-fallback-href={normalizedPerformativeRoomHref}
 									data-href={normalizedPerformativeRoomHref}
@@ -346,15 +349,15 @@ const withActiveCourse = (href: string) => {
 			<div
 				class="online-users-bar"
 				data-online-users-bar
-				aria-label="Usuarios online"
+				aria-label={t(locale, 'header.onlineUsers')}
 			></div>
-			<button id="graph-toggle" class="graph-toggle-btn" title="Mostrar grafo de conocimiento ⌘G">
+			<button id="graph-toggle" class="graph-toggle-btn" title={`${t(locale, 'header.knowledgeGraph')} ⌘G`}>
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
 					<path d="M11 19.5a8.5 8.5 0 1 1 5.23-15.52l-1.06 1.06a6.5 6.5 0 1 0-3.17 12.46l-1 1zM12.5 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm13 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
 				</svg>
 			</button>
 
-				<button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
+				<button id="theme-toggle" class="theme-toggle" aria-label={t(locale, 'header.toggleTheme')}>
 				<svg class="sun" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
 					<path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"/>
 				</svg>
@@ -366,8 +369,8 @@ const withActiveCourse = (href: string) => {
 				<button
 					id="page-info-toggle"
 					class="page-info-toggle-btn"
-					title="Mostrar informacion de la pagina"
-					aria-label="Mostrar informacion de la pagina"
+					title={t(locale, 'header.pageInfo')}
+					aria-label={t(locale, 'header.pageInfo')}
 				>
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
 						<path fill-rule="evenodd" d="M2.25 12a9.75 9.75 0 1119.5 0 9.75 9.75 0 01-19.5 0zM11.25 10.5a.75.75 0 011.5 0v5.25a.75.75 0 01-1.5 0V10.5zM12 8.25a.937.937 0 100-1.875.937.937 0 000 1.875z" clip-rule="evenodd" />
@@ -383,7 +386,7 @@ const withActiveCourse = (href: string) => {
 							type="button"
 							aria-haspopup="menu"
 							aria-expanded="false"
-							aria-label={user.name || user.email || 'Cuenta'}
+							aria-label={user.name || user.email || t(locale, 'header.account')}
 						>
 							{
 								user.image ? (
@@ -400,13 +403,13 @@ const withActiveCourse = (href: string) => {
 							</svg>
 						</button>
 						<div class="user-dropdown" id="user-dropdown">
-							<a href={withActiveCourse('/dashboard')}>Dashboard</a>
-							<a href="/dashboard">Notas</a>
-							<SignOut class="logout-button">Cerrar Sesión</SignOut>
+							<a href={withActiveCourse('/dashboard')}>{t(locale, 'header.dashboard')}</a>
+							<a href="/dashboard">{t(locale, 'header.notes')}</a>
+							<SignOut class="logout-button">{t(locale, 'header.signOut')}</SignOut>
 						</div>
 					</div>
 				) : (
-					<a href={loginHref}>Login</a>
+					<a href={loginHref}>{t(locale, 'header.login')}</a>
 				)}
 			</div>
 		</div>
@@ -674,7 +677,7 @@ const withActiveCourse = (href: string) => {
 		if (!(brandLink instanceof HTMLAnchorElement)) return;
 
 		const buildCommit = brandLink.dataset.commit || '';
-		const defaultTitle = brandLink.title || 'musiki26';
+		const defaultTitle = brandLink.title || '';
 		let lastState = brandLink.dataset.buildState || 'unknown';
 		let intervalId = 0;
 		let controller: AbortController | null = null;
@@ -711,7 +714,7 @@ const withActiveCourse = (href: string) => {
 			if (state === 'ok') return `Última sincronización correcta${details}`;
 			if (state === 'error') return `Última sincronización con error${details}`;
 			if (state === 'idle') return `Sincronización sin cambios${details}`;
-			return commitPart ? `musiki26 · ${commitPart}` : '';
+			return commitPart && defaultTitle ? `${defaultTitle} · ${commitPart}` : '';
 		};
 
 		const applyPayload = (payload: Record<string, unknown>) => {

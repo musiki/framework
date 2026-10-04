@@ -1,5 +1,5 @@
 import type { Locale } from '../tenant/tenants.ts';
-import { en, type Dict } from './en.ts';
+import { en, type Dict, type DeepPartial } from './en.ts';
 import { es } from './es.ts';
 import { fr } from './fr.ts';
 import { nb } from './nb.ts';
@@ -13,7 +13,6 @@ export type { Dict };
 
 // fr and nb are partial; every missing key falls back to en.
 // nb covers only the mm namespace; every other key falls back to en.
-type DeepPartial<T> = { [K in keyof T]?: T[K] extends string ? string : DeepPartial<T[K]> };
 const DICTS: Partial<Record<Locale, DeepPartial<Dict>>> = { en, es, fr, nb };
 
 function lookup(dict: unknown, key: string): string | undefined {
