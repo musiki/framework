@@ -85,8 +85,6 @@ jobs:
 
       # repository_dispatch from HEM-Multimedia-Master/internetmusic -> hem only;
       # any other dispatch -> musiki only; push / workflow_dispatch -> both.
-      # repository_dispatch from HEM-Multimedia-Master/internetmusic -> hem only;
-      # any other dispatch -> musiki only; push / workflow_dispatch -> both.
       # HEM_DISPATCH is the same expression as the concurrency group, so a run
       # deploys musiki only when it sits in the musiki (content-sync) group.
       - name: Select instances to deploy
