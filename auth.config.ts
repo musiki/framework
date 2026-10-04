@@ -3,8 +3,7 @@ import { defineConfig } from "auth-astro";
 import { buildLogtoHemProvider } from "./src/lib/auth-providers";
 import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
 import { query } from "./src/lib/db/pool";
-import { tenantForAuthProvider, findTenantByHost } from "./src/lib/tenant/resolve";
-import { DEFAULT_TENANT_ID } from "./src/lib/tenant/tenants";
+import { findTenantByHost, signInTenantFor } from "./src/lib/tenant/resolve";
 import { authorizeTenantSignIn, isForeignTenantOnlyUser } from "./src/lib/tenant/access-db";
 
 // Astro/Vite will inject these, but we fallback to process.env for Node contexts
@@ -187,8 +186,10 @@ export default defineConfig({
         return false;
       }
 
-      const providerTenant = tenantForAuthProvider(account?.provider);
-      if (providerTenant && providerTenant.id !== DEFAULT_TENANT_ID) {
+      // Limited tenants (so, mm) authorize via spaces/invites; full-route
+      // tenants (musiki, hem) use the account lookup below.
+      const providerTenant = signInTenantFor(account?.provider);
+      if (providerTenant) {
         try {
           return await authorizeTenantSignIn(providerTenant.id, {
             email,

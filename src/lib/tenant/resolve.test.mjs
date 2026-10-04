@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TENANTS } from './tenants.ts';
 import {
-  normalizeHost, findTenantByHost, resolveTenant, tenantForAuthProvider, isAuthProviderAllowed,
+  normalizeHost, findTenantByHost, resolveTenant, tenantForAuthProvider, isAuthProviderAllowed, signInTenantFor,
 } from './resolve.ts';
 
 test('normalizeHost lowercases, strips port, trailing dot and forwarded lists', () => {
@@ -81,4 +81,12 @@ test('musiki brand values are unchanged', () => {
   assert.equal(b.logoAlt, 'musiki26');
   assert.equal(b.helpLabel, 'Ayuda Musiki');
   assert.equal(b.docsUrl, 'https://doc.musiki.org.ar');
+});
+
+test('signInTenantFor: full-route tenants use the account path, limited tenants the space path', () => {
+  for (const provider of ['logto', 'google', 'authentik', 'logto-hem', 'unknown', undefined]) {
+    assert.equal(signInTenantFor(provider), null, String(provider));
+  }
+  assert.equal(signInTenantFor('logto-so')?.id, 'so');
+  assert.equal(signInTenantFor('logto-mm')?.id, 'mm');
 });

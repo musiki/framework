@@ -31,3 +31,15 @@ export function tenantForAuthProvider(providerId: string | undefined): Tenant | 
 export function isAuthProviderAllowed(tenant: Tenant, providerId: string): boolean {
   return tenant.authProviders.includes(providerId);
 }
+
+/**
+ * Which sign-in authorization a provider goes through. Full-route tenants
+ * (musiki, hem: routes === "all") use the account path (UserEmail/User
+ * lookup); limited tenants (so, mm) use space/invite authorization. Unknown
+ * providers fall back to the account path, as before.
+ */
+export function signInTenantFor(providerId: string | undefined): Tenant | null {
+  const tenant = tenantForAuthProvider(providerId);
+  if (!tenant || tenant.routes === 'all') return null;
+  return tenant;
+}
