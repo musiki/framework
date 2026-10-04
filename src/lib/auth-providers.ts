@@ -1,5 +1,15 @@
 type Env = Record<string, string | undefined>;
 
+// Whether a tenant Logto provider (logto-<tenant>) is registered in
+// auth.config.ts, i.e. LOGTO_ISSUER_URL and LOGTO_<TENANT>_CLIENT_ID are set.
+// Other providers (musiki's) are not judged here and count as configured.
+export function isTenantAuthProviderConfigured(providerId: string | undefined, env: Env | ((key: string) => string | undefined)): boolean {
+  const get = typeof env === "function" ? env : (key: string) => env[key];
+  const match = /^logto-([a-z0-9]+)$/.exec(String(providerId ?? ''));
+  if (!match) return true;
+  return Boolean(get("LOGTO_ISSUER_URL") && get(`LOGTO_${match[1].toUpperCase()}_CLIENT_ID`));
+}
+
 // hem tenant Logto client. Included only when its client id is configured.
 // ui_locales is hem-only (French), so the other providers stay untouched.
 export function buildLogtoHemProvider(env: Env) {

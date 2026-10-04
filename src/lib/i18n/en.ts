@@ -305,6 +305,7 @@ export const en = {
     signIn: 'Sign in',
     enter: 'Enter {name}',
     google: 'Sign in with Google',
+    notConfigured: 'Sign-in is not configured yet.',
   },
   courses: {
     title: 'Courses',

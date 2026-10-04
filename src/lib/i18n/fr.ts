@@ -87,6 +87,7 @@ export const fr: DeepPartial<Omit<Dict, 'mm'>> = {
     signIn: 'Se connecter',
     enter: 'Entrer dans {name}',
     google: 'Se connecter avec Google',
+    notConfigured: 'La connexion n’est pas encore configurée.',
   },
   courses: {
     title: 'Cours',

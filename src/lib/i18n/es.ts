@@ -306,6 +306,7 @@ export const es: Dict = {
     signIn: 'Iniciar sesión',
     enter: 'Entrar a {name}',
     google: 'Acceder con Google',
+    notConfigured: 'El inicio de sesión todavía no está configurado.',
   },
   courses: {
     title: 'Cursos',
