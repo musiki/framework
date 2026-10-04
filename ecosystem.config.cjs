@@ -15,7 +15,7 @@ if (fs.existsSync(envPath)) {
 
 // Instance: .env first, then the calling process env (the deploy workflow
 // exports MUSIKI_INSTANCE=hem). An empty value (`MUSIKI_INSTANCE=`) counts as unset.
-const setting = (key) => String(dotEnv[key] ?? process.env[key] ?? '').trim();
+const setting = (key) => String(dotEnv[key] || process.env[key] || '').trim();
 const instance = setting('MUSIKI_INSTANCE') || 'musiki';
 if (!['musiki', 'hem'].includes(instance)) {
   throw new Error(`[ecosystem] Unknown MUSIKI_INSTANCE "${instance}" (expected musiki or hem)`);

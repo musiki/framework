@@ -104,6 +104,13 @@ test('ecosystem config: MUSIKI_INSTANCE from the process env', () => {
   assert.deepStrictEqual(cfg.apps.map((a) => a.name), ['hem-engine', 'hem-engine-content-bus']);
 });
 
+test('ecosystem config: an empty MUSIKI_INSTANCE in .env does not hide the process env', () => {
+  const cfg = loadConfigWithEnv('MUSIKI_INSTANCE=\n', { MUSIKI_INSTANCE: 'hem' });
+  assert.deepStrictEqual(cfg.apps.map((a) => a.name), ['hem-engine', 'hem-engine-content-bus']);
+  const musiki = loadConfigWithEnv('MUSIKI_INSTANCE=\n');
+  assert.strictEqual(musiki.apps[0].name, 'musiki-framework');
+});
+
 test('ecosystem config: musiki names and ports ignore .env and the process env', () => {
   const cfg = loadConfigWithEnv(
     'DATABASE_URL=postgresql://u:p@h:5432/musiki26\nPORT=9999\nPM2_APP_NAME=x-app\nPM2_BUS_APP_NAME=x-bus\nPM2_DEV_APP_NAME=x-dev\n',
