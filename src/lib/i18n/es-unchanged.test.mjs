@@ -42,6 +42,23 @@ const ROWS = [
   ["ribbon.noActiveCourses", "No tienes cursos activos"],
   ["ribbon.viewAllCourses", "Ver todos los cursos"],
   ["ribbon.about", {"name": "musiki26"}, "Acerca de musiki26"],
+  ["home.resumeCourse", "Continuar Curso"],
+  ["home.resumeWith", {"title": "armonía i"}, "Continuar con armonía i"],
+  ["home.openBrowser", {"name": "Musiki"}, "Abrir Musiki en tu navegador"],
+  ["home.orDownload", "o descarga la aplicación nativa"],
+  ["home.searchPlaceholder", "Buscar contenidos..."],
+  ["home.searchLabel", "Buscar contenidos públicos"],
+  ["home.featured", "destacados"],
+  ["home.commentCount", {"count": 3}, "3 comentarios"],
+  ["home.goToCourse", "Ir al curso público"],
+  ["home.privacy", "Política de privacidad"],
+  ["home.terms", "Términos del servicio"],
+  ["login.title", "Login"],
+  ["login.description", "Inicia sesión para acceder a tus cursos."],
+  ["login.heading", "Iniciar Sesión"],
+  ["login.signIn", "Iniciar sesión"],
+  ["login.enter", {"name": "Musiki"}, "Entrar a Musiki"],
+  ["login.google", "Acceder con Google"],
 ];
 
 test('es: localized screen strings equal the Spanish literals they replaced', () => {

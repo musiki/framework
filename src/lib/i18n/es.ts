@@ -282,6 +282,27 @@ export const es: Dict = {
     viewAllCourses: 'Ver todos los cursos',
     about: 'Acerca de {name}',
   },
+  home: {
+    resumeCourse: 'Continuar Curso',
+    resumeWith: 'Continuar con {title}',
+    openBrowser: 'Abrir {name} en tu navegador',
+    orDownload: 'o descarga la aplicación nativa',
+    searchPlaceholder: 'Buscar contenidos...',
+    searchLabel: 'Buscar contenidos públicos',
+    featured: 'destacados',
+    commentCount: '{count} comentarios',
+    goToCourse: 'Ir al curso público',
+    privacy: 'Política de privacidad',
+    terms: 'Términos del servicio',
+  },
+  login: {
+    title: 'Login',
+    description: 'Inicia sesión para acceder a tus cursos.',
+    heading: 'Iniciar Sesión',
+    signIn: 'Iniciar sesión',
+    enter: 'Entrar a {name}',
+    google: 'Acceder con Google',
+  },
   // mm (MishMash Concept Machine) has no Spanish UI; English keeps the Dict type complete.
   mm: mmEn,
 };

@@ -6,6 +6,11 @@ import { safeGetCollection } from '../lib/safe-content-collection';
 import { isCourseIndexEntry, getCourseEntryCourseId, buildCourseHref } from '../lib/course-routing';
 import { getContentCanonicalSlug } from '../lib/content-slug';
 import { query } from '../lib/db/pool';
+import { t } from '../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+
+const tenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
+const locale = tenant.locale;
 
 const hasSearchSession = Boolean(Astro.locals.session?.user);
 
@@ -176,7 +181,7 @@ const courseItems = rawCursos
 const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.getTime() - a.date.getTime());
 ---
 
-<html lang="es" class="musiki-continuous-canvas">
+<html lang={locale} class="musiki-continuous-canvas">
   <head>
     <BaseHead
       title="musiki"
@@ -663,7 +668,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
-            <span id="resume-course-label">Continuar Curso</span>
+            <span id="resume-course-label" data-resume-with={t(locale, 'home.resumeWith')}>{t(locale, 'home.resumeCourse')}</span>
           </a>
 
           <!-- Web App Button -->
@@ -673,10 +678,10 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
               <line x1="2" y1="12" x2="22" y2="12"></line>
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
             </svg>
-            <span>Abrir Musiki en tu navegador</span>
+            <span>{t(locale, 'home.openBrowser', { name: tenant.brand.name })}</span>
           </a>
 
-          <div class="welcome-divider" id="welcome-download-divider">o descarga la aplicación nativa</div>
+          <div class="welcome-divider" id="welcome-download-divider">{t(locale, 'home.orDownload')}</div>
 
           <div class="download-platforms" id="welcome-download-platforms">
             <a href="/download/musiki-mac.dmg" class="btn-download" title="Descargar para macOS">
@@ -740,7 +745,8 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
             if (lastCourse && lastCourse.title && lastCourse.slug) {
               if (btnResume && resumeLabel) {
                 btnResume.href = lastCourse.slug;
-                resumeLabel.textContent = `Continuar con ${lastCourse.title.toLowerCase()}`;
+                const resumeWith = resumeLabel.dataset.resumeWith || 'Continuar con {title}';
+                resumeLabel.textContent = resumeWith.replace('{title}', () => lastCourse.title.toLowerCase());
                 btnResume.style.display = 'inline-flex';
               }
             }
@@ -764,10 +770,10 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
             type="search"
             class="home-search-input"
             id="home-search-input"
-            placeholder="Buscar contenidos..."
+            placeholder={t(locale, 'home.searchPlaceholder')}
             autocomplete="off"
             spellcheck="false"
-            aria-label="Buscar contenidos públicos"
+            aria-label={t(locale, 'home.searchLabel')}
             aria-controls="home-search-results"
             aria-autocomplete="list"
           />
@@ -783,7 +789,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
 
       {featuredItems.length > 0 && (
         <section class="mosaic-section">
-          <h2 class="mosaic-title">destacados</h2>
+          <h2 class="mosaic-title">{t(locale, 'home.featured')}</h2>
           <div class="mosaic-grid">
             {featuredItems.map((item) => (
               <a class="mosaic-card" href={item.slug.replace(/^\/cursos\//, '/')}>
@@ -800,7 +806,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
                   <h3 class="mosaic-card-title">{item.title}</h3>
                   <div class="mosaic-meta">
                     <time datetime={item.date.toISOString()}>{item.dateHuman}</time>
-                    <span class="mosaic-comments-count" title={`${item.commentCount} comentarios`}>
+                    <span class="mosaic-comments-count" title={t(locale, 'home.commentCount', { count: item.commentCount })}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; opacity:0.8;">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                       </svg>
@@ -810,7 +816,7 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
                   <p class="mosaic-desc">{item.description}</p>
                   {item.isCourse && (
                     <div class="mosaic-footer">
-                      <span class="mosaic-course-link">Ir al curso público</span>
+                      <span class="mosaic-course-link">{t(locale, 'home.goToCourse')}</span>
                     </div>
                   )}
                 </div>
@@ -821,8 +827,8 @@ const featuredItems = [...contentItems, ...courseItems].sort((a, b) => b.date.ge
       )}
 
       <div class="legal-links">
-        <a href="/privacy">Política de privacidad</a>
-        <a href="/terms">Términos del servicio</a>
+        <a href="/privacy">{t(locale, 'home.privacy')}</a>
+        <a href="/terms">{t(locale, 'home.terms')}</a>
       </div>
     </main>
 

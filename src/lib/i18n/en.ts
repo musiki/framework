@@ -281,6 +281,27 @@ export const en = {
     viewAllCourses: 'View all courses',
     about: 'About {name}',
   },
+  home: {
+    resumeCourse: 'Resume course',
+    resumeWith: 'Continue with {title}',
+    openBrowser: 'Open {name} in your browser',
+    orDownload: 'or download the native app',
+    searchPlaceholder: 'Search content...',
+    searchLabel: 'Search public content',
+    featured: 'featured',
+    commentCount: '{count} comments',
+    goToCourse: 'Go to the public course',
+    privacy: 'Privacy policy',
+    terms: 'Terms of service',
+  },
+  login: {
+    title: 'Log in',
+    description: 'Sign in to access your courses.',
+    heading: 'Sign in',
+    signIn: 'Sign in',
+    enter: 'Enter {name}',
+    google: 'Sign in with Google',
+  },
   mm: mmEn,
 } as const;
 
