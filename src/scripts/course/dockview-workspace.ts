@@ -240,8 +240,16 @@ function escAttr(s: string) {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Tenant brand values are rendered by Ribbon.astro on the help button.
+function helpButton(): HTMLElement | null {
+  return typeof document === 'undefined' ? null : document.getElementById('ribbon-help-btn');
+}
+function brandHelpLabel(): string {
+  return helpButton()?.dataset.helpLabel || 'Ayuda Musiki';
+}
+
 function resolveDocsUrl(pathOrUrl = '/pods/ayuda-contextual/'): string {
-  const configuredBase = String(import.meta.env.PUBLIC_DOCS_URL || 'https://doc.musiki.org.ar').trim();
+  const configuredBase = String(helpButton()?.dataset.docsUrl || import.meta.env.PUBLIC_DOCS_URL || 'https://doc.musiki.org.ar').trim();
   const fallbackBase = configuredBase || 'https://doc.musiki.org.ar';
   const raw = String(pathOrUrl || '/pods/ayuda-contextual/').trim() || '/pods/ayuda-contextual/';
   try {
@@ -1286,7 +1294,7 @@ export function initDockviewWorkspace(
     });
   }
 
-  function openHelp(path = '/pods/ayuda-contextual/', title = 'Ayuda Musiki', split = false): void {
+  function openHelp(path = '/pods/ayuda-contextual/', title = brandHelpLabel(), split = false): void {
     const url = resolveDocsUrl(path);
     const existing = dockview.getGroupPanel('musiki-help');
     if (existing && !split) {
@@ -1540,7 +1548,7 @@ export function initDockviewWorkspace(
 
   window.addEventListener('musiki:open-help', (e: Event) => {
     const ev = e as CustomEvent<{ path?: string; title?: string; split?: boolean }>;
-    openHelp(ev.detail?.path || '/pods/ayuda-contextual/', ev.detail?.title || 'Ayuda Musiki', ev.detail?.split ?? false);
+    openHelp(ev.detail?.path || '/pods/ayuda-contextual/', ev.detail?.title || brandHelpLabel(), ev.detail?.split ?? false);
   }, { signal });
 
   // Cleanup on panel removal

@@ -6,12 +6,15 @@ type Props = {
 };
 
 const { isTeacher = false, isExternal = false } = Astro.props;
+import { TENANTS, DEFAULT_TENANT_ID } from '../../../lib/tenant/tenants';
+
+const brand = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).brand;
 ---
 
 <div class="conference-welcome-modal" data-welcome-modal hidden>
   <div class="conference-welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-modal-title">
     <header class="conference-welcome-header">
-      <img src="/logo-musiki.png" alt="Musiki" class="welcome-logo" />
+      <img src={brand.logo} alt={brand.name} class="welcome-logo" />
       <h2 id="welcome-modal-title">Configuración de Sala</h2>
     </header>
 

@@ -5,6 +5,7 @@ import SetupModal from "./room/panels/setup/SetupModal.astro";
 import WelcomeModal from "./room/overlays/WelcomeModal.astro";
 import StageFrame from "./room/stage/StageFrame.astro";
 import StageOverlays from "./room/overlays/StageOverlays.astro";
+import { TENANTS, DEFAULT_TENANT_ID } from "../lib/tenant/tenants";
 import type { RoomPresentationOption } from "../lib/live/presentation-options";
 
 type Props = {
@@ -59,6 +60,7 @@ if (
     value: defaultPresentation,
   });
 }
+const brand = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).brand;
 ---
 
 <div
@@ -710,7 +712,7 @@ if (
       <form data-external-invite-form>
         <div class="conference-invite-brand" aria-hidden="true">
           <img
-            src="/logo-musiki.png"
+            src={brand.logo}
             alt=""
             class="conference-invite-brand-logo"
           />
