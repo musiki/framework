@@ -25,7 +25,18 @@ DEPLOY_LOCK_TIMEOUT="${VPS_DEPLOY_LOCK_TIMEOUT:-900}"
 # (.env LILYPOND_ASSET_DIR, default /opt/musiki/data/lily in production).
 LILYPOND_ASSET_DIR="${LILYPOND_ASSET_DIR:-/opt/musiki/data/lily}"
 
+# assemble-content / watch-content read MUSIKI_INSTANCE from the process env
+# only, so take it from the instance's .env when the caller did not set it
+# (content-bus redeploys). Only that one line is read; nothing else from .env.
+if [[ -z "${MUSIKI_INSTANCE:-}" && -f "$FRAMEWORK_DIR/.env" ]]; then
+  MUSIKI_INSTANCE="$( (grep -E '^MUSIKI_INSTANCE=' "$FRAMEWORK_DIR/.env" || true) | tail -n 1 | cut -d= -f2- | tr -d "\"' \r")"
+fi
+if [[ -n "${MUSIKI_INSTANCE:-}" ]]; then
+  export MUSIKI_INSTANCE
+fi
+
 printf '\n[framework] Deploying in %s\n' "$FRAMEWORK_DIR"
+printf '[framework] Instance: %s\n' "${MUSIKI_INSTANCE:-musiki}"
 printf '[framework] Content source strategy: %s\n' "$CONTENT_SOURCE_STRATEGY"
 
 if command -v flock >/dev/null 2>&1; then

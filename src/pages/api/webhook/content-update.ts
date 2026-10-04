@@ -21,7 +21,8 @@ export const POST: APIRoute = async ({ request }) => {
       console.warn(`[Astro Bridge] Payload is not JSON`);
     }
     
-    const busUrl = 'http://127.0.0.1:4322/webhook/content-update';
+    // Each instance runs its own bus (musiki 4322, hem 4334; set by ecosystem.config.cjs).
+    const busUrl = `http://127.0.0.1:${process.env.CONTENT_BUS_PORT || 4322}/webhook/content-update`;
     
     console.log(`[Astro Bridge] Forwarding webhook to Content Bus at ${busUrl}...`);
     console.log(`[Astro Bridge] Payload: ${JSON.stringify(payload)}`);

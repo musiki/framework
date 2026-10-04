@@ -16,8 +16,11 @@ on:
 permissions:
   contents: read
 
+# One group per instance: a hem content dispatch must never cancel an
+# in-flight musiki deploy (and vice versa). Pushes deploy both and stay in the
+# musiki group, as before.
 concurrency:
-  group: content-sync
+  group: ${{ (github.event_name == 'repository_dispatch' && contains(github.event.client_payload.source_repo, 'HEM-Multimedia-Master/internetmusic')) && 'content-sync-hem' || 'content-sync' }}
   cancel-in-progress: true
 
 env:
@@ -78,7 +81,30 @@ jobs:
         with:
           node-version: 24
 
+      # repository_dispatch from HEM-Multimedia-Master/internetmusic -> hem only;
+      # any other dispatch -> musiki only; push / workflow_dispatch -> both.
+      - name: Select instances to deploy
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          target="$(printf '%s' "$CONTENT_SOURCE_TARGET_REPO" | tr '[:upper:]' '[:lower:]' | sed -E 's#^(https?://github\.com/|git@github\.com:)##; s#\.git$##; s#^/+##')"
+          musiki=true
+          hem=true
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            if [[ "$target" == "hem-multimedia-master/internetmusic" ]]; then
+              musiki=false
+            else
+              hem=false
+            fi
+          fi
+          echo "musiki=$musiki" >> "$GITHUB_OUTPUT"
+          echo "hem=$hem" >> "$GITHUB_OUTPUT"
+          echo "[scope] event=$EVENT_NAME target=${target:-none} musiki=$musiki hem=$hem"
+
       - name: Sync checked-out framework into runtime dir
+        if: ${{ steps.scope.outputs.musiki == 'true' }}
         run: |
           mkdir -p "$VPS_FRAMEWORK_DIR"
 
@@ -96,13 +122,66 @@ jobs:
             "$GITHUB_WORKSPACE/" "$VPS_FRAMEWORK_DIR/"
 
       - name: Zero Downtime Deploy on VPS
+        if: ${{ steps.scope.outputs.musiki == 'true' }}
         run: |
           cd "$VPS_FRAMEWORK_DIR"
           bash scripts/vps/deploy-framework-local.sh
 
       - name: Reload Content Bus Sidecar
+        if: ${{ steps.scope.outputs.musiki == 'true' }}
         run: |
           cd "$VPS_FRAMEWORK_DIR"
           export PATH="$PATH:$(npm config get prefix)/bin"
           pm2 reload ecosystem.config.cjs --only musiki-content-bus --update-env || pm2 start ecosystem.config.cjs --only musiki-content-bus
+          pm2 save
+
+      # --- hem instance (/opt/hem/engine) -------------------------------------
+      # Runs after the musiki steps so a hem failure can never undo a musiki
+      # deploy. Skipped (with a notice) until /opt/hem/engine/.env exists.
+      - name: Check hem instance is provisioned
+        id: hem
+        if: ${{ steps.scope.outputs.hem == 'true' }}
+        continue-on-error: false
+        shell: bash
+        run: |
+          if [[ -f /opt/hem/engine/.env ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=hem deploy skipped::/opt/hem/engine/.env is missing; provision the hem instance to enable hem deploys"
+          fi
+
+      - name: Sync checked-out framework into hem runtime dir
+        if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
+        continue-on-error: false
+        run: |
+          mkdir -p /opt/hem/engine
+
+          rsync -a --delete \
+            --exclude '.env' \
+            --exclude '.git' \
+            --exclude '.astro' \
+            --exclude '.content-sources' \
+            --exclude 'node_modules' \
+            --exclude '.tmp' \
+            --exclude 'src/content' \
+            --exclude 'dist' \
+            --exclude 'dist_tmp' \
+            --exclude 'dist_old' \
+            "$GITHUB_WORKSPACE/" /opt/hem/engine/
+
+      - name: Zero Downtime Deploy hem on VPS
+        if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
+        continue-on-error: false
+        run: |
+          cd /opt/hem/engine && MUSIKI_INSTANCE=hem VPS_FRAMEWORK_DIR=/opt/hem/engine VPS_DEPLOY_LOCK_FILE=/tmp/hem-engine-deploy.lock LILYPOND_ASSET_DIR=/opt/hem/data/lily VPS_RELOAD_COMMAND="pm2 reload ecosystem.config.cjs --only hem-engine --update-env || pm2 start ecosystem.config.cjs --only hem-engine --update-env" bash scripts/vps/deploy-framework-local.sh
+
+      - name: Reload hem Content Bus Sidecar
+        if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
+        continue-on-error: false
+        run: |
+          cd /opt/hem/engine
+          export PATH="$PATH:$(npm config get prefix)/bin"
+          export MUSIKI_INSTANCE=hem
+          pm2 reload ecosystem.config.cjs --only hem-engine-content-bus --update-env || pm2 start ecosystem.config.cjs --only hem-engine-content-bus
           pm2 save

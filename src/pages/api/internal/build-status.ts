@@ -93,7 +93,7 @@ export const GET: APIRoute = async () => {
     let githubBody: Record<string, unknown> | null = null;
 
     // 1. Try to fetch from LOCAL Content Bus
-    const busResponse = await fetch('http://127.0.0.1:4322/status').catch(() => null);
+    const busResponse = await fetch(`http://127.0.0.1:${process.env.CONTENT_BUS_PORT || 4322}/status`).catch(() => null);
     
     if (busResponse && busResponse.ok) {
       const busStatus = await busResponse.json();
