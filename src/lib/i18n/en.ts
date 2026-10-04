@@ -83,6 +83,10 @@ export const en = {
       tags: 'Tags',
     },
   },
+  content: {
+    languageAria: 'Content language',
+    languageLabel: 'language',
+  },
   roles: {
     author: 'Author',
     supervisor: 'Supervisor',

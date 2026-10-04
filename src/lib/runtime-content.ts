@@ -23,6 +23,7 @@ import remarkWikiLink from '../plugins/remark-wiki-link.mjs';
 import remarkLily from '../plugins/remark-lily.mjs';
 import remarkRemoteLilypond from '../plugins/remark-remote-lilypond.mjs';
 import remarkCoverBlock from '../plugins/remark-cover-block.mjs';
+import remarkLanguageBlocks from '../plugins/remark-language-blocks.mjs';
 import remarkStrudelBlocks from '../plugins/remark-strudel-blocks.mjs';
 import rehypeLazyYouTube from '../plugins/rehype-lazy-youtube.mjs';
 import remarkObsidianHighlight from '../plugins/remark-obsidian-highlight.mjs';
@@ -45,6 +46,7 @@ export async function renderRuntimeMarkdown(rawContent: string, id = '') {
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkLanguageBlocks)
     .use(slugMathRemark)
     .use(remarkMath)
     .use(remarkCoverBlock)

@@ -17,6 +17,7 @@ import remarkDataviewLite from './src/plugins/remark-dataview-lite.mjs'
 import remarkWikiLink from './src/plugins/remark-wiki-link.mjs'
 import remarkLily from './src/plugins/remark-lily.mjs'
 import remarkCoverBlock from './src/plugins/remark-cover-block.mjs'
+import remarkLanguageBlocks from './src/plugins/remark-language-blocks.mjs'
 import remarkStrudelBlocks from './src/plugins/remark-strudel-blocks.mjs'
 import rehypeLazyYouTube from './src/plugins/rehype-lazy-youtube.mjs'
 import rehypeCodeSyntax from './src/plugins/rehype-code-syntax.mjs'
@@ -138,6 +139,7 @@ export default defineConfig({
     },
     remarkPlugins: [
       remarkGfm,
+      remarkLanguageBlocks,   // <!--lang:fr/en--> -> alternable blocks (inert without markers)
       remarkDefCallout,       // inserta el def del frontmatter como callout [!def]
       remarkCoverBlock,
       slugMathRemark,         // primero traducís $<

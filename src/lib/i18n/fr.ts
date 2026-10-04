@@ -23,6 +23,10 @@ export const fr: DeepPartial<Omit<Dict, 'mm'>> = {
     commentsTitle: 'Commentaires',
     cancelBtn: 'Annuler',
   },
+  content: {
+    languageAria: 'Langue du contenu',
+    languageLabel: 'langue',
+  },
   header: {
     about: 'À propos',
     dashboard: 'Tableau de bord',

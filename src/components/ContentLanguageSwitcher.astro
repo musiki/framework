@@ -1,0 +1,202 @@
+---
+import {
+  CONTENT_TRANSLATION_LANGS,
+  CONTENT_TRANSLATION_LABELS,
+  type ContentTranslationLang,
+} from '../lib/content-language';
+import { t } from '../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+
+const {
+  availableLanguages = [],
+  defaultLanguage = 'en',
+} = Astro.props as {
+  availableLanguages?: ContentTranslationLang[];
+  defaultLanguage?: ContentTranslationLang;
+};
+
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
+const languages = availableLanguages.filter((lang, index, list) => list.indexOf(lang) === index);
+---
+
+{languages.length > 1 && (
+<section
+  class="content-language-switcher"
+  data-content-language-switcher
+  data-default-lang={defaultLanguage}
+  data-langs={CONTENT_TRANSLATION_LANGS.join(',')}
+  aria-label={t(locale, 'content.languageAria')}
+>
+  <span class="content-language-switcher-label">{t(locale, 'content.languageLabel')}</span>
+  <div class="content-language-switcher-options">
+    {languages.map((lang) => (
+      <button
+        type="button"
+        class="content-language-switcher-option"
+        data-content-language-option
+        data-lang={lang}
+        aria-pressed="false"
+      >
+        {CONTENT_TRANSLATION_LABELS[lang]}
+      </button>
+    ))}
+  </div>
+</section>
+)}
+
+<script>
+  const CONTENT_LANGS = ['fr', 'en'];
+  const STORAGE_KEY = 'musiki:content-language';
+
+  const normalizeContentLang = (value) => {
+    const lang = String(value || '').trim().toLowerCase();
+    return CONTENT_LANGS.includes(lang) ? lang : '';
+  };
+
+  const getSwitcherDefaultLang = () => {
+    const switcher = document.querySelector('[data-content-language-switcher]');
+    return normalizeContentLang(switcher?.getAttribute('data-default-lang')) || 'en';
+  };
+
+  const getRequestedContentLang = () => {
+    const params = new URLSearchParams(window.location.search);
+    const explicit = normalizeContentLang(params.get('lang'));
+    if (explicit) return explicit;
+    for (const lang of CONTENT_LANGS) {
+      if (params.has(lang)) return lang;
+    }
+    try {
+      const stored = normalizeContentLang(window.localStorage.getItem(STORAGE_KEY));
+      if (stored) return stored;
+    } catch {}
+    return getSwitcherDefaultLang();
+  };
+
+  const updateContentLanguageUrl = (lang) => {
+    const url = new URL(window.location.href);
+    for (const key of CONTENT_LANGS) url.searchParams.delete(key);
+    url.searchParams.set('lang', lang);
+    window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  const applyContentLanguage = (lang = getRequestedContentLang()) => {
+    const defaultLang = getSwitcherDefaultLang();
+    const defaultBlockExists = Boolean(document.querySelector('.musiki-i18n-block.musiki-i18n-default'));
+    const matchingBlockExists = Boolean(
+      document.querySelector(`.musiki-i18n-block:not(.musiki-i18n-default)[data-translation-block="${lang}"]`),
+    );
+
+    document.querySelectorAll('.musiki-i18n-block').forEach((block) => {
+      const blockLang = block.getAttribute('data-translation-block');
+      const isDefault = block.classList.contains('musiki-i18n-default');
+
+      if (isDefault) {
+        block.hidden = lang !== defaultLang && matchingBlockExists;
+        return;
+      }
+
+      block.hidden = defaultBlockExists
+        ? lang === defaultLang || blockLang !== lang
+        : blockLang !== lang;
+    });
+
+    document.querySelectorAll('[data-content-language-option]').forEach((button) => {
+      const active = button.getAttribute('data-lang') === lang;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    document.documentElement.dataset.contentLang = lang;
+    document.documentElement.lang = lang;
+  };
+
+  const setContentLanguage = (lang) => {
+    const normalized = normalizeContentLang(lang) || getSwitcherDefaultLang();
+    try {
+      window.localStorage.setItem(STORAGE_KEY, normalized);
+    } catch {}
+    updateContentLanguageUrl(normalized);
+    applyContentLanguage(normalized);
+  };
+
+  const initContentLanguageSwitcher = () => {
+    // Inert on pages without a switcher (no language blocks).
+    if (!document.querySelector('[data-content-language-switcher]')) return;
+    applyContentLanguage();
+  };
+
+  if (!window.__musikiContentLanguageBound) {
+    window.__musikiContentLanguageBound = true;
+    window.addEventListener('popstate', () => applyContentLanguage());
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element
+        ? event.target.closest('[data-content-language-option]')
+        : null;
+      if (!(target instanceof HTMLElement)) return;
+      event.preventDefault();
+      setContentLanguage(target.getAttribute('data-lang'));
+    });
+  }
+
+  document.addEventListener('astro:page-load', initContentLanguageSwitcher);
+  initContentLanguageSwitcher();
+</script>
+
+<style is:global>
+  .content-language-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin: 0.15rem 0 0.75rem;
+    padding: 0.42rem 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--c-border) 70%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c-fg) 3%, transparent);
+  }
+
+  .content-language-switcher-label {
+    color: color-mix(in srgb, var(--c-fg) 54%, transparent);
+    font-size: 0.62rem;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .content-language-switcher-options {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .content-language-switcher-option {
+    appearance: none;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: color-mix(in srgb, var(--c-fg) 62%, transparent);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 750;
+    line-height: 1;
+    padding: 0.34rem 0.38rem;
+    transition: background 140ms, color 140ms;
+  }
+
+  .content-language-switcher-option:hover,
+  .content-language-switcher-option:focus-visible {
+    background: color-mix(in srgb, var(--c-fg) 7%, transparent);
+    color: var(--c-fg);
+    outline: none;
+  }
+
+  .content-language-switcher-option.is-active {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+  }
+
+  .musiki-i18n-block[hidden] {
+    display: none !important;
+  }
+</style>

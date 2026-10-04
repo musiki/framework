@@ -84,6 +84,10 @@ export const es: Dict = {
       tags: 'Etiquetas',
     },
   },
+  content: {
+    languageAria: 'Idioma del contenido',
+    languageLabel: 'idioma',
+  },
   roles: {
     author: 'Autor/a',
     supervisor: 'Director/a',

@@ -6,6 +6,7 @@ import { ClientRouter } from 'astro:transitions';
 import '../lib/writing/tree/tree.css';
 import BaseHead from '../components/BaseHead.astro';
 import Ribbon from '../components/Ribbon.astro';
+import ContentLanguageSwitcher from '../components/ContentLanguageSwitcher.astro';
 import GraphModal from '../components/GraphModal.astro';
 import Search from '../components/Search.astro';
 import RecursosEditor from '../components/course/RecursosEditor.astro';
@@ -41,6 +42,11 @@ import {
   getPreferredCoursePathSegment,
   isCourseLessonEntryForCourse,
 } from '../lib/course-routing';
+import {
+  getAvailableContentTranslationLanguages,
+  getDefaultContentLanguage,
+} from '../lib/content-language';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
 import { getCoursePageHistory } from '../lib/page-history';
 import { buildPageProperties } from '../lib/page-properties';
 
@@ -764,6 +770,19 @@ const dynamicContent = !isCourseForumPage && !isRecursosEditorPage
 // Envolvemos el contenido en un objeto compatible para el JSX
 const dynamicHtml = dynamicContent?.html;
 const Content = StaticContent;
+const contentTranslationBody = String((currentEntry as any)?.body || '');
+const contentTranslationData = (currentEntry?.data || {}) as Record<string, unknown>;
+const contentTranslationFallback = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
+const contentTranslationDefaultLanguage = getDefaultContentLanguage({
+  body: contentTranslationBody,
+  data: contentTranslationData,
+  fallback: contentTranslationFallback,
+});
+const contentTranslationAvailableLanguages = getAvailableContentTranslationLanguages({
+  body: contentTranslationBody,
+  data: contentTranslationData,
+  fallback: contentTranslationFallback,
+});
 
 const assignmentLikeTypes = new Set(['assignment', 'eval']);
 const isAssignment = assignmentLikeTypes.has(currentEntryType);
@@ -4788,6 +4807,11 @@ function renderLessonsTreeHTML(
             </div>
           )}
         </div>
+
+        <ContentLanguageSwitcher
+          availableLanguages={contentTranslationAvailableLanguages}
+          defaultLanguage={contentTranslationDefaultLanguage}
+        />
 
         {canManageLiveInteractions ? (
           <>
