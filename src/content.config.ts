@@ -1,20 +1,7 @@
 import { defineCollection } from 'astro:content';
 import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
-
-const courseNoteTypes = [
-	'course',
-	'lesson',
-	'assignment',
-	'eval',
-	'lesson-presentation',
-	'app-dataviewjs',
-	'public-note',
-	'latex-template',
-	'info',
-	'concept',
-	'glossary',
-] as const;
+import { noteTypeSchema } from './lib/note-types.mjs';
 
 const workflowStatuses = ['draft', 'private', 'review', 'approved', 'published', 'archived', 'nonshown', 'public', 'inprocess'] as const;
 const publicStatuses = ['draft', 'review', 'approved', 'deprecated'] as const;
@@ -58,7 +45,7 @@ const cursos = defineCollection({
 	loader: glob({ base: './src/content/cursos', pattern: ['**/*.md', '**/*.mdx'] }),
 	schema: z.object({
 			// Course index fields
-			type: z.enum(courseNoteTypes).optional(),
+			type: noteTypeSchema.optional(),
 			title: z.string().optional().nullable(),
 			subtitle: z.string().optional().nullable(),
 			description: z.string().optional().nullable(),
