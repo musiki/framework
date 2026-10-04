@@ -63,3 +63,16 @@ for (const [event, repo, group, musiki, hem] of cases) {
     if (r.musiki) assert.equal(r.group, 'content-sync');
   });
 }
+
+test('hem deploy step unsets the job content token when the hem .env defines one; musiki steps do not', () => {
+  const steps = workflow.jobs.deploy.steps;
+  const hemDeploy = steps.find((s) => s.name === 'Zero Downtime Deploy hem on VPS');
+  const unsetAt = hemDeploy.run.indexOf('unset CONTENT_SOURCE_READ_TOKEN');
+  assert.ok(unsetAt >= 0, 'hem deploy must unset the inherited token');
+  assert.match(hemDeploy.run, /grep -q '\^CONTENT_SOURCE_READ_TOKEN=' \/opt\/hem\/engine\/\.env/);
+  assert.ok(unsetAt < hemDeploy.run.indexOf('deploy-framework-local.sh'), 'unset must precede the deploy script');
+  for (const s of steps) {
+    if (s === hemDeploy) continue;
+    assert.doesNotMatch(String(s.run || ''), /unset CONTENT_SOURCE_READ_TOKEN/, `unexpected unset in "${s.name}"`);
+  }
+});

@@ -192,6 +192,11 @@ jobs:
         if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
         continue-on-error: false
         run: |
+          # The job env carries musiki's CONTENT_SOURCE_READ_TOKEN, which
+          # pull-sources prefers over the instance .env and which cannot read
+          # the hem source repo. When the hem .env defines its own token, drop
+          # the inherited one so the deploy uses it (value is never printed).
+          if grep -q '^CONTENT_SOURCE_READ_TOKEN=' /opt/hem/engine/.env; then unset CONTENT_SOURCE_READ_TOKEN; fi
           cd /opt/hem/engine && MUSIKI_INSTANCE=hem VPS_FRAMEWORK_DIR=/opt/hem/engine VPS_DEPLOY_LOCK_FILE=/tmp/hem-engine-deploy.lock LILYPOND_ASSET_DIR=/opt/hem/data/lily VPS_RELOAD_COMMAND="pm2 reload ecosystem.config.cjs --only hem-engine --update-env || pm2 start ecosystem.config.cjs --only hem-engine --update-env" bash scripts/vps/deploy-framework-local.sh
 
       - name: Reload hem Content Bus Sidecar
