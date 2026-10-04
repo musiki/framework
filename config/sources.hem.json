@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "internetmusic",
+      "enabled": true,
+      "repo": "HEM-Multimedia-Master/internetmusic",
+      "branch": "main",
+      "contentRoot": ".",
+      "localPath": "../../hem/internetmusic"
+    }
+  ],
+  "assembly": {
+    "coursesDir": "cursos",
+    "publicDir": "public",
+    "promoteFromCourses": true,
+    "requiredVisibilityForPublic": "public",
+    "requiredPublicStatus": "approved",
+    "excludeTypesFromPublic": [
+      "assignment",
+      "eval",
+      "lesson-presentation",
+      "app-dataviewjs"
+    ]
+  }
+}

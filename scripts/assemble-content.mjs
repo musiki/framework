@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { contentManifestPath, currentInstance } from '../src/lib/instance.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +14,7 @@ const findArgValue = (flag, fallback) => {
   return args[idx + 1];
 };
 
-const manifestPath = path.resolve(findArgValue('--manifest', 'config/sources.manifest.json'));
+const manifestPath = path.resolve(findArgValue('--manifest', contentManifestPath(currentInstance())));
 const sourcesDir = path.resolve(findArgValue('--sources-dir', '.content-sources'));
 const targetDir = path.resolve(findArgValue('--target', 'src/content'));
 const stagingDir = path.resolve(findArgValue('--staging', '.tmp/assembled-content'));

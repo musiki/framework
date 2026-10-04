@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { normalizeContentSlug } from './content-slug';
+import { contentManifestPath, currentInstance } from './instance.mjs';
 
 type SourceManifestSource = {
   id: string;
@@ -17,7 +18,7 @@ type SourceManifest = {
   sources?: SourceManifestSource[];
 };
 
-const manifestPath = path.join(process.cwd(), 'config', 'sources.manifest.json');
+const manifestPath = path.join(process.cwd(), contentManifestPath(currentInstance()));
 
 let cachedManifestMtimeMs = -1;
 let cachedManifest: SourceManifest | null = null;

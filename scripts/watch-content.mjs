@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { contentManifestPath, currentInstance } from '../src/lib/instance.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -12,7 +13,7 @@ const findArgValue = (flag, fallback) => {
   return args[idx + 1];
 };
 
-const manifestPath = path.resolve(findArgValue('--manifest', 'config/sources.manifest.json'));
+const manifestPath = path.resolve(findArgValue('--manifest', contentManifestPath(currentInstance())));
 const debounceMs = Math.max(250, Number(findArgValue('--debounce', process.env.CONTENT_WATCH_DEBOUNCE_MS || '1200')) || 1200);
 const runInitial = !args.includes('--no-initial');
 const selectedSourceIds = new Set(
