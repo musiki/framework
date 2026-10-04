@@ -1,5 +1,7 @@
 ---
 import ClassWorkspacePanel from './ClassWorkspacePanel.astro';
+import { t } from '../../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../../lib/tenant/tenants';
 
 type Props = {
   courseId: string;
@@ -9,6 +11,7 @@ type Props = {
 };
 
 const { courseId, canManage, canContribute = canManage, classOptions = [] } = Astro.props;
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
 const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 ---
 
@@ -20,13 +23,13 @@ const classOptionsJson = JSON.stringify(classOptions).replace(/</g, '\\u003c');
 >
   <header class="recursos-editor-header">
     <div>
-      <p class="recursos-editor-kicker">80 RECURSOS</p>
-      <h1>Editor de recursos</h1>
+      <p class="recursos-editor-kicker">80 {t(locale, 'workspace.kicker')}</p>
+      <h1>{t(locale, 'workspace.editorTitle')}</h1>
     </div>
   </header>
 
   {!canContribute ? (
-    <p class="recursos-editor-empty">No tenes permisos para editar recursos de este curso.</p>
+    <p class="recursos-editor-empty">{t(locale, 'workspace.noPermission')}</p>
   ) : (
     <>
       <ClassWorkspacePanel courseId={courseId} canManage={canManage} canContribute={canContribute} />

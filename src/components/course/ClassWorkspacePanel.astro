@@ -1,4 +1,7 @@
 ---
+import { t } from '../../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../../lib/tenant/tenants';
+
 type Props = {
   courseId: string;
   canManage: boolean;
@@ -6,6 +9,7 @@ type Props = {
 };
 
 const { courseId, canManage, canContribute = canManage } = Astro.props;
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
 ---
 
 <section
@@ -17,27 +21,27 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
 >
   <header class="cw-toolbar">
     <div>
-      <p class="cw-kicker">RECURSOS</p>
-      <h2>Workspace</h2>
+      <p class="cw-kicker">{t(locale, 'workspace.kicker')}</p>
+      <h2>{t(locale, 'workspace.title')}</h2>
     </div>
     <div class="cw-toolbar-actions">
-      <input class="cw-search" data-cw-search placeholder="Buscar" />
-      <select class="cw-sort" data-cw-sort aria-label="Ordenar recursos">
-        <option value="name">Nombre</option>
-        <option value="type">Tipo</option>
-        <option value="size-desc">Tamaño</option>
-        <option value="date-desc">Fecha ↓</option>
-        <option value="date-asc">Fecha ↑</option>
+      <input class="cw-search" data-cw-search placeholder={t(locale, 'workspace.search')} />
+      <select class="cw-sort" data-cw-sort aria-label={t(locale, 'workspace.sort')}>
+        <option value="name">{t(locale, 'workspace.sortName')}</option>
+        <option value="type">{t(locale, 'workspace.sortType')}</option>
+        <option value="size-desc">{t(locale, 'workspace.sortSize')}</option>
+        <option value="date-desc">{t(locale, 'workspace.sortDate')} ↓</option>
+        <option value="date-asc">{t(locale, 'workspace.sortDate')} ↑</option>
       </select>
-      <button type="button" class="cw-btn" data-cw-refresh>Actualizar</button>
+      <button type="button" class="cw-btn" data-cw-refresh>{t(locale, 'workspace.refresh')}</button>
       {canContribute && (
         <>
-          {canManage && <button type="button" class="cw-btn cw-btn-primary" data-cw-session>Nueva sesion</button>}
-          <button type="button" class="cw-btn cw-btn-primary" data-cw-folder>Carpeta</button>
-          <button type="button" class="cw-btn cw-btn-primary" data-cw-link>Link</button>
-          <button type="button" class="cw-btn" data-cw-rename-top>Renombrar</button>
+          {canManage && <button type="button" class="cw-btn cw-btn-primary" data-cw-session>{t(locale, 'workspace.newSession')}</button>}
+          <button type="button" class="cw-btn cw-btn-primary" data-cw-folder>{t(locale, 'workspace.folder')}</button>
+          <button type="button" class="cw-btn cw-btn-primary" data-cw-link>{t(locale, 'workspace.link')}</button>
+          <button type="button" class="cw-btn" data-cw-rename-top>{t(locale, 'workspace.rename')}</button>
           <label class="cw-btn cw-btn-primary">
-            Subir
+            {t(locale, 'workspace.upload')}
             <input type="file" data-cw-upload multiple hidden />
           </label>
         </>
@@ -45,48 +49,48 @@ const { courseId, canManage, canContribute = canManage } = Astro.props;
     </div>
   </header>
 
-  <div class="cw-status" data-cw-status>Listo.</div>
+  <div class="cw-status" data-cw-status>{t(locale, 'workspace.ready')}</div>
   <div class="cw-bulkbar" data-cw-bulkbar hidden>
-    <span data-cw-selection-count>0 seleccionados</span>
-    <button type="button" class="cw-btn" data-cw-bulk-rename hidden>Renombrar</button>
-    <button type="button" class="cw-btn" data-cw-bulk-move>Mover</button>
-    <button type="button" class="cw-btn cw-btn-danger" data-cw-bulk-delete>Borrar</button>
-    <button type="button" class="cw-btn" data-cw-selection-clear>Limpiar</button>
+    <span data-cw-selection-count>{t(locale, 'workspace.selected', { count: 0 })}</span>
+    <button type="button" class="cw-btn" data-cw-bulk-rename hidden>{t(locale, 'workspace.rename')}</button>
+    <button type="button" class="cw-btn" data-cw-bulk-move>{t(locale, 'workspace.move')}</button>
+    <button type="button" class="cw-btn cw-btn-danger" data-cw-bulk-delete>{t(locale, 'workspace.delete')}</button>
+    <button type="button" class="cw-btn" data-cw-selection-clear>{t(locale, 'workspace.clear')}</button>
   </div>
 
   <div class="cw-layout">
     <aside class="cw-tree" data-cw-tree></aside>
     <main class="cw-main">
       <div class="cw-breadcrumb">
-        <button type="button" class="cw-breadcrumb-btn cw-breadcrumb-btn--icon" data-cw-root title="Ver todo" aria-label="Ver todo">⌂</button>
-        <button type="button" class="cw-breadcrumb-btn cw-breadcrumb-btn--icon" data-cw-up hidden title="Subir carpeta" aria-label="Subir carpeta">↑</button>
-        <span class="cw-size-group" data-cw-size-group aria-label="Tamaño de previews">
-          <button type="button" class="cw-size-btn" data-cw-size="small" title="Previews compactas" aria-label="Previews compactas">▦</button>
-          <button type="button" class="cw-size-btn" data-cw-size="medium" title="Previews medianas" aria-label="Previews medianas">▥</button>
-          <button type="button" class="cw-size-btn" data-cw-size="large" title="Previews grandes" aria-label="Previews grandes">▣</button>
-          <button type="button" class="cw-size-btn" data-cw-size="list" title="Vista lista" aria-label="Vista lista">☰</button>
+        <button type="button" class="cw-breadcrumb-btn cw-breadcrumb-btn--icon" data-cw-root title={t(locale, 'workspace.viewAll')} aria-label={t(locale, 'workspace.viewAll')}>⌂</button>
+        <button type="button" class="cw-breadcrumb-btn cw-breadcrumb-btn--icon" data-cw-up hidden title={t(locale, 'workspace.upFolder')} aria-label={t(locale, 'workspace.upFolder')}>↑</button>
+        <span class="cw-size-group" data-cw-size-group aria-label={t(locale, 'workspace.previewSize')}>
+          <button type="button" class="cw-size-btn" data-cw-size="small" title={t(locale, 'workspace.previewSmall')} aria-label={t(locale, 'workspace.previewSmall')}>▦</button>
+          <button type="button" class="cw-size-btn" data-cw-size="medium" title={t(locale, 'workspace.previewMedium')} aria-label={t(locale, 'workspace.previewMedium')}>▥</button>
+          <button type="button" class="cw-size-btn" data-cw-size="large" title={t(locale, 'workspace.previewLarge')} aria-label={t(locale, 'workspace.previewLarge')}>▣</button>
+          <button type="button" class="cw-size-btn" data-cw-size="list" title={t(locale, 'workspace.listView')} aria-label={t(locale, 'workspace.listView')}>☰</button>
         </span>
-        <span data-cw-current>Workspace</span>
+        <span data-cw-current>{t(locale, 'workspace.title')}</span>
       </div>
       <div class="cw-grid" data-cw-grid></div>
     </main>
     <aside class="cw-preview" data-cw-preview>
-      <div class="cw-empty">Selecciona un recurso.</div>
+      <div class="cw-empty">{t(locale, 'workspace.selectResource')}</div>
     </aside>
   </div>
 
   <div class="cw-context-menu" data-cw-context-menu hidden>
-    <button type="button" data-cw-context-action="preview">Ver</button>
-    <button type="button" data-cw-context-action="open">Abrir</button>
-    <button type="button" data-cw-context-action="rename" data-requires-edit>Renombrar</button>
-    <button type="button" data-cw-context-action="move" data-requires-edit>Mover</button>
-    <button type="button" data-cw-context-action="delete" data-requires-edit>Borrar</button>
+    <button type="button" data-cw-context-action="preview">{t(locale, 'workspace.view')}</button>
+    <button type="button" data-cw-context-action="open">{t(locale, 'workspace.open')}</button>
+    <button type="button" data-cw-context-action="rename" data-requires-edit>{t(locale, 'workspace.rename')}</button>
+    <button type="button" data-cw-context-action="move" data-requires-edit>{t(locale, 'workspace.move')}</button>
+    <button type="button" data-cw-context-action="delete" data-requires-edit>{t(locale, 'workspace.delete')}</button>
   </div>
 
   <div class="cw-modal" data-cw-modal hidden>
-    <button type="button" class="cw-modal-backdrop" data-cw-modal-close aria-label="Cerrar preview"></button>
+    <button type="button" class="cw-modal-backdrop" data-cw-modal-close aria-label={t(locale, 'workspace.closePreview')}></button>
     <div class="cw-modal-panel" role="dialog" aria-modal="true">
-      <button type="button" class="cw-modal-close" data-cw-modal-close aria-label="Cerrar">×</button>
+      <button type="button" class="cw-modal-close" data-cw-modal-close aria-label={t(locale, 'workspace.close')}>×</button>
       <div data-cw-modal-body></div>
     </div>
   </div>

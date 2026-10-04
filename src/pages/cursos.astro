@@ -4,6 +4,10 @@ import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import { buildCourseHref } from '../lib/course-routing';
 import { isElevatedGlobalRole } from '../lib/roles';
+import { t } from '../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
 
 // Get all courses (files named _index.md in cursos collection)
 const allCourseFiles = await getCollection('cursos');
@@ -23,7 +27,7 @@ const asStringArray = (value: unknown): string[] => {
 
 const normalizeCourseYear = (yearValue: unknown, legacyLevel: unknown): string => {
   if (typeof yearValue === 'number' && Number.isFinite(yearValue)) {
-    return `${yearValue}° año`;
+    return t(locale, 'courses.yearNumber', { n: yearValue });
   }
 
   if (typeof yearValue === 'string' && yearValue.trim()) {
@@ -32,9 +36,9 @@ const normalizeCourseYear = (yearValue: unknown, legacyLevel: unknown): string =
 
   if (typeof legacyLevel === 'string' && legacyLevel.trim()) {
     const normalized = legacyLevel.trim().toLowerCase();
-    if (normalized === 'beginner') return '1er año';
-    if (normalized === 'intermediate') return '2do año';
-    if (normalized === 'advanced') return '3er año';
+    if (normalized === 'beginner') return t(locale, 'courses.yearBeginner');
+    if (normalized === 'intermediate') return t(locale, 'courses.yearIntermediate');
+    if (normalized === 'advanced') return t(locale, 'courses.yearAdvanced');
     return legacyLevel.trim();
   }
 
@@ -98,9 +102,9 @@ if (currentUser?.email) {
 ---
 
 <!doctype html>
-<html lang="es" class="musiki-continuous-canvas">
+<html lang={locale} class="musiki-continuous-canvas">
 	<head>
-		<BaseHead title="Cursos" description="Explora nuestros cursos de arte, música y tecnología" />
+		<BaseHead title={t(locale, 'courses.title')} description={t(locale, 'courses.description')} />
 		<style>
 			.course-grid {
 				display: grid;
@@ -243,7 +247,7 @@ if (currentUser?.email) {
 	<body class="musiki-continuous-canvas">
 		<Header />
 		<main class="container">
-			<h1>cursos</h1>
+			<h1>{t(locale, 'courses.heading')}</h1>
 			
 			<div class="course-grid">
 				{courses.map((course) => (
@@ -260,38 +264,38 @@ if (currentUser?.email) {
 						
 							<div class="course-meta">
 								<span class="meta-item">
-									<span class="meta-label">Estado</span>
+									<span class="meta-label">{t(locale, 'courses.status')}</span>
 									<span
 										class:list={[
 											'course-status',
 											userEnrollments.includes(normalizeCourseCardId(course.id)) ? 'is-enrolled' : 'not-enrolled',
 										]}
-										title={userEnrollments.includes(normalizeCourseCardId(course.id)) ? 'Inscrito' : 'No inscrito'}
+										title={userEnrollments.includes(normalizeCourseCardId(course.id)) ? t(locale, 'courses.enrolled') : t(locale, 'courses.notEnrolled')}
 									>
-										{userEnrollments.includes(normalizeCourseCardId(course.id)) ? 'Inscrito' : 'No inscrito'}
+										{userEnrollments.includes(normalizeCourseCardId(course.id)) ? t(locale, 'courses.enrolled') : t(locale, 'courses.notEnrolled')}
 									</span>
 								</span>
 								{!course.public && (
-									<span class="meta-item" title="Requiere inscripción">
-										<span class="meta-label">Acceso</span>
-										<span class="meta-value">Solo inscritos</span>
+									<span class="meta-item" title={t(locale, 'courses.requiresEnrollment')}>
+										<span class="meta-label">{t(locale, 'courses.access')}</span>
+										<span class="meta-value">{t(locale, 'courses.onlyEnrolled')}</span>
 									</span>
 								)}
 								{course.instructors && course.instructors.length > 0 && (
 									<span class="meta-item meta-docentes" title={course.instructors.join(', ')}>
-										<span class="meta-label">{course.instructors.length > 1 ? 'Docentes' : 'Docente'}</span>
+										<span class="meta-label">{course.instructors.length > 1 ? t(locale, 'courses.teachers') : t(locale, 'courses.teacher')}</span>
 										<span class="meta-value">{course.instructors.join(', ')}</span>
 									</span>
 								)}
 								{course.duration && (
 									<span class="meta-item">
-										<span class="meta-label">Duración</span>
+										<span class="meta-label">{t(locale, 'courses.duration')}</span>
 										<span class="meta-value">{course.duration}</span>
 									</span>
 								)}
 								{course.year && (
 									<span class="meta-item">
-										<span class="meta-label">Año</span>
+										<span class="meta-label">{t(locale, 'courses.year')}</span>
 										<span class="meta-value">{course.year}</span>
 									</span>
 								)}
@@ -308,26 +312,30 @@ if (currentUser?.email) {
 							<div class="course-actions">
 								{!session ? (
 									<a href="/login" class="button">
-										Inicia sesión
+										{t(locale, 'courses.signIn')}
 									</a>
 								) : userEnrollments.includes(normalizeCourseCardId(course.id)) ? (
 									<a href={course.href} class="button">
-										Ver curso
+										{t(locale, 'courses.viewCourse')}
 									</a>
 								) : isTeacher ? (
 									<a href={course.href} class="button">
-										Ver curso
+										{t(locale, 'courses.viewCourse')}
 									</a>
 								) : userInvites.includes(normalizeCourseCardId(course.id)) ? (
 									<button
 										class="button enroll-btn"
 										data-course-id={normalizeCourseCardId(course.id)}
 										data-course-title={course.title}
+										data-label-enroll={t(locale, 'courses.enroll')}
+										data-label-enrolling={t(locale, 'courses.enrolling')}
+										data-label-enrolled={t(locale, 'courses.enrolled')}
+										data-label-error={t(locale, 'courses.enrollError')}
 									>
-										Inscribirse
+										{t(locale, 'courses.enroll')}
 									</button>
 								) : (
-									<span class="no-access-label">Sin acceso — contactá al docente</span>
+									<span class="no-access-label">{t(locale, 'courses.noAccess')}</span>
 								)}
 							</div>
 						</div>
@@ -337,7 +345,7 @@ if (currentUser?.email) {
 			
 			{courses.length === 0 && (
 				<p style="text-align: center; margin-top: 3rem; color: var(--c-fg-dim);">
-					No hay cursos disponibles por el momento.
+					{t(locale, 'courses.none')}
 				</p>
 				)}
 				</main>
@@ -352,7 +360,7 @@ if (currentUser?.email) {
 					
 					// Disable button and show loading
 					button.disabled = true;
-					button.textContent = 'Inscribiendo...';
+					button.textContent = button.dataset.labelEnrolling || 'Inscribiendo...';
 					
 					try {
 						const response = await fetch(`/api/enroll/${courseId}`, {
@@ -365,7 +373,7 @@ if (currentUser?.email) {
 						const data = await response.json();
 						
 						if (response.ok) {
-							button.textContent = 'Inscrito';
+							button.textContent = button.dataset.labelEnrolled || 'Inscrito';
 							button.style.background = '#4caf50';
 							// Redirect to course — server-side welcome redirect will kick in
 							setTimeout(() => { window.location.href = `/${courseId}`; }, 800);
@@ -374,10 +382,10 @@ if (currentUser?.email) {
 						}
 					} catch (error) {
 						console.error('Enrollment error:', error);
-						button.textContent = 'Error';
+						button.textContent = button.dataset.labelError || 'Error';
 						button.disabled = false;
 						setTimeout(() => {
-							button.textContent = 'Inscribirse';
+							button.textContent = button.dataset.labelEnroll || 'Inscribirse';
 						}, 2000);
 					}
 				});

@@ -1,11 +1,30 @@
 ---
 // POD del recorrido académico: plantilla, visualización y motor de hidratación.
 // La API aporta evidencia real; el componente no fabrica puntos ni rachas.
+import { t } from '../../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../../lib/tenant/tenants';
+
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
+// Strings the client script writes, in the tenant locale (read via data-cpp-strings).
+const clientStrings = JSON.stringify({
+  'req.proyecto': t(locale, 'progress.reqProject'),
+  'req.conexiones': t(locale, 'progress.reqConnections'),
+  'req.coloquios': t(locale, 'progress.reqColloquia'),
+  'req.estigmergia': t(locale, 'progress.reqStigmergy'),
+  'req.aporte': t(locale, 'progress.reqContribution'),
+  density: t(locale, 'progress.density'),
+  openCourse: t(locale, 'progress.openCourse'),
+  signIn: t(locale, 'progress.signIn'),
+  loadError: t(locale, 'progress.loadError'),
+  empty: t(locale, 'progress.empty'),
+  networkError: t(locale, 'progress.networkError'),
+});
 ---
 
 <section
   class="progress-sidebar-panel"
   id="progress-sidebar"
+  data-cpp-strings={clientStrings}
   aria-label="Progreso del recorrido"
   aria-hidden="true"
 >
@@ -395,6 +414,12 @@
   let activeSlug = '';
 
   const el = (id: string) => document.getElementById(id);
+  // Localized strings from the server (data-cpp-strings); the Spanish literal is the fallback.
+  const str = (key: string, fallback: string, vars: Record<string, string | number> = {}) => {
+    let table: Record<string, string> = {};
+    try { table = JSON.parse(el('progress-sidebar')?.dataset.cppStrings || '{}'); } catch { /* fallback */ }
+    return (table[key] || fallback).replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match));
+  };
   const container = () => document.querySelector('.course-container');
   const courseId = () => {
     const fromAttr = (container()?.getAttribute('data-live-course-id') || '').trim();
@@ -452,7 +477,7 @@
       const c4 = key === 'proyecto' && project?.c4Level > 0
         ? ` · ${['—', 'mini-c', 'little-c', 'pro-c', 'big-c'][project.c4Level] || '4C'}`
         : '';
-      label.textContent = `${REQ_LABEL[key]}${c4}`;
+      label.textContent = `${str(`req.${key}`, REQ_LABEL[key])}${c4}`;
       const bar = document.createElement('span');
       bar.className = 'bar';
       const fill = document.createElement('i');
@@ -644,7 +669,7 @@
         activeEdges += 1;
       });
       const density = el('cpp-dens');
-      if (density) density.textContent = `densidad ${(activeEdges / Math.max(1, edges.length)).toFixed(2)} · ${activeEdges} aristas`;
+      if (density) density.textContent = str('density', 'densidad {density} · {edges} aristas', { density: (activeEdges / Math.max(1, edges.length)).toFixed(2), edges: activeEdges });
     } catch (error) {
       console.warn('[progress-pod] connectome render failed', error);
     }
@@ -666,7 +691,7 @@
     const cid = courseId();
     const note = el('cpp-note');
     if (!cid) {
-      if (note) note.textContent = 'Abrí un curso para ver el recorrido.';
+      if (note) note.textContent = str('openCourse', 'Abrí un curso para ver el recorrido.');
       return;
     }
     lastCourse = cid;
@@ -677,7 +702,7 @@
     try {
       const response = await fetch(`/api/progress/pod?courseId=${encodeURIComponent(cid)}`, { headers: { Accept: 'application/json' } });
       if (!response.ok) {
-        if (note) note.textContent = response.status === 401 ? 'Iniciá sesión para ver tu progreso.' : 'No se pudo cargar el progreso.';
+        if (note) note.textContent = response.status === 401 ? str('signIn', 'Iniciá sesión para ver tu progreso.') : str('loadError', 'No se pudo cargar el progreso.');
         return;
       }
       const data = await response.json();
@@ -692,9 +717,9 @@
       renderPath(concepts, data.project || {});
       renderBrain(concepts, edges);
       updateActiveUnit();
-      if (note) note.textContent = concepts.length ? '' : 'Todavía no hay conceptos disponibles para este curso.';
+      if (note) note.textContent = concepts.length ? '' : str('empty', 'Todavía no hay conceptos disponibles para este curso.');
     } catch (error) {
-      if (note) note.textContent = 'Error de red al cargar el progreso.';
+      if (note) note.textContent = str('networkError', 'Error de red al cargar el progreso.');
     }
   }
 
