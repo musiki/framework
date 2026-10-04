@@ -9,8 +9,10 @@ test('translates by locale', () => {
   assert.equal(t('es', 'roles.supervisor'), 'Director/a');
 });
 
-test('fr falls back to en until hem joins', () => {
-  assert.equal(t('fr', 'roles.author'), 'Author');
+test('fr translates known keys and falls back to en for the rest', () => {
+  assert.equal(t('fr', 'studio.signOut'), 'Se déconnecter');
+  assert.equal(t('fr', 'studio.tree.delete'), 'Supprimer');
+  assert.equal(t('fr', 'roles.author'), 'Author'); // not yet translated: falls back to en
 });
 
 test('interpolates variables', () => {
@@ -53,4 +55,21 @@ test('mm: nb translates mm keys and falls back to en elsewhere', () => {
   assert.equal(t('nb', 'mm.nav.about'), 'Om');
   assert.equal(t('nb', 'roles.supervisor'), 'Supervisor');
   assert.equal(t('nb', 'mm.nav.account', { name: 'Ada' }), 'Logget inn som Ada');
+});
+
+test('fr: every key exists in en', async () => {
+  const { fr } = await import('./fr.ts');
+  const enKeys = new Set(leaves(en).map(([k]) => k));
+  for (const [k, v] of leaves(fr)) {
+    assert.ok(enKeys.has(k), `fr key not in en: ${k}`);
+    assert.ok(v.trim(), `empty fr: ${k}`);
+  }
+});
+
+test('fr: parity report (informational, does not fail)', async (ctx) => {
+  const { fr } = await import('./fr.ts');
+  const frKeys = new Set(leaves(fr).map(([k]) => k));
+  const missing = leaves(en).map(([k]) => k).filter((k) => !k.startsWith('mm.') && !frKeys.has(k));
+  ctx.diagnostic(`fr parity: ${frKeys.size} translated, ${missing.length} en keys (excluding mm) missing in fr`);
+  console.log(`fr missing (${missing.length}):\n${missing.join('\n')}`);
 });
