@@ -98,3 +98,43 @@ test('content-language helpers: switcher languages only when blocks exist', asyn
   assert.equal(m.getDefaultContentLanguage({ body: '', fallback: 'fr' }), 'fr');
   assert.equal(m.getDefaultContentLanguage({ body: '', data: { lang: 'en' }, fallback: 'fr' }), 'en');
 });
+
+// Runs the switcher's client script against a minimal fake DOM.
+const runSwitcherScript = async ({ withSwitcher }) => {
+  const fs = await import('node:fs');
+  const vm = await import('node:vm');
+  const source = fs.readFileSync(new URL('../components/ContentLanguageSwitcher.astro', import.meta.url), 'utf8');
+  const script = source.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const listeners = {};
+  const on = (target) => (type, fn) => { (listeners[`${target}:${type}`] ||= []).push(fn); };
+  const switcher = { getAttribute: (name) => (name === 'data-default-lang' ? 'fr' : null) };
+  const documentElement = { dataset: {}, lang: 'es' };
+  const document = {
+    documentElement,
+    querySelector: (sel) => (withSwitcher && sel === '[data-content-language-switcher]' ? switcher : null),
+    querySelectorAll: () => [],
+    addEventListener: on('document'),
+  };
+  const window = {
+    location: { search: '', href: 'https://musiki.org.ar/curso/x#a' },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    history: { pushState: () => {} },
+    addEventListener: on('window'),
+  };
+  vm.runInNewContext(script, { window, document, URLSearchParams, URL, Element: class {}, HTMLElement: class {} });
+  return { documentElement, fire: (type) => (listeners[`window:${type}`] || []).forEach((fn) => fn()) };
+};
+
+test('content language switcher: popstate is inert on pages without a switcher', async () => {
+  const page = await runSwitcherScript({ withSwitcher: false });
+  page.fire('popstate');
+  assert.equal(page.documentElement.lang, 'es');
+  assert.equal(page.documentElement.dataset.contentLang, undefined);
+});
+
+test('content language switcher: popstate re-applies the language when a switcher exists', async () => {
+  const page = await runSwitcherScript({ withSwitcher: true });
+  page.documentElement.lang = 'es';
+  page.fire('popstate');
+  assert.equal(page.documentElement.lang, 'fr');
+});

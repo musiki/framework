@@ -127,7 +127,7 @@ const languages = availableLanguages.filter((lang, index, list) => list.indexOf(
 
   if (!window.__musikiContentLanguageBound) {
     window.__musikiContentLanguageBound = true;
-    window.addEventListener('popstate', () => applyContentLanguage());
+    window.addEventListener('popstate', () => initContentLanguageSwitcher());
     document.addEventListener('click', (event) => {
       const target = event.target instanceof Element
         ? event.target.closest('[data-content-language-option]')
