@@ -4,6 +4,7 @@ import { getCollection } from 'astro:content';
 import { isElevatedGlobalRole } from '../lib/roles';
 import { buildCourseHref } from '../lib/course-routing';
 import { getSession } from 'auth-astro/server';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
 
 interface Props {
   courseId?: string;
@@ -55,7 +56,8 @@ let ribbonAvatarSource = ribbonUserImage
 const hasVivo = Boolean(performativeRoomHref);
 const badgeLabel = activeCourseCode.slice(0, 4) || '···';
 const dashboardHref = courseId ? `/dashboard?course=${encodeURIComponent(courseId)}` : '/dashboard';
-const docsBaseUrl = String(import.meta.env.PUBLIC_DOCS_URL || 'https://doc.musiki.org.ar').replace(/\/$/, '');
+const brand = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).brand;
+const docsBaseUrl = String(brand.docsUrl).replace(/\/$/, '');
 
 // Get all courses from the content collection
 const allCourseFiles = await getCollection('cursos').catch(() => []);
@@ -130,7 +132,7 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
 
   <!-- Brand logo -->
   <a href="/" class="ribbon-item ribbon-item--logo" aria-label="musiki26 — inicio" title="Inicio">
-    <img src="/logo-musiki.png" alt="musiki26" />
+    <img src={brand.logo} alt={brand.logoAlt} />
     <span class="ribbon-beacon" aria-hidden="true"></span>
   </a>
 
@@ -327,8 +329,9 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     id="ribbon-help-btn"
     data-docs-url={docsBaseUrl}
     data-docs-path="/pods/ayuda-contextual/"
-    aria-label="Ayuda Musiki"
-    title="Ayuda Musiki"
+    data-help-label={brand.helpLabel}
+    aria-label={brand.helpLabel}
+    title={brand.helpLabel}
   >
     <span aria-hidden="true" class="ribbon-help-mark">?</span>
   </button>
@@ -654,7 +657,7 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     const openHelp = () => {
       const btn = document.getElementById('ribbon-help-btn');
       const path = btn?.dataset.docsPath || '/pods/ayuda-contextual/';
-      const title = 'Ayuda Musiki';
+      const title = btn?.dataset.helpLabel || 'Ayuda Musiki';
       const ws = (window as any).__cnwWorkspace;
       if (ws && typeof ws.openHelp === 'function') {
         ws.openHelp(path, title);

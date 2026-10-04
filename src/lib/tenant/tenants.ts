@@ -9,13 +9,16 @@ export type Tenant = {
   id: TenantId;
   hosts: string[];            // exact, lowercase, no port
   locale: Locale;             // interface locale
-  brand: { name: string; theme: TenantTheme };
+  brand: { name: string; theme: TenantTheme; logo: string; logoAlt: string; helpLabel: string; docsUrl: string };
   spaceKinds: SpaceKind[];
   routes: 'all' | RouteFamily[];
   authProviders: string[];    // Auth.js provider ids, unique across tenants
   homePath: string;           // post-login landing path
   loginPath?: string;         // tenant sign-in page for non-'all' tenants (default '/studio/login')
 };
+
+// `import.meta.env` is undefined when this module runs under plain node (tests).
+const DOCS_URL: string = (import.meta as any).env?.PUBLIC_DOCS_URL || 'https://doc.musiki.org.ar';
 
 export const DEFAULT_TENANT_ID: TenantId = 'musiki';
 
@@ -24,18 +27,17 @@ export const TENANTS: Record<TenantId, Tenant> = {
     id: 'musiki',
     hosts: ['musiki.org.ar', 'www.musiki.org.ar', 'dev.musiki.org.ar'],
     locale: 'es',
-    brand: { name: 'Musiki', theme: 'default' },
+    brand: { name: 'Musiki', theme: 'default', logo: '/logo-musiki.png', logoAlt: 'musiki26', helpLabel: 'Ayuda Musiki', docsUrl: DOCS_URL },
     spaceKinds: ['course'],
     routes: 'all',
     authProviders: ['logto', 'google', 'authentik'],
     homePath: '/dashboard',
   },
-  // hem.zztt.org is still served by the fork; hosts are added in sub-project 4.
   hem: {
     id: 'hem',
-    hosts: [],
+    hosts: ['hem.zztt.org'],
     locale: 'fr',
-    brand: { name: 'HEM', theme: 'default' },
+    brand: { name: 'HEM', theme: 'default', logo: '/hem-logo.png', logoAlt: 'HEM', helpLabel: 'Aide', docsUrl: DOCS_URL },
     spaceKinds: ['course'],
     routes: 'all',
     authProviders: ['logto-hem'],
@@ -45,7 +47,7 @@ export const TENANTS: Record<TenantId, Tenant> = {
     id: 'so',
     hosts: ['so.zztt.org', 'so-dev.zztt.org'],
     locale: 'en',
-    brand: { name: 'so', theme: 'so' },
+    brand: { name: 'so', theme: 'so', logo: '/logo-musiki.png', logoAlt: 'so', helpLabel: 'Help', docsUrl: DOCS_URL },
     spaceKinds: ['dissertation'],
     routes: ['studio', 'api:studio', 'api:public', 'auth'],
     authProviders: ['logto-so'],
@@ -59,7 +61,7 @@ export const TENANTS: Record<TenantId, Tenant> = {
     id: 'mm',
     hosts: ['mm.zztt.org'],
     locale: 'en',
-    brand: { name: 'MishMash Concept Machine', theme: 'mm' },
+    brand: { name: 'MishMash Concept Machine', theme: 'mm', logo: '/logo-musiki.png', logoAlt: 'MishMash Concept Machine', helpLabel: 'Help', docsUrl: DOCS_URL },
     spaceKinds: ['commons'],
     routes: ['mm', 'api:mm', 'api:public-mm', 'auth', 'lily'],
     authProviders: ['logto-mm'],

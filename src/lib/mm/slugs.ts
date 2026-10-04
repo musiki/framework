@@ -39,7 +39,7 @@ export const RESERVED_SLUGS: readonly string[] = Object.freeze([
   'dashboard', 'slides', 'cursos', 'foro', 'live', 'editor', 'privacy', 'terms', 'centauro', 'content-media',
   'debug', 'demo', 'notas', 'notas-editor', 'room', 'sse', 'test-table', 'public-search', 'search-index',
   // top-level entries of public/ (static files served before any page)
-  'favicon', 'fonts', 'inc', 'lib', 'logos', 'scripts', 'vendor', 'wasm', 'graph-data', 'logo-musiki',
+  'favicon', 'fonts', 'inc', 'lib', 'logos', 'scripts', 'vendor', 'wasm', 'graph-data', 'logo-musiki', 'hem-logo',
   'msk-diagnostico', 'musiki-background', 'og-image', 'universidad-publica',
 ]);
 

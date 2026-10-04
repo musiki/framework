@@ -63,3 +63,22 @@ test('providers map to tenants and are only allowed on their tenant', () => {
   assert.equal(isAuthProviderAllowed(TENANTS.so, 'logto-mm'), false);
   assert.equal(isAuthProviderAllowed(TENANTS.musiki, 'logto-mm'), false);
 });
+
+test('hem tenant config', () => {
+  const hem = resolveTenant('hem.zztt.org');
+  assert.equal(hem.id, 'hem');
+  assert.equal(hem.routes, 'all');
+  assert.equal(hem.locale, 'fr');
+  assert.deepEqual(hem.authProviders, ['logto-hem']);
+  assert.equal(hem.brand.logo, '/hem-logo.png');
+  assert.equal(hem.brand.logoAlt, 'HEM');
+  assert.equal(hem.brand.helpLabel, 'Aide');
+});
+
+test('musiki brand values are unchanged', () => {
+  const b = TENANTS.musiki.brand;
+  assert.equal(b.logo, '/logo-musiki.png');
+  assert.equal(b.logoAlt, 'musiki26');
+  assert.equal(b.helpLabel, 'Ayuda Musiki');
+  assert.equal(b.docsUrl, 'https://doc.musiki.org.ar');
+});

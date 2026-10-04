@@ -7,6 +7,9 @@ import { getCourseFrontmatterId, getCourseLegacyCode } from '../lib/course-metad
 import { execSync } from 'node:child_process';
 import { SignOut } from 'auth-astro/components';
 import { getSession } from 'auth-astro/server';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+
+const brand = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).brand;
 
 const buildCommit = (() => {
   try {
@@ -220,7 +223,7 @@ const withActiveCourse = (href: string) => {
 				data-build-state="unknown"
 				data-commit={buildCommit}
 			>
-				<img src="/logo-musiki.png" alt="musiki26" class="brand-logo" />
+				<img src={brand.logo} alt={brand.logoAlt} class="brand-logo" />
 			</a>
 		</h2>
 		<div class="internal-links">
