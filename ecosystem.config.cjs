@@ -13,8 +13,8 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-// Instance-level settings: .env first, then the calling process env (the deploy
-// workflow exports MUSIKI_INSTANCE=hem), then per-instance defaults.
+// Instance: .env first, then the calling process env (the deploy workflow
+// exports MUSIKI_INSTANCE=hem). An empty value (`MUSIKI_INSTANCE=`) counts as unset.
 const setting = (key) => String(dotEnv[key] ?? process.env[key] ?? '').trim();
 const instance = setting('MUSIKI_INSTANCE') || 'musiki';
 if (!['musiki', 'hem'].includes(instance)) {
@@ -22,23 +22,29 @@ if (!['musiki', 'hem'].includes(instance)) {
 }
 const isHem = instance === 'hem';
 
-const appName = setting('PM2_APP_NAME') || (isHem ? 'hem-engine' : 'musiki-framework');
-// PORT only from .env: a stray PORT in the pm2/runner env must not move the app.
-const appPort = String(dotEnv.PORT ?? '').trim() || (isHem ? '4333' : '4321');
-// hem has no dev app unless PM2_DEV_APP_NAME is set explicitly.
-const devAppName = setting('PM2_DEV_APP_NAME') || (isHem ? '' : 'musiki-framework-dev');
-const devPort = setting('PM2_DEV_PORT') || '4325';
-const busAppName = setting('PM2_BUS_APP_NAME') || (isHem ? 'hem-engine-content-bus' : 'musiki-content-bus');
-const busPort = setting('CONTENT_BUS_PORT') || (isHem ? '4334' : '4322');
+// Names and ports are fixed per instance and never read from .env: musiki keeps
+// its historical values, and hem's .env is copied from the old fork, whose
+// PORT/PM2_*/VPS_* keys must not move the hem apps onto the fork's.
+const appName = isHem ? 'hem-engine' : 'musiki-framework';
+const appPort = isHem ? '4333' : '4321';
+const devAppName = isHem ? '' : 'musiki-framework-dev'; // hem has no dev app
+const busAppName = isHem ? 'hem-engine-content-bus' : 'musiki-content-bus';
+const busPort = isHem ? '4334' : '4322';
 
-// Defaults that keep a hem deploy (from the app or its content bus) off the
-// musiki lock, LilyPond store and pm2 apps. .env values still win.
-const hemDefaults = isHem
+// Values that define the hem instance. Spread AFTER ...dotEnv so a key copied
+// from the fork's .env cannot point hem at the fork (or at musiki's lock,
+// LilyPond store or pm2 apps). Empty for musiki, whose env stays as before.
+const hemPinned = isHem
   ? {
       MUSIKI_INSTANCE: 'hem',
-      LILYPOND_ASSET_DIR: '/opt/hem/data/lily',
+      PORT: appPort,
+      CONTENT_BUS_PORT: busPort,
+      VPS_FRAMEWORK_DIR: __dirname,
       VPS_DEPLOY_LOCK_FILE: '/tmp/hem-engine-deploy.lock',
       VPS_RELOAD_COMMAND: `pm2 reload ecosystem.config.cjs --only ${appName} --update-env || pm2 start ecosystem.config.cjs --only ${appName} --update-env`,
+      LILYPOND_ASSET_DIR: '/opt/hem/data/lily',
+      PM2_APP_NAME: appName,
+      PM2_BUS_APP_NAME: busAppName,
     }
   : {};
 
@@ -64,7 +70,6 @@ const apps = [
     autorestart: true,
     max_memory_restart: '1G',
     env: {
-      ...hemDefaults,
       ...dotEnv,
       NODE_ENV: 'production',
       HOST: '127.0.0.1',
@@ -72,29 +77,28 @@ const apps = [
       // FORZADO DE ENTORNO
       AUTH_URL: isHem ? (dotEnv.AUTH_URL || 'https://hem.zztt.org') : 'https://musiki.org.ar',
       AUTH_TRUST_HOST: 'true',
-      ...(isHem ? { MUSIKI_INSTANCE: 'hem', CONTENT_BUS_PORT: busPort } : {}),
+      ...hemPinned,
     },
   },
 ];
 
+// Dev app: musiki only.
 if (devAppName) {
   apps.push({
     name: devAppName,
     cwd: __dirname,
     script: 'node_modules/.bin/astro',
-    args: `dev --host 0.0.0.0 --port ${devPort}`,
+    args: 'dev --host 0.0.0.0 --port 4325',
     interpreter: 'node',
     exec_mode: 'fork',
     instances: 1,
     autorestart: true,
     env: {
-      ...hemDefaults,
       ...dotEnv,
       DATABASE_URL: stagingDatabaseUrl,
       NODE_ENV: 'development',
-      AUTH_URL: isHem ? (dotEnv.DEV_AUTH_URL || 'https://dev.hem.zztt.org') : 'https://dev.musiki.org.ar',
-      AUTH_TRUST_HOST: 'true',
-      ...(isHem ? { MUSIKI_INSTANCE: 'hem', CONTENT_BUS_PORT: busPort } : {}),
+      AUTH_URL: 'https://dev.musiki.org.ar',
+      AUTH_TRUST_HOST: 'true'
     },
   });
 }
@@ -113,9 +117,8 @@ apps.push({
     CONTENT_BUS_PORT: busPort,
     VPS_FRAMEWORK_DIR: __dirname,
     PATH: `/Users/zztt/.local/share/nvm/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${process.env.PATH}`,
-    ...hemDefaults,
     ...dotEnv,
-    ...(isHem ? { MUSIKI_INSTANCE: 'hem', CONTENT_BUS_PORT: busPort } : {}),
+    ...hemPinned,
     CONTENT_BUS_SECRET: dotEnv.CONTENT_BUS_SECRET || 'musiki-local-secret'
   },
 });

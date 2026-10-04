@@ -43,7 +43,7 @@ function loadConfigWithEnv(envText, processEnv = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ecosystem-'));
   fs.copyFileSync(path.resolve(__dirname, '../ecosystem.config.cjs'), path.join(dir, 'ecosystem.config.cjs'));
   if (envText !== null) fs.writeFileSync(path.join(dir, '.env'), envText);
-  const keys = ['MUSIKI_INSTANCE', 'PORT', 'CONTENT_BUS_PORT', 'PM2_APP_NAME', 'PM2_DEV_APP_NAME', 'PM2_BUS_APP_NAME'];
+  const keys = ['MUSIKI_INSTANCE', 'PORT', 'CONTENT_BUS_PORT', 'PM2_APP_NAME', 'PM2_DEV_APP_NAME', 'PM2_BUS_APP_NAME', 'PM2_DEV_PORT'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   for (const k of keys) delete process.env[k];
   Object.assign(process.env, processEnv);
@@ -99,15 +99,55 @@ test('ecosystem config: MUSIKI_INSTANCE=hem in .env selects hem names and ports'
   }
 });
 
-test('ecosystem config: MUSIKI_INSTANCE from the process env and explicit overrides', () => {
+test('ecosystem config: MUSIKI_INSTANCE from the process env', () => {
   const cfg = loadConfigWithEnv(null, { MUSIKI_INSTANCE: 'hem' });
   assert.deepStrictEqual(cfg.apps.map((a) => a.name), ['hem-engine', 'hem-engine-content-bus']);
-  const custom = loadConfigWithEnv('PM2_APP_NAME=x-app\nPORT=5000\nPM2_BUS_APP_NAME=x-bus\nCONTENT_BUS_PORT=5001\nPM2_DEV_APP_NAME=x-dev\n');
-  assert.deepStrictEqual(summary(custom), [
-    ['x-app', '5000'],
-    ['x-dev', 'dev --host 0.0.0.0 --port 4325'],
-    ['x-bus', '5001'],
+});
+
+test('ecosystem config: musiki names and ports ignore .env and the process env', () => {
+  const cfg = loadConfigWithEnv(
+    'DATABASE_URL=postgresql://u:p@h:5432/musiki26\nPORT=9999\nPM2_APP_NAME=x-app\nPM2_BUS_APP_NAME=x-bus\nPM2_DEV_APP_NAME=x-dev\n',
+    { PORT: '7777', PM2_APP_NAME: 'y-app' },
+  );
+  assert.deepStrictEqual(summary(cfg).slice(0, 2), [
+    ['musiki-framework', '4321'],
+    ['musiki-framework-dev', 'dev --host 0.0.0.0 --port 4325'],
   ]);
+  assert.strictEqual(cfg.apps[2].name, 'musiki-content-bus');
+});
+
+test('ecosystem config: hem instance values win over keys copied from the fork .env', () => {
+  const forkEnv = [
+    'MUSIKI_INSTANCE=hem',
+    'PORT=4321',
+    'CONTENT_BUS_PORT=4322',
+    'VPS_FRAMEWORK_DIR=/opt/hem/framework',
+    'VPS_RELOAD_COMMAND=pm2 reload hem-framework',
+    'VPS_DEPLOY_LOCK_FILE=/tmp/musiki-framework-deploy.lock',
+    'LILYPOND_ASSET_DIR=/opt/musiki/data/lily',
+    'PM2_APP_NAME=hem-framework',
+    'PM2_DEV_APP_NAME=hem-framework-dev',
+    'PM2_BUS_APP_NAME=hem-content-bus',
+    '',
+  ].join('\n');
+  const cfg = loadConfigWithEnv(forkEnv);
+  assert.deepStrictEqual(summary(cfg), [
+    ['hem-engine', '4333'],
+    ['hem-engine-content-bus', '4334'],
+  ]);
+  const dir = path.dirname(cfg.apps[0].env.VPS_FRAMEWORK_DIR);
+  for (const a of cfg.apps) {
+    assert.strictEqual(a.env.MUSIKI_INSTANCE, 'hem', a.name);
+    assert.strictEqual(a.env.CONTENT_BUS_PORT, '4334', a.name);
+    assert.strictEqual(a.env.VPS_DEPLOY_LOCK_FILE, '/tmp/hem-engine-deploy.lock', a.name);
+    assert.strictEqual(a.env.LILYPOND_ASSET_DIR, '/opt/hem/data/lily', a.name);
+    assert.match(a.env.VPS_RELOAD_COMMAND, /--only hem-engine --update-env/, a.name);
+    assert.strictEqual(a.env.PM2_APP_NAME, 'hem-engine', a.name);
+    assert.strictEqual(a.env.PM2_BUS_APP_NAME, 'hem-engine-content-bus', a.name);
+    assert.notStrictEqual(a.env.VPS_FRAMEWORK_DIR, '/opt/hem/framework', a.name);
+    assert.strictEqual(path.dirname(a.env.VPS_FRAMEWORK_DIR), dir, a.name);
+  }
+  assert.strictEqual(cfg.apps[0].env.PORT, '4333');
 });
 
 test('ecosystem config: unknown instance fails loudly', () => {
