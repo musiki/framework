@@ -96,7 +96,7 @@
 
 **Files:** `ecosystem.config.cjs`, `scripts/vps/content-bus.mjs` (if it hard-codes names/paths), `scripts/vps/deploy-framework-local.sh` (only if needed: it already reads `VPS_FRAMEWORK_DIR`, `VPS_DEPLOY_LOCK_FILE`, `LILYPOND_ASSET_DIR`, `VPS_RELOAD_COMMAND`), `.github/workflows/sync-content-sources.yml`, new `scripts/vps/env-keys-check.mjs` (+ test)
 
-- [ ] `ecosystem.config.cjs`: app names and ports from env with today's defaults (`PM2_APP_NAME` → `musiki-framework`, `PORT` 4321; `PM2_DEV_APP_NAME`; `PM2_BUS_APP_NAME` → `musiki-content-bus`, `CONTENT_BUS_PORT` 4322). With `MUSIKI_INSTANCE=hem` in `.env` the defaults become `hem-engine` / 4333, no dev app, `hem-engine-content-bus` / 4334. Keep the existing `.env` parsing. Test with a tiny node script that requires the config under both envs and asserts names/ports (add to `scripts/ecosystem-config.test.mjs`, which already exists).
+- [ ] `ecosystem.config.cjs`: app names and ports from env with today's defaults (`PM2_APP_NAME` → `musiki-framework`, `PORT` 4321; `PM2_DEV_APP_NAME`; `PM2_BUS_APP_NAME` → `musiki-content-bus`, `CONTENT_BUS_PORT` 4322). With `MUSIKI_INSTANCE=hem` in `.env` the defaults become `hem-engine` / 4333, no dev app, `hem-engine-content-bus` / 4334. Keep the existing `.env` parsing. Test with a tiny node script that requires the config under both envs and asserts names/ports (add to `scripts/ecosystem-config.test.mjs`, which already exists). *Revised in the final fix wave:* names and ports are fixed per instance and not read from `.env` (musiki output byte-identical to main; hem's `PORT`, `CONTENT_BUS_PORT`, `VPS_FRAMEWORK_DIR`, lock, LilyPond dir, reload command and pm2 names are spread after `...dotEnv` so the copied fork `.env` cannot override them).
 - [ ] Workflow: after "Reload Content Bus Sidecar", add a job step group for hem: rsync the same `$GITHUB_WORKSPACE` to `/opt/hem/engine` with the same excludes; `cd /opt/hem/engine && MUSIKI_INSTANCE=hem VPS_FRAMEWORK_DIR=/opt/hem/engine VPS_DEPLOY_LOCK_FILE=/tmp/hem-engine-deploy.lock LILYPOND_ASSET_DIR=/opt/hem/data/lily VPS_RELOAD_COMMAND="pm2 reload ecosystem.config.cjs --only hem-engine --update-env || pm2 start ecosystem.config.cjs --only hem-engine --update-env" bash scripts/vps/deploy-framework-local.sh`; then reload `hem-engine-content-bus`. Skip the hem steps when `/opt/hem/engine/.env` is missing (prints a notice) so the first merge cannot break musiki. Dispatches: if `CONTENT_SOURCE_TARGET_REPO` is `HEM-Multimedia-Master/internetmusic`, run only the hem steps; if it is a musiki source, only the musiki steps; pushes run both. Mark the hem steps `continue-on-error: false` but after the musiki steps, so a hem failure never undoes musiki.
 - [ ] `scripts/vps/env-keys-check.mjs <reference.env> <target.env>`: prints key **names** present in reference and missing in target (never values; parse `KEY=` prefixes only). Test with temp files.
 - [ ] Commit `feat(ops): hem instance runtime and deploy steps`.
@@ -104,8 +104,29 @@
 ### Task 8: Rollout (controller, with the user)
 
 - [ ] **DB catch-up:** list migrations applied to `musiki26` but not `musiki_hem` (compare `postgres-patches/migrations/*.sql` against objects present; or apply all idempotent migrations in order). Backup `musiki_hem` → restore into `musiki_hem_check` → apply all migrations twice there → if clean, apply twice to `musiki_hem` → owner checks → drop `musiki_hem_check`. All via uploaded bash scripts.
-- [ ] **Env:** on the VPS `mkdir -p /opt/hem/engine /opt/hem/data/lily`; `cp /opt/hem/framework/.env /opt/hem/engine/.env` (no printing); run `env-keys-check.mjs /opt/musiki/framework/.env /opt/hem/engine/.env` and give the user the missing key names; the user adds `MUSIKI_INSTANCE=hem`, `PORT=4333`, `LOGTO_HEM_CLIENT_ID/SECRET` (from the fork's Logto app), `LILYPOND_*`, `PLUGINS_DIR`, `AUTH_URL=https://hem.zztt.org`; the user updates the Logto app redirect URI to `https://hem.zztt.org/api/auth/callback/logto-hem`.
+- [ ] **Checkout:** `/opt/hem/engine` must be a git clone, not an empty dir: `deploy-framework-local.sh` runs `git fetch origin && git reset --hard origin/main` there. As zz: `sudo install -d -o zz -g zz /opt/hem /opt/hem/data/lily` (if not already zz-owned) then `git clone https://github.com/musiki/framework.git /opt/hem/engine` (owner zz; verify `stat -c %U /opt/hem/engine` = zz and `git -C /opt/hem/engine remote get-url origin`).
+- [ ] **Env:** `cp /opt/hem/framework/.env /opt/hem/engine/.env` (no printing; `chmod 600`).
+- [ ] **Strip fork instance keys:** the fork's `.env` carries values that would point the engine at the fork. List the names present (names only, never values) and remove them:
+  ```bash
+  ENV=/opt/hem/engine/.env
+  KEYS='CONTENT_BUS_PORT|VPS_FRAMEWORK_DIR|VPS_RELOAD_COMMAND|VPS_DEPLOY_LOCK_FILE|LILYPOND_ASSET_DIR|PORT|PM2_APP_NAME|PM2_DEV_APP_NAME|PM2_BUS_APP_NAME'
+  grep -oE "^(${KEYS})=" "$ENV" | tr -d '='; grep -qE "^(${KEYS})=" "$ENV" || echo '(none present)'
+  cp -p "$ENV" "$ENV.bak-$(date +%Y%m%d%H%M%S)"   # backup stays on the VPS, chmod 600
+  sed -i -E "/^(${KEYS})=/d" "$ENV"
+  grep -cE "^(${KEYS})=" "$ENV"   # expect 0
+  ```
+  (`ecosystem.config.cjs` pins these for hem anyway; removing them keeps `.env` honest for scripts that read it directly.)
+- [ ] **Missing keys:** run `env-keys-check.mjs /opt/musiki/framework/.env /opt/hem/engine/.env` and give the user the missing key names; the user adds `MUSIKI_INSTANCE=hem`, `LOGTO_HEM_CLIENT_ID/SECRET` (from the fork's Logto app), `LILYPOND_SOCKET`, `PLUGINS_DIR`, `AUTH_URL=https://hem.zztt.org` (no `PORT`: hem is pinned to 4333/4334 by `ecosystem.config.cjs`); the user updates the Logto app redirect URI to `https://hem.zztt.org/api/auth/callback/logto-hem`.
+- [ ] **Content token check:** confirm `CONTENT_SOURCE_READ_TOKEN` from `/opt/hem/engine/.env` can read `HEM-Multimedia-Master/internetmusic`, printing only the status code:
+  ```bash
+  TOKEN="$(grep -E '^CONTENT_SOURCE_READ_TOKEN=' /opt/hem/engine/.env | tail -n 1 | cut -d= -f2- | tr -d "\"' \r")"
+  [ -n "$TOKEN" ] || echo 'CONTENT_SOURCE_READ_TOKEN missing'
+  curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" https://api.github.com/repos/HEM-Multimedia-Master/internetmusic
+  unset TOKEN
+  ```
+  Expect `200`; on `404`/`401` the user grants the token read access to the repo (fine-grained token or org approval) before the first deploy.
 - [ ] **Deploy:** merge `feat/hem-instance` → main, push, verify `origin/main`, watch the run; musiki verified unchanged (musiki.org.ar home, a course, login 200).
+- [ ] **Known workflow behaviour:** the hem steps run after the musiki steps in the same job, and a musiki-only `repository_dispatch` shares the musiki concurrency group with pushes. If such a dispatch arrives while a push run is in its hem steps, it can cancel that run: musiki is already deployed, hem is left on its previous build and is only updated by the next push (or a manual `workflow_dispatch`). Check the hem step status of the run before assuming hem is current.
 - [ ] **Smoke:** `curl -H 'Host: hem.zztt.org' http://127.0.0.1:4333/` (+ a course page, `/login`, `/foro`) on the VPS: 200, French, HEM logo.
 - [ ] **Caddy:** `hem.zztt.org` → `reverse_proxy 127.0.0.1:4333` (backup, validate, reload); verify https://hem.zztt.org live; sign in via Logto.
 - [ ] **Retire (user OK):** `pm2 delete hem-framework hem-framework-dev hem-content-bus && pm2 save`; tarball `/opt/hem/framework` without `.env` into `/home/zz/backups/`; delete `/opt/hem/framework`; delete `/Users/zztt/projects/hem/framework`; the user archives `HEM-Multimedia-Master/framework` on GitHub and points `internetmusic`'s dispatch at `musiki/framework`.
