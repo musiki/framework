@@ -18,9 +18,11 @@ permissions:
 
 # One group per instance: a hem content dispatch must never cancel an
 # in-flight musiki deploy (and vice versa). Pushes deploy both and stay in the
-# musiki group, as before.
+# musiki group, as before. The hem-dispatch test below is an exact match
+# (GitHub `==` ignores case) and must stay identical to HEM_DISPATCH in the
+# "Select instances to deploy" step (scripts/vps/workflow-scope.test.mjs).
 concurrency:
-  group: ${{ (github.event_name == 'repository_dispatch' && contains(github.event.client_payload.source_repo, 'HEM-Multimedia-Master/internetmusic')) && 'content-sync-hem' || 'content-sync' }}
+  group: ${{ (github.event_name == 'repository_dispatch' && (github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'git@github.com:HEM-Multimedia-Master/internetmusic.git')) && 'content-sync-hem' || 'content-sync' }}
   cancel-in-progress: true
 
 env:
@@ -83,17 +85,21 @@ jobs:
 
       # repository_dispatch from HEM-Multimedia-Master/internetmusic -> hem only;
       # any other dispatch -> musiki only; push / workflow_dispatch -> both.
+      # repository_dispatch from HEM-Multimedia-Master/internetmusic -> hem only;
+      # any other dispatch -> musiki only; push / workflow_dispatch -> both.
+      # HEM_DISPATCH is the same expression as the concurrency group, so a run
+      # deploys musiki only when it sits in the musiki (content-sync) group.
       - name: Select instances to deploy
         id: scope
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          HEM_DISPATCH: ${{ github.event_name == 'repository_dispatch' && (github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'git@github.com:HEM-Multimedia-Master/internetmusic.git') }}
         run: |
-          target="$(printf '%s' "$CONTENT_SOURCE_TARGET_REPO" | tr '[:upper:]' '[:lower:]' | sed -E 's#^(https?://github\.com/|git@github\.com:)##; s#\.git$##; s#^/+##')"
           musiki=true
           hem=true
           if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
-            if [[ "$target" == "hem-multimedia-master/internetmusic" ]]; then
+            if [[ "$HEM_DISPATCH" == "true" ]]; then
               musiki=false
             else
               hem=false
@@ -101,7 +107,7 @@ jobs:
           fi
           echo "musiki=$musiki" >> "$GITHUB_OUTPUT"
           echo "hem=$hem" >> "$GITHUB_OUTPUT"
-          echo "[scope] event=$EVENT_NAME target=${target:-none} musiki=$musiki hem=$hem"
+          echo "[scope] event=$EVENT_NAME target=${CONTENT_SOURCE_TARGET_REPO:-none} musiki=$musiki hem=$hem"
 
       - name: Sync checked-out framework into runtime dir
         if: ${{ steps.scope.outputs.musiki == 'true' }}
@@ -151,13 +157,27 @@ jobs:
             echo "::notice title=hem deploy skipped::/opt/hem/engine/.env is missing; provision the hem instance to enable hem deploys"
           fi
 
+      # A push (content-sync group) and a hem dispatch (content-sync-hem) can
+      # overlap, and the hem content bus can redeploy at any time. The rsync
+      # takes the same lock deploy-framework-local.sh holds for the whole hem
+      # build (/tmp/hem-engine-deploy.lock), so it never rewrites the tree
+      # mid-build. The lock is released before the deploy step, which takes it
+      # again itself: no nesting, so no self-deadlock.
       - name: Sync checked-out framework into hem runtime dir
         if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
         continue-on-error: false
+        shell: bash
         run: |
           mkdir -p /opt/hem/engine
 
-          rsync -a --delete \
+          lock=()
+          if command -v flock >/dev/null 2>&1; then
+            lock=(flock -w 900 /tmp/hem-engine-deploy.lock)
+          else
+            echo "flock not available; syncing hem without deploy lock" >&2
+          fi
+
+          "${lock[@]}" rsync -a --delete \
             --exclude '.env' \
             --exclude '.git' \
             --exclude '.astro' \
