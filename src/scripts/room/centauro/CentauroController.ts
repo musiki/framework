@@ -479,7 +479,7 @@ export class CentauroController {
 
     this.mapModeBtn.addEventListener('click', () => {
       this.mapMode = this.mapMode === 'chromatic' ? 'isomorphic' : 'chromatic';
-      this.mapModeBtn.textContent = `Mapa: ${this.mapMode === 'chromatic' ? 'Cromático' : 'Isomórfico'}`;
+      this.mapModeBtn.textContent = this.mapModeLabel();
       this.renderKeyboard(); // Re-render keyboard to update layout labels
       if (this.onMapModeChange) {
         this.onMapModeChange(this.mapMode);
@@ -994,10 +994,18 @@ export class CentauroController {
     }
   }
 
+  /** Map-mode button label, localized by the server (data-label-*), Spanish as fallback. */
+  private mapModeLabel(): string {
+    const labels = this.mapModeBtn.dataset;
+    return this.mapMode === 'chromatic'
+      ? labels.labelChromatic || 'Mapa: Cromático'
+      : labels.labelIsomorphic || 'Mapa: Isomórfico';
+  }
+
   public setMapModeRemote(mapMode: 'chromatic' | 'isomorphic') {
     this.mapMode = mapMode;
     if (this.mapModeBtn) {
-      this.mapModeBtn.textContent = `Mapa: ${this.mapMode === 'chromatic' ? 'Cromático' : 'Isomórfico'}`;
+      this.mapModeBtn.textContent = this.mapModeLabel();
     }
     this.renderKeyboard();
   }
