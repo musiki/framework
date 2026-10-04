@@ -11,6 +11,8 @@ import {
 import { query } from '../lib/db/pool';
 import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
 import { getCourseFrontmatterId } from '../lib/course-metadata';
+import { t } from '../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
 
 type CourseMeta = {
   courseId: string;
@@ -48,6 +50,29 @@ function pickNewestTimestamp(current: string | null, candidate: string | null): 
   return candidateTs > currentTs ? candidate : current;
 }
 
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
+// Strings the inline reader script writes (read through forumText()).
+const forumClientStrings = JSON.stringify({
+  newThreadPlaceholder: t(locale, 'forum.newThreadPlaceholder'),
+  uploadFailed: t(locale, 'forum.uploadFailed'),
+  reactionFailed: t(locale, 'forum.reactionFailed'),
+  postEditFailed: t(locale, 'forum.postEditFailed'),
+  postDeleteFailed: t(locale, 'forum.postDeleteFailed'),
+  replies: t(locale, 'forum.replies'),
+  pinFailed: t(locale, 'forum.pinFailed'),
+  threadEditFailed: t(locale, 'forum.threadEditFailed'),
+  threadDeleteFailed: t(locale, 'forum.threadDeleteFailed'),
+  boardsLoadFailed: t(locale, 'forum.boardsLoadFailed'),
+  threadsLoadFailed: t(locale, 'forum.threadsLoadFailed'),
+  boardNameShort: t(locale, 'forum.boardNameShort'),
+  boardCreateFailed: t(locale, 'forum.boardCreateFailed'),
+  replyEmpty: t(locale, 'forum.replyEmpty'),
+  replyFailed: t(locale, 'forum.replyFailed'),
+  titleShort: t(locale, 'forum.titleShort'),
+  threadCreateFailed: t(locale, 'forum.threadCreateFailed'),
+  threadPublished: t(locale, 'forum.threadPublished'),
+  boardListFailed: t(locale, 'forum.boardListFailed'),
+});
 const session = (Astro.locals as any).session;
 if (!session?.user?.email) {
   return Astro.redirect('/login?redirect=/foro');
@@ -101,7 +126,7 @@ let activeForumView: 'board' | 'lesson' = 'board';
 let activeForumScope = 'general';
 let activeForumScopeKey = '';
 let activeForumLabel = 'General';
-let activeForumDescription = 'Foro general del curso.';
+let activeForumDescription = t(locale, 'forum.generalDescription');
 let activeCourseCanModerate = false;
 
 if (activeCourse) {
@@ -166,7 +191,7 @@ if (activeCourse) {
     }
   } catch (error: any) {
     console.error('Forum sidebar load error:', error?.message || error);
-    forumListError = 'No se pudo cargar el estado del foro.';
+    forumListError = t(locale, 'forum.stateLoadFailed');
   }
 
   const threadStatsById = new Map<string, { messageCount: number; lastActivityAt: string | null }>();
@@ -265,8 +290,8 @@ if (activeCourse) {
       : 'general';
     activeForumLabel = String(boardBySlugForSelection.get(activeForumScope)?.title || 'General');
     activeForumDescription = activeForumScope === 'general'
-      ? 'Foro general del curso.'
-      : 'Foro alternativo del curso.';
+      ? t(locale, 'forum.generalDescription')
+      : t(locale, 'forum.alternativeDescription');
     activeForumScopeKey = `board:${courseId}:${activeForumScope}`;
   }
 
@@ -308,9 +333,9 @@ if (activeCourse) {
 ---
 
 <!doctype html>
-<html lang="es">
+<html lang={locale}>
   <head>
-    <BaseHead title="Foro" description="Navegador global de foros por curso y clase" />
+    <BaseHead title={t(locale, 'forum.title')} description={t(locale, 'forum.description')} />
     <style>
       .forum-shell {
         width: 100%;
@@ -1843,12 +1868,12 @@ if (activeCourse) {
         activeCourseCode={activeCourse?.code || ''}
       />
     )}
-    <main class:list={["forum-shell", { "is-embedded": isEmbedded }]} style={isEmbedded ? "padding:0; grid-template-columns: 1fr;" : ""}>
+    <main data-forum-i18n={forumClientStrings} class:list={["forum-shell", { "is-embedded": isEmbedded }]} style={isEmbedded ? "padding:0; grid-template-columns: 1fr;" : ""}>
       {!isEmbedded && (
         <aside class="forum-sidebar">
           <div class="forum-sidebar-top">
             <form method="get">
-              <label for="forum-course-select">Curso</label>
+              <label for="forum-course-select">{t(locale, 'forum.course')}</label>
               <select
                 id="forum-course-select"
                 name="course"
@@ -1857,7 +1882,7 @@ if (activeCourse) {
                 disabled={accessibleCourses.length === 0}
               >
                 {accessibleCourses.length === 0 ? (
-                  <option value="">Sin cursos con acceso</option>
+                  <option value="">{t(locale, 'forum.noAccessibleCourses')}</option>
                 ) : (
                   accessibleCourses.map((course) => (
                     <option value={course.courseId} selected={activeCourse?.courseId === course.courseId}>
@@ -1873,7 +1898,7 @@ if (activeCourse) {
           <ul class="forum-nav-list">
             {mainForumItems.length === 0 ? (
               <li class="forum-nav-link">
-                <span class="forum-nav-label">No hay foros principales</span>
+                <span class="forum-nav-label">{t(locale, 'forum.noMainForums')}</span>
               </li>
             ) : (
               mainForumItems.map((item) => (
@@ -1888,8 +1913,8 @@ if (activeCourse) {
                   >
                     <span class="forum-nav-label">{item.title}</span>
                     <span class="forum-nav-counts">
-                      <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
-                      <span class="forum-count-unread" title="mensajes no leídos">0</span>
+                      <span class="forum-count-total" title={t(locale, 'forum.totalMessages')}>{item.totalMessages}</span>
+                      <span class="forum-count-unread" title={t(locale, 'forum.unreadMessages')}>0</span>
                     </span>
                   </a>
                 </li>
@@ -1903,7 +1928,7 @@ if (activeCourse) {
           <ul class="forum-nav-list">
             {classForumItems.length === 0 ? (
               <li class="forum-nav-link">
-                <span class="forum-nav-label">No hay foros de clase</span>
+                <span class="forum-nav-label">{t(locale, 'forum.noClassForums')}</span>
               </li>
             ) : (
               classForumItems.map((item) => (
@@ -1918,8 +1943,8 @@ if (activeCourse) {
                   >
                     <span class="forum-nav-label">{item.title}</span>
                     <span class="forum-nav-counts">
-                      <span class="forum-count-total" title="mensajes totales">{item.totalMessages}</span>
-                      <span class="forum-count-unread" title="mensajes no leídos">0</span>
+                      <span class="forum-count-total" title={t(locale, 'forum.totalMessages')}>{item.totalMessages}</span>
+                      <span class="forum-count-unread" title={t(locale, 'forum.unreadMessages')}>0</span>
                     </span>
                   </a>
                 </li>
@@ -1934,19 +1959,19 @@ if (activeCourse) {
           <>
             <div class="forum-main-header">
               <div>
-                <h1>Foro</h1>
+                <h1>{t(locale, 'forum.title')}</h1>
                 {activeCourse ? (
                   <p>
-                    Lectura dedicada de hilos para <strong>{activeCourse.title}</strong>.
+                    {t(locale, 'forum.readingFor')} <strong>{activeCourse.title}</strong>.
                   </p>
                 ) : (
-                  <p>No tienes cursos con acceso a foro en este momento.</p>
+                  <p>{t(locale, 'forum.noForumAccess')}</p>
                 )}
               </div>
               {activeCourse && <div class="forum-scope-badge">{activeForumLabel}</div>}
             </div>
             <div class="forum-panel-help">
-              Verde: total de mensajes por foro. Rojo: mensajes no leídos desde tu última lectura.
+              {t(locale, 'forum.countsHelp')}
             </div>
           </>
         )}
@@ -1973,7 +1998,7 @@ if (activeCourse) {
 
                   {activeForumView === 'board' && (
                     <details id="forum-new-board-details" class="forum-fold" hidden>
-                      <summary class="forum-fold-summary">Crear foro</summary>
+                      <summary class="forum-fold-summary">{t(locale, 'forum.createForum')}</summary>
                       <form id="forum-new-board-form" class="forum-form">
                         <input id="forum-board-title" class="forum-field" type="text" maxlength="90" placeholder="Título" required />
                         <input id="forum-board-description" class="forum-field" type="text" maxlength="260" placeholder="Descripción opcional" />
@@ -1981,9 +2006,9 @@ if (activeCourse) {
                           <button
                             type="submit"
                             class="forum-secondary-btn forum-action-btn forum-action-f"
-                            data-tooltip="Crear foro alternativo"
-                            aria-label="Crear foro alternativo"
-                            title="Crear foro alternativo"
+                            data-tooltip={t(locale, 'forum.createAlternative')}
+                            aria-label={t(locale, 'forum.createAlternative')}
+                            title={t(locale, 'forum.createAlternative')}
                           >F</button>
                         </div>
                       </form>
@@ -2003,7 +2028,7 @@ if (activeCourse) {
               </div>
 
               <div id="forum-reply-indicator" class="forum-reply-indicator" hidden>
-                <button type="button" id="forum-cancel-reply" class="forum-reply-indicator-cancel" aria-label="Cancelar respuesta" title="Cancelar">✕</button>
+                <button type="button" id="forum-cancel-reply" class="forum-reply-indicator-cancel" aria-label={t(locale, 'forum.cancelReply')} title={t(locale, 'forum.cancel')}>✕</button>
                 <span class="forum-reply-indicator-label">↩ Respondiendo a <strong id="forum-reply-author-name"></strong></span>
               </div>
 
@@ -2019,7 +2044,7 @@ if (activeCourse) {
                 </div>
                 <form id="forum-new-thread-form" class="forum-new-thread-form">
                   <div class="forum-editor-dropzone forum-new-thread-editor">
-                    <textarea id="forum-thread-body" class="forum-textarea forum-textarea--autogrow" maxlength="4000" placeholder="Nuevo hilo… (primera línea = título)" required rows="1"></textarea>
+                    <textarea id="forum-thread-body" class="forum-textarea forum-textarea--autogrow" maxlength="4000" placeholder={t(locale, 'forum.newThreadPlaceholder')} required rows="1"></textarea>
                   </div>
                   <button type="submit" class="forum-send-btn" title="Publicar" aria-label="Publicar">
                     <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M3.4 11.2 19.8 4.3c.8-.3 1.7.4 1.5 1.2l-2.7 13.3c-.2 1-1.5 1.2-2 .4l-3.3-4.7-4.8-.5c-1-.1-1.2-1.5-.3-2l11.6-6.8-12.9 5 1.2 2.3c.3.7-.2 1.5-1 1.4l-3.2-.3c-.9-.1-1.2-1.4-.5-1.8Z" fill="currentColor"/></svg>
@@ -2032,13 +2057,13 @@ if (activeCourse) {
       </section>
     </main>
     <div id="forum-media-modal" class="forum-media-modal" hidden aria-hidden="true">
-      <div class="forum-media-modal-stage" role="dialog" aria-modal="true" aria-label="Media ampliado">
+      <div class="forum-media-modal-stage" role="dialog" aria-modal="true" aria-label={t(locale, 'forum.mediaEnlarged')}>
         <button
           id="forum-media-modal-close"
           class="forum-media-modal-close"
           type="button"
-          aria-label="Cerrar media ampliado"
-          title="Cerrar"
+          aria-label={t(locale, 'forum.closeMedia')}
+          title={t(locale, 'forum.close')}
         >×</button>
         <div id="forum-media-modal-content" class="forum-media-modal-content"></div>
       </div>
@@ -2050,6 +2075,15 @@ if (activeCourse) {
     </script>
 
     <script is:inline>
+      // Localized client strings from <main data-forum-i18n>; the Spanish literal is the fallback.
+      function forumText(key, fallback) {
+        try {
+          const table = JSON.parse(document.querySelector('[data-forum-i18n]')?.getAttribute('data-forum-i18n') || '{}');
+          return table[key] || fallback;
+        } catch {
+          return fallback;
+        }
+      }
       const FORUM_READ_PREFIX = 'forum:read:';
 
       function parseForumReadState(value) {
@@ -2590,7 +2624,7 @@ if (activeCourse) {
           parentPostInput.value = '';
           replyIndicatorEl.hidden = true;
           if (replyAuthorNameEl) replyAuthorNameEl.textContent = '';
-          threadBodyInput.placeholder = 'Nuevo hilo… (primera línea = título)';
+          threadBodyInput.placeholder = forumText('newThreadPlaceholder', 'Nuevo hilo… (primera línea = título)');
         };
 
         const setReplyTarget = (postId, authorName) => {
@@ -2986,7 +3020,7 @@ a[node] -->|edge| b[hub]
 
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(payload?.error || 'No se pudo subir el archivo.');
+            throw new Error(payload?.error || forumText('uploadFailed', 'No se pudo subir el archivo.'));
           }
 
           const mediaUrl = typeof payload?.url === 'string' ? payload.url.trim() : '';
@@ -3057,7 +3091,7 @@ a[node] -->|edge| b[hub]
             return true;
           } catch (error) {
             console.error('Forum media upload client error:', error);
-            setStatus(error?.message || 'No se pudo subir el archivo.', 'error');
+            setStatus(error?.message || forumText('uploadFailed', 'No se pudo subir el archivo.'), 'error');
             return true;
           } finally {
             textarea.closest('.forum-editor-dropzone')?.classList.remove('is-uploading');
@@ -3464,7 +3498,7 @@ a[node] -->|edge| b[hub]
                       });
                       const payload = await response.json().catch(() => ({}));
                       if (!response.ok) {
-                        throw new Error(payload?.error || 'No se pudo registrar la reacción.');
+                        throw new Error(payload?.error || forumText('reactionFailed', 'No se pudo registrar la reacción.'));
                       }
 
                       const payloadCounts = payload?.reactionCounts;
@@ -3479,7 +3513,7 @@ a[node] -->|edge| b[hub]
                       applyReactionState();
                     } catch (error) {
                       console.error('Forum reaction error:', error);
-                      setForumStatus(error?.message || 'No se pudo registrar la reacción.', 'error');
+                      setForumStatus(error?.message || forumText('reactionFailed', 'No se pudo registrar la reacción.'), 'error');
                     } finally {
                       reactionButtons.forEach((button) => {
                         button.disabled = false;
@@ -3652,14 +3686,14 @@ a[node] -->|edge| b[hub]
                       });
                       const payload = await response.json().catch(() => ({}));
                       if (!response.ok) {
-                        throw new Error(payload?.error || 'No se pudo editar el mensaje.');
+                        throw new Error(payload?.error || forumText('postEditFailed', 'No se pudo editar el mensaje.'));
                       }
 
                       setForumStatus('Mensaje actualizado.', 'info');
                       await loadPosts(forumState.selectedThreadId);
                     } catch (error) {
                       console.error('Forum post edit error:', error);
-                      setForumStatus(error?.message || 'No se pudo editar el mensaje.', 'error');
+                      setForumStatus(error?.message || forumText('postEditFailed', 'No se pudo editar el mensaje.'), 'error');
                     } finally {
                       if (saveEditButton) saveEditButton.disabled = false;
                       if (cancelEditButton) cancelEditButton.disabled = false;
@@ -3702,13 +3736,13 @@ a[node] -->|edge| b[hub]
                       });
                       const payload = await response.json().catch(() => ({}));
                       if (!response.ok) {
-                        throw new Error(payload?.error || 'No se pudo borrar el mensaje.');
+                        throw new Error(payload?.error || forumText('postDeleteFailed', 'No se pudo borrar el mensaje.'));
                       }
                       setForumStatus('Mensaje borrado.', 'info');
                       await loadThreads({ preserveSelection: true });
                     } catch (error) {
                       console.error('Forum post delete error:', error);
-                      setForumStatus(error?.message || 'No se pudo borrar el mensaje.', 'error');
+                      setForumStatus(error?.message || forumText('postDeleteFailed', 'No se pudo borrar el mensaje.'), 'error');
                       deleteButton.disabled = false;
                       if (editButton) editButton.disabled = false;
                       if (replyButton) replyButton.disabled = false;
@@ -3814,8 +3848,8 @@ a[node] -->|edge| b[hub]
             const replyChip = document.createElement('span');
             replyChip.className = 'forum-thread-count forum-thread-count-replies';
             replyChip.textContent = String(replyCount);
-            replyChip.dataset.tooltip = 'respuestas';
-            replyChip.title = 'respuestas';
+            replyChip.dataset.tooltip = forumText('replies', 'respuestas');
+            replyChip.title = forumText('replies', 'respuestas');
             counts.appendChild(replyChip);
 
             const trailing = document.createElement('span');
@@ -3929,14 +3963,14 @@ a[node] -->|edge| b[hub]
                   });
                   const payload = await response.json().catch(() => ({}));
                   if (!response.ok) {
-                    throw new Error(payload?.error || 'No se pudo actualizar el fijado del hilo.');
+                    throw new Error(payload?.error || forumText('pinFailed', 'No se pudo actualizar el fijado del hilo.'));
                   }
 
                   setForumStatus(thread.isPinned ? 'Hilo desfijado.' : 'Hilo fijado.', 'info');
                   await loadThreads({ preserveSelection: true });
                 } catch (error) {
                   console.error('Forum thread pin error:', error);
-                  setForumStatus(error?.message || 'No se pudo actualizar el fijado del hilo.', 'error');
+                  setForumStatus(error?.message || forumText('pinFailed', 'No se pudo actualizar el fijado del hilo.'), 'error');
                 } finally {
                   setThreadActionState(false);
                 }
@@ -3975,14 +4009,14 @@ a[node] -->|edge| b[hub]
                   });
                   const payload = await response.json().catch(() => ({}));
                   if (!response.ok) {
-                    throw new Error(payload?.error || 'No se pudo editar el hilo.');
+                    throw new Error(payload?.error || forumText('threadEditFailed', 'No se pudo editar el hilo.'));
                   }
 
                   setForumStatus('Hilo actualizado.', 'info');
                   await loadThreads({ preserveSelection: true });
                 } catch (error) {
                   console.error('Forum thread edit error:', error);
-                  setForumStatus(error?.message || 'No se pudo editar el hilo.', 'error');
+                  setForumStatus(error?.message || forumText('threadEditFailed', 'No se pudo editar el hilo.'), 'error');
                 } finally {
                   setThreadActionState(false);
                 }
@@ -4009,14 +4043,14 @@ a[node] -->|edge| b[hub]
                   });
                   const payload = await response.json().catch(() => ({}));
                   if (!response.ok) {
-                    throw new Error(payload?.error || 'No se pudo borrar el hilo.');
+                    throw new Error(payload?.error || forumText('threadDeleteFailed', 'No se pudo borrar el hilo.'));
                   }
                   clearReplyTarget();
                   setForumStatus('Hilo borrado.', 'info');
                   await loadThreads({ preserveSelection: true });
                 } catch (error) {
                   console.error('Forum thread delete error:', error);
-                  setForumStatus(error?.message || 'No se pudo borrar el hilo.', 'error');
+                  setForumStatus(error?.message || forumText('threadDeleteFailed', 'No se pudo borrar el hilo.'), 'error');
                 } finally {
                   setThreadActionState(false);
                 }
@@ -4068,7 +4102,7 @@ a[node] -->|edge| b[hub]
           const payload = await response.json().catch(() => ({}));
 
           if (!response.ok) {
-            throw new Error(payload?.error || 'No se pudieron cargar los foros del curso.');
+            throw new Error(payload?.error || forumText('boardsLoadFailed', 'No se pudieron cargar los foros del curso.'));
           }
 
           forumState.boards = Array.isArray(payload.boards) ? payload.boards : [];
@@ -4104,7 +4138,7 @@ a[node] -->|edge| b[hub]
             const response = await fetch(url.toString());
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
-              throw new Error(payload?.error || 'No se pudieron cargar los hilos del foro.');
+              throw new Error(payload?.error || forumText('threadsLoadFailed', 'No se pudieron cargar los hilos del foro.'));
             }
 
             forumState.threads = Array.isArray(payload.threads) ? payload.threads : [];
@@ -4143,7 +4177,7 @@ a[node] -->|edge| b[hub]
             if (newThreadContainer) newThreadContainer.hidden = true;
             renderThreadList();
             renderPosts([], false, false);
-            setForumStatus(error?.message || 'No se pudieron cargar los hilos del foro.', 'error');
+            setForumStatus(error?.message || forumText('threadsLoadFailed', 'No se pudieron cargar los hilos del foro.'), 'error');
           } finally {
             refreshForumUnreadBadges();
           }
@@ -4310,7 +4344,7 @@ a[node] -->|edge| b[hub]
             const title = boardTitleInput.value.trim();
             const description = boardDescriptionInput.value.trim();
             if (title.length < 3) {
-              setForumStatus('El nombre del foro alternativo debe tener al menos 3 caracteres.', 'error');
+              setForumStatus(forumText('boardNameShort', 'El nombre del foro alternativo debe tener al menos 3 caracteres.'), 'error');
               return;
             }
 
@@ -4330,14 +4364,14 @@ a[node] -->|edge| b[hub]
 
               const payload = await response.json().catch(() => ({}));
               if (!response.ok) {
-                throw new Error(payload?.error || 'No se pudo crear el foro alternativo.');
+                throw new Error(payload?.error || forumText('boardCreateFailed', 'No se pudo crear el foro alternativo.'));
               }
 
               const newSlug = normalizeForumBoardSlug(payload?.board?.slug || '');
               window.location.href = buildScopeUrl('board', newSlug || 'general').toString();
             } catch (error) {
               console.error('Forum create board error:', error);
-              setForumStatus(error?.message || 'No se pudo crear el foro alternativo.', 'error');
+              setForumStatus(error?.message || forumText('boardCreateFailed', 'No se pudo crear el foro alternativo.'), 'error');
             } finally {
               if (submitButton) submitButton.disabled = false;
             }
@@ -4354,7 +4388,7 @@ a[node] -->|edge| b[hub]
             // Reply to selected thread (or to specific post when parentPostInput.value is set)
             const replyBody = threadBodyInput.value.trim();
             if (!replyBody) {
-              setForumStatus('Escribe una respuesta antes de publicar.', 'error');
+              setForumStatus(forumText('replyEmpty', 'Escribe una respuesta antes de publicar.'), 'error');
               return;
             }
             if (submitButton) submitButton.disabled = true;
@@ -4368,14 +4402,14 @@ a[node] -->|edge| b[hub]
                 }),
               });
               const payload = await response.json().catch(() => ({}));
-              if (!response.ok) throw new Error(payload?.error || 'No se pudo publicar la respuesta.');
+              if (!response.ok) throw new Error(payload?.error || forumText('replyFailed', 'No se pudo publicar la respuesta.'));
               threadBodyInput.value = '';
               clearReplyTarget();
               setForumStatus('Respuesta publicada.', 'info');
               await loadThreads({ preserveSelection: true });
             } catch (error) {
               console.error('Forum create post error:', error);
-              setForumStatus(error?.message || 'No se pudo publicar la respuesta.', 'error');
+              setForumStatus(error?.message || forumText('replyFailed', 'No se pudo publicar la respuesta.'), 'error');
             } finally {
               if (submitButton) submitButton.disabled = false;
             }
@@ -4386,7 +4420,7 @@ a[node] -->|edge| b[hub]
             const title = (nlIdx > -1 ? fullText.slice(0, nlIdx) : fullText).trim();
             const body = (nlIdx > -1 ? fullText.slice(nlIdx + 1).trim() : '') || title;
             if (title.length < 3) {
-              setForumStatus('La primera línea (título) debe tener al menos 3 caracteres.', 'error');
+              setForumStatus(forumText('titleShort', 'La primera línea (título) debe tener al menos 3 caracteres.'), 'error');
               return;
             }
             if (submitButton) submitButton.disabled = true;
@@ -4402,16 +4436,16 @@ a[node] -->|edge| b[hub]
                 }),
               });
               const payload = await response.json().catch(() => ({}));
-              if (!response.ok) throw new Error(payload?.error || 'No se pudo crear el hilo.');
+              if (!response.ok) throw new Error(payload?.error || forumText('threadCreateFailed', 'No se pudo crear el hilo.'));
               threadBodyInput.value = '';
               if (newThreadContainer instanceof HTMLDetailsElement) {
                 newThreadContainer.open = false;
               }
-              setForumStatus('Hilo publicado.', 'info');
+              setForumStatus(forumText('threadPublished', 'Hilo publicado.'), 'info');
               await loadThreads({ preserveSelection: false });
             } catch (error) {
               console.error('Forum create thread error:', error);
-              setForumStatus(error?.message || 'No se pudo crear el hilo.', 'error');
+              setForumStatus(error?.message || forumText('threadCreateFailed', 'No se pudo crear el hilo.'), 'error');
             } finally {
               if (submitButton) submitButton.disabled = false;
             }
@@ -4426,7 +4460,7 @@ a[node] -->|edge| b[hub]
           try {
             await loadBoards({ preferredSlug: forumState.boardSlug });
           } catch (error) {
-            setForumStatus(error?.message || 'No se pudo cargar la lista de foros del curso.', 'error');
+            setForumStatus(error?.message || forumText('boardListFailed', 'No se pudo cargar la lista de foros del curso.'), 'error');
             newThreadForm.hidden = true;
             if (newThreadContainer) newThreadContainer.hidden = true;
             refreshForumUnreadBadges();
@@ -4449,11 +4483,11 @@ a[node] -->|edge| b[hub]
               body: JSON.stringify({ isPinned: !thread.isPinned }),
             });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(payload?.error || 'No se pudo actualizar el fijado del hilo.');
+            if (!response.ok) throw new Error(payload?.error || forumText('pinFailed', 'No se pudo actualizar el fijado del hilo.'));
             setForumStatus(thread.isPinned ? 'Hilo desfijado.' : 'Hilo fijado.', 'info');
             await loadThreads({ preserveSelection: true });
           } catch (error) {
-            setForumStatus(error?.message || 'No se pudo actualizar el fijado del hilo.', 'error');
+            setForumStatus(error?.message || forumText('pinFailed', 'No se pudo actualizar el fijado del hilo.'), 'error');
           }
         });
 

@@ -50,7 +50,11 @@ import { getRoleBadgeLabel } from '../lib/dashboard-role';
 import { isAdminGlobalRole, isElevatedGlobalRole } from '../lib/roles';
 import { ensureDbUserFromSession } from '../lib/forum-server';
 import { query } from '../lib/db/pool';
+import { t } from '../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
 import '../styles/theme.css';
+
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
 
 // --- AUTHENTICATION ---
 const session = Astro.locals.session as any;
@@ -2990,7 +2994,7 @@ const teacherDashboardAnnotationsJson = toDashboardProjectionJson(teacherDashboa
 const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
 ---
 
-<html lang="es">
+<html lang={locale}>
   <head>
     <BaseHead title={isTeacher ? "Panel de Administración" : "Panel de Estudiante"} description="Plataforma de aprendizaje" />
     <meta charset="utf-8" />
@@ -6421,20 +6425,20 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
     <main class="wrap">
       <div class:list={['dashboard-shell', isTeacher ? 'dashboard-shell--teacher' : '']} data-left-open="true">
           {!isTeacher && (
-            <aside class="dashboard-sidebar" aria-label="Navegacion del panel">
-              <nav class="dashboard-sidebar-nav" aria-label="Secciones del panel">
-                <a href="#student-profile" class="tab active">Perfil</a>
-                <a href="#student-deliveries" class="tab">Entregas</a>
-                <a href="#student-attendance" class="tab">Asistencia</a>
-                {studentAgendaVisible && <a href="#student-agenda" class="tab">Agenda</a>}
-                <a href="#student-log" class="tab">Log</a>
+            <aside class="dashboard-sidebar" aria-label={t(locale, 'dashboard.panelNav')}>
+              <nav class="dashboard-sidebar-nav" aria-label={t(locale, 'dashboard.panelSections')}>
+                <a href="#student-profile" class="tab active">{t(locale, 'dashboard.profile')}</a>
+                <a href="#student-deliveries" class="tab">{t(locale, 'dashboard.deliveries')}</a>
+                <a href="#student-attendance" class="tab">{t(locale, 'dashboard.attendance')}</a>
+                {studentAgendaVisible && <a href="#student-agenda" class="tab">{t(locale, 'dashboard.agenda')}</a>}
+                <a href="#student-log" class="tab">{t(locale, 'dashboard.log')}</a>
               </nav>
               <div class="dashboard-scope-controls">
                 <label class="dashboard-scope-field">
-                  <span>Curso</span>
+                  <span>{t(locale, 'dashboard.course')}</span>
                   <select data-dashboard-scope="course">
                     {availableCourseMeta.length === 0 ? (
-                      <option value="">Sin cursos</option>
+                      <option value="">{t(locale, 'dashboard.noCourses')}</option>
                     ) : (
                       availableCourseMeta.map((course) => (
                         <option value={course.courseId} selected={course.courseId === activeCourseId}>
@@ -6445,7 +6449,7 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
                   </select>
                 </label>
                 <label class="dashboard-scope-field">
-                  <span>Año</span>
+                  <span>{t(locale, 'dashboard.year')}</span>
                   <select data-dashboard-scope="year">
                     {availableYears.map((year) => (
                       <option value={year} selected={year === activeYear}>{year}</option>
