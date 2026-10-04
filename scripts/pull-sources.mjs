@@ -13,7 +13,6 @@ const findArgValue = (flag, fallback) => {
   return args[idx + 1];
 };
 
-const manifestPath = path.resolve(findArgValue('--manifest', contentManifestPath(currentInstance())));
 const sourcesDir = path.resolve(findArgValue('--sources-dir', '.content-sources'));
 const envFileInjectedKeys = new Set();
 const SLEEP_BUFFER = new Int32Array(new SharedArrayBuffer(4));
@@ -50,6 +49,9 @@ const normalizeRepoSlug = (value) => {
     .replace(/^\/+/, '')
     .toLowerCase();
 };
+// Resolved after .env is loaded so MUSIKI_INSTANCE may live only in .env.
+const manifestPath = path.resolve(findArgValue('--manifest', contentManifestPath(currentInstance())));
+
 const targetRepo = normalizeRepoSlug(process.env.CONTENT_SOURCE_TARGET_REPO || '');
 const targetBranch = normalizeBranchName(
   process.env.CONTENT_SOURCE_TARGET_BRANCH || process.env.CONTENT_SOURCE_TARGET_REF || '',
