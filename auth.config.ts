@@ -1,5 +1,6 @@
 import Google from "@auth/core/providers/google";
 import { defineConfig } from "auth-astro";
+import { buildLogtoHemProvider } from "./src/lib/auth-providers";
 import { resolveAuthRedirectUrl } from "./src/lib/auth-origin";
 import { query } from "./src/lib/db/pool";
 import { tenantForAuthProvider, findTenantByHost } from "./src/lib/tenant/resolve";
@@ -98,6 +99,12 @@ const logtoMmProvider = LOGTO_ISSUER && LOGTO_MM_CLIENT_ID
     }]
   : [];
 
+const logtoHemProvider = buildLogtoHemProvider({
+  LOGTO_ISSUER_URL: LOGTO_ISSUER,
+  LOGTO_HEM_CLIENT_ID: getEnv('LOGTO_HEM_CLIENT_ID'),
+  LOGTO_HEM_CLIENT_SECRET: getEnv('LOGTO_HEM_CLIENT_SECRET'),
+});
+
 // so-provisioned users (no enrollment, no elevated role, only foreign-tenant
 // spaces) must not reach musiki. Any failure here allows the sign-in.
 const rejectForeignTenantOnlyUser = async (userId: string, email: string): Promise<boolean> => {
@@ -140,6 +147,7 @@ export default defineConfig({
     ...logtoProvider,
     ...logtoSoProvider,
     ...logtoMmProvider,
+    ...logtoHemProvider,
     Google({
       clientId: getEnv('GOOGLE_CLIENT_ID'),
       clientSecret: getEnv('GOOGLE_CLIENT_SECRET'),

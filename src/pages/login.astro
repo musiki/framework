@@ -97,6 +97,11 @@ const logtoEnabled = Boolean(process.env.LOGTO_ISSUER_URL || import.meta.env.LOG
     <main class="wrap">
         <h1>{t(locale, "login.heading")}</h1>
         <div class="provider-login">
+            {tenant.id !== DEFAULT_TENANT_ID ? (
+                <SignIn provider={tenant.authProviders[0]} options={{ callbackUrl }}>
+                    <span class="btn-authentik">{t(locale, "login.signIn")}</span>
+                </SignIn>
+            ) : (<>
             {logtoEnabled ? (
                 <SignIn provider="logto" options={{ callbackUrl }}>
                     <span class="btn-authentik">{t(locale, "login.signIn")}</span>
@@ -112,6 +117,7 @@ const logtoEnabled = Boolean(process.env.LOGTO_ISSUER_URL || import.meta.env.LOG
             <SignIn provider="google" options={{ callbackUrl }}>
                 <span class="btn-google">{t(locale, "login.google")}</span>
             </SignIn>
+            </>)}
         </div>
     </main>
 </body>

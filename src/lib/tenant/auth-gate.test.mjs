@@ -81,3 +81,13 @@ test('mm: default Auth.js pages redirect to /join, providers filtered', () => {
   const payload = { google: {}, 'logto-so': {}, 'logto-mm': { id: 'logto-mm' } };
   assert.deepEqual(filterProvidersPayload(mm, payload), { 'logto-mm': { id: 'logto-mm' } });
 });
+
+test('hem: only logto-hem passes; musiki hides it', () => {
+  const { hem } = TENANTS;
+  assert.deepEqual(decideAuthRoute(hem, 'signin', 'logto-hem'), { kind: 'pass' });
+  for (const p of ['logto', 'google', 'authentik', 'logto-so', 'logto-mm']) {
+    assert.deepEqual(decideAuthRoute(hem, 'signin', p), { kind: 'not-found' }, p);
+  }
+  assert.deepEqual(decideAuthRoute(musiki, 'signin', 'logto-hem'), { kind: 'not-found' });
+  assert.deepEqual(decideAuthRoute(musiki, 'callback', 'logto-hem'), { kind: 'not-found' });
+});
