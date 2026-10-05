@@ -28,30 +28,50 @@ if (root) {
       else if (st.state === 'published' && st.publishedAt) {
         const d = new Date(st.publishedAt);
         if (!Number.isNaN(d.getTime())) {
-          const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
           text = (pl.published || '').replace('{time}', time);
         }
       }
       publishEl.textContent = text;
     };
+    let inFlight = false;
+    let stopped = false;
+    const schedule = (delay: number) => {
+      if (timer) clearTimeout(timer);
+      timer = stopped || document.hidden ? undefined : setTimeout(() => void poll(), delay);
+    };
     const poll = async () => {
+      if (timer) clearTimeout(timer);
       timer = undefined;
-      if (document.hidden) return; // resumed by visibilitychange
+      if (inFlight || stopped || document.hidden) return;
+      inFlight = true;
       let delay = 30000;
       try {
         const res = await fetch(publishUrl, { credentials: 'same-origin', cache: 'no-store' });
-        if (res.ok) {
+        if (res.status === 401 || res.status === 404) {
+          stopped = true; // expired session or non-so tenant: stop, show nothing
+          publishEl.textContent = '';
+        } else if (res.ok) {
           const st = await res.json();
           render(st);
           if (st.state === 'pending' || st.state === 'building') delay = 5000;
         }
       } catch { /* keep polling */ }
-      if (!document.hidden) timer = setTimeout(poll, delay);
+      inFlight = false;
+      schedule(delay);
     };
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) { if (timer) clearTimeout(timer); timer = undefined; }
-      else if (!timer) void poll();
+      else void poll();
     });
+    // After the editor's own save completes (status dot turns "saved"), poll
+    // soon so "Publishing…" shows up right away.
+    let wasSaved = status.classList.contains('saved');
+    new MutationObserver(() => {
+      const saved = status.classList.contains('saved');
+      if (saved && !wasSaved) schedule(2000);
+      wasSaved = saved;
+    }).observe(status, { attributes: true, attributeFilter: ['class'] });
     void poll();
   }
 }

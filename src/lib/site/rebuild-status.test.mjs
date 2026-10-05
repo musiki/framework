@@ -30,3 +30,9 @@ test('valid status passes through, extra fields dropped', async () => {
 test('unknown state -> idle', async () => {
   await withFile(JSON.stringify({ state: 'exploding', commit: 'abc' }), async (f) => assert.deepEqual(await readPublishStatus(f), IDLE));
 });
+
+test('non-string field values become null; array JSON -> idle', async () => {
+  await withFile(JSON.stringify({ state: 'building', requestedAt: 5, startedAt: {}, publishedAt: false, commit: ['a'], release: '' }), async (f) =>
+    assert.deepEqual(await readPublishStatus(f), { ...IDLE, state: 'building' }));
+  await withFile('[{"state":"published"}]', async (f) => assert.deepEqual(await readPublishStatus(f), IDLE));
+});
