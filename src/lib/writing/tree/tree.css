@@ -15,12 +15,12 @@
 .writing-tree .wt-actions[open] { flex-basis: 100%; }
 .writing-tree summary > .wt-row { display: inline-flex; width: calc(100% - 1rem); }
 .writing-tree button:focus-visible, .writing-tree summary:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-/* Hierarchy: each nested level steps in ~14px (13px padding + 1px guide),
+/* Hierarchy: each nested level steps in 14px (13px padding + 1px guide, no margin),
    with a faint vertical guide line. `.writing-tree ul ul` outranks host
    resets such as so's `.so-sidebar ul { padding: 0 }`. Items inside folders
    drop to .9em once (depth 1); deeper levels inherit it rather than
    compounding. */
-.writing-tree ul ul { margin: 0 0 0 .45rem; padding: 0 0 0 13px; border-left: 1px solid color-mix(in srgb, var(--tree-border) 70%, transparent); }
+.writing-tree ul ul { margin: 0; padding: 0 0 0 13px; border-left: 1px solid color-mix(in srgb, var(--tree-border) 70%, transparent); }
 .writing-tree ul[data-depth="1"] { font-size: .9em; }
 .writing-tree mark { background: color-mix(in srgb, var(--so-link-hover, #2563eb) 22%, transparent); color: inherit; border-radius: 2px; padding: 0; }
 /* Opt-in toolbar (search + fold-all) */

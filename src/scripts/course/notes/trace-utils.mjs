@@ -1,5 +1,6 @@
 // Pure functions mirrored from trace-margin.ts for Node test runner.
 
+import { findFrontmatter } from './frontmatter-yaml.ts';
 import { getLangPack, traceStopwords } from '../../../lib/writing/lang/index.ts';
 
 export const MIN_KEYWORD_LEN = 4;
@@ -13,6 +14,7 @@ export function segmentParagraphs(markdown) {
   let last = 0;
   const regex = /\n[ \t]*\n|\n---\n/g;
   let match;
+  const fm = findFrontmatter(text);
 
   const processPart = (rawPart, partFrom) => {
     const trimmed = rawPart.trim();
@@ -21,7 +23,9 @@ export function segmentParagraphs(markdown) {
     const from = partFrom + leadingSpace;
     const to = from + trimmed.length;
     const id = `p-${index}`;
-    result.push({ index, text: trimmed, id, from, to });
+    const para = { index, text: trimmed, id, from, to };
+    if (fm && from < fm.end) para.frontmatter = true;
+    result.push(para);
     index++;
   };
 
@@ -91,7 +95,7 @@ export const EXCLUDED_ROLE = 'excluir';
 
 export function paragraphsForAnalysis(paras, mode, roleByParagraph = new Map()) {
   const norm = normalizeMode(mode);
-  const included = paras.filter(para => roleByParagraph.get(para.index) !== EXCLUDED_ROLE);
+  const included = paras.filter(para => !para.frontmatter && roleByParagraph.get(para.index) !== EXCLUDED_ROLE);
   if (norm !== 'lit_art') return included;
   return included.filter(para => approximateParagraphLines(para.text) > 2);
 }

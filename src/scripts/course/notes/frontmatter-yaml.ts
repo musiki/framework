@@ -12,9 +12,8 @@ export function findFrontmatter(fullDoc: string): { start: number; end: number; 
   const fm = findFrontmatterRaw(fullDoc.length > FRONTMATTER_HEAD_CAP ? fullDoc.slice(0, FRONTMATTER_HEAD_CAP) : fullDoc);
   if (!fm) return null;
   const body = fullDoc.slice(0, fm.closeFrom).split(/\r?\n/).slice(1);
-  let off = 0;
   for (const l of body) {
-    if (tokenizeYamlLine(l, off).some(t => t.kind === 'key')) return fm;
+    if (tokenizeYamlLine(l).some(t => t.kind === 'key')) return fm;
   }
   return null;
 }

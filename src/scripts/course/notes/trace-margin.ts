@@ -7,6 +7,7 @@ import {
 } from '@codemirror/view';
 import { computeKwic, computeZipfProfile } from '../../notas/qa-analyzer-logic';
 import { getLangPack, traceStopwords, type ContentLang } from '../../../lib/writing/lang/index.ts';
+import { findFrontmatter } from './frontmatter-yaml.ts';
 import { scrollTopToReveal } from './trace-layout.ts';
 import { DEFAULT_ES_TRACE_LABELS, formatLabel, type TraceLabels } from '../../../lib/writing/editor/labels.ts';
 
@@ -28,6 +29,8 @@ type Paragraph = {
   id: string;
   from: number;
   to: number;
+  /** Lies inside the leading YAML frontmatter: keeps its index (traces/codes are index-keyed) but is never analysed or rendered. */
+  frontmatter?: boolean;
 };
 
 type TraceMode =
@@ -308,6 +311,7 @@ export function segmentParagraphs(markdown: string): Paragraph[] {
   let last = 0;
   const regex = /\n[ \t]*\n|\n---\n/g;
   let match: RegExpExecArray | null;
+  const fm = findFrontmatter(markdown);
 
   const processPart = (rawPart: string, partFrom: number) => {
     const trimmed = rawPart.trim();
@@ -316,7 +320,9 @@ export function segmentParagraphs(markdown: string): Paragraph[] {
     const from = partFrom + leadingSpace;
     const to = from + trimmed.length;
     const id = `p-${index}`;
-    result.push({ index, text: trimmed, id, from, to });
+    const para: Paragraph = { index, text: trimmed, id, from, to };
+    if (fm && from < fm.end) para.frontmatter = true;
+    result.push(para);
     index++;
   };
 
@@ -367,7 +373,7 @@ function approximateParagraphLines(text: string): number {
 export function paragraphsForAnalysis(paras: Paragraph[], mode: TraceMode, codes: TraceCode[] = []): Paragraph[] {
   const norm = normalizeMode(mode);
   const excluded = excludedParagraphIndices(codes);
-  const included = paras.filter(para => !excluded.has(para.index));
+  const included = paras.filter(para => !para.frontmatter && !excluded.has(para.index));
   if (norm !== 'lit_art') return included;
   return included.filter(para => approximateParagraphLines(para.text) > 2);
 }
@@ -520,7 +526,7 @@ function detectChains(paragraphsWithKeywords: { index: number; keywords: string[
 }
 
 export function computeSuggestions(paras: Paragraph[], codes: TraceCode[], lang: ContentLang = 'es'): TraceSuggestion[] {
-  const withKeywords = paras.map(p => ({ index: p.index, keywords: extractKeywords(p.text, lang) }));
+  const withKeywords = paras.filter(p => !p.frontmatter).map(p => ({ index: p.index, keywords: extractKeywords(p.text, lang) }));
   const chains = detectChains(withKeywords);
   const existingSet = new Set(codes.map(c => `${c.paraIndex}:${c.label}`));
   const suggestions: TraceSuggestion[] = [];
@@ -1270,12 +1276,13 @@ export function injectTraceCss() {
 // ── SVG graph ──────────────────────────────────────────────────────────────
 
 function renderTraceGraph(
-  paras: Paragraph[],
+  allParas: Paragraph[],
   traces: ParagraphTrace[],
   onJumpToParagraph: (para: Paragraph) => void,
   onHoverParagraph: (paraIndex: number | null) => void,
   labels: TraceLabels,
 ): SVGSVGElement {
+  const paras = allParas.filter(para => !para.frontmatter);
   const SPACING = 38;
   const R = 9;
   const CX = 16;

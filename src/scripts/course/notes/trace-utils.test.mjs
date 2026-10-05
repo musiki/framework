@@ -331,3 +331,21 @@ describe('creative modes dummy texts and diagnostics', () => {
     assert.ok(denseDiag);
   });
 });
+
+describe('frontmatter handling', () => {
+  const md = '---\ntitle: Hola\ntags: [a]\n---\nCuerpo uno largo con palabras.\n\nCuerpo dos largo con palabras.';
+  test('keeps indices stable but flags frontmatter paragraphs', () => {
+    const paras = segmentParagraphs(md);
+    assert.equal(paras[0].frontmatter, true);
+    assert.deepEqual(paras.map(p => p.index), [0, 1, 2]);
+    assert.ok(!paras[1].frontmatter && !paras[2].frontmatter);
+  });
+  test('analysis skips frontmatter', () => {
+    const analyzed = paragraphsForAnalysis(segmentParagraphs(md), 'borrador');
+    assert.deepEqual(analyzed.map(p => p.index), [1, 2]);
+  });
+  test('a leading horizontal rule without key lines is not frontmatter', () => {
+    const paras = segmentParagraphs('---\nJust text\n---\nMore');
+    assert.ok(paras.every(p => !p.frontmatter));
+  });
+});
