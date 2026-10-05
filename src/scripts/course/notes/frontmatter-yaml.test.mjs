@@ -20,7 +20,8 @@ test('findFrontmatter handles CRLF and an empty block', () => {
   const doc = '---\r\na: 1\r\n---\r\nx';
   const fm = findFrontmatter(doc);
   assert.equal(doc.slice(fm.closeFrom, fm.end), '---');
-  assert.ok(findFrontmatter('---\n---\n'));
+  assert.equal(findFrontmatter('---\n---\n'), null);
+  assert.equal(findFrontmatter('---\nplain text\n---\n'), null);
 });
 test('key with string / number / bool / date / comment', () => {
   assert.deepEqual(kinds('title: "Hello"'), [['key', 'title'], ['punct', ':'], ['string', '"Hello"']]);

@@ -5,7 +5,21 @@ export type YamlTokenKind = 'key' | 'string' | 'number' | 'bool' | 'comment' | '
 export interface YamlToken { from: number; to: number; kind: YamlTokenKind }
 
 /** Offsets of the leading `---` ... `---` block, or null. `end` is the end of the closing delimiter line. */
-export function findFrontmatter(doc: string): { start: number; end: number; closeFrom: number } | null {
+export const FRONTMATTER_HEAD_CAP = 20000;
+
+/** Like the above but requires >=1 `key:` line (so an opening horizontal rule isn't styled as YAML). Scans only the first FRONTMATTER_HEAD_CAP chars. */
+export function findFrontmatter(fullDoc: string): { start: number; end: number; closeFrom: number } | null {
+  const fm = findFrontmatterRaw(fullDoc.length > FRONTMATTER_HEAD_CAP ? fullDoc.slice(0, FRONTMATTER_HEAD_CAP) : fullDoc);
+  if (!fm) return null;
+  const body = fullDoc.slice(0, fm.closeFrom).split(/\r?\n/).slice(1);
+  let off = 0;
+  for (const l of body) {
+    if (tokenizeYamlLine(l, off).some(t => t.kind === 'key')) return fm;
+  }
+  return null;
+}
+
+function findFrontmatterRaw(doc: string): { start: number; end: number; closeFrom: number } | null {
   if (!/^---[ \t]*(\r?\n|$)/.test(doc)) return null;
   const re = /\r?\n(---|\.\.\.)[ \t]*(?=\r?\n|$)/g;
   const open = doc.indexOf('\n');

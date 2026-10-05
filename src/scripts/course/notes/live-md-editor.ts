@@ -17,7 +17,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
 import { markdownFormattingKeymap } from './markdown-shortcuts.ts';
 import { seshatCitationAutocomplete } from '../../seshat-citations.ts';
-import { findFrontmatter, tokenizeYamlLine } from './frontmatter-yaml.ts';
+import { findFrontmatter, FRONTMATTER_HEAD_CAP, tokenizeYamlLine } from './frontmatter-yaml.ts';
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -46,11 +46,11 @@ function injectCss() {
       font-size: 1em; font-weight: 400; font-style: normal;
     }
     .cm-lmd-fm-delim { opacity: .4; }
-    .cm-lmd-y-key     { color: var(--c-link, #2563eb); }
-    .cm-lmd-y-string  { color: #15803d; }
-    .cm-lmd-y-number  { color: #b45309; }
-    .cm-lmd-y-bool    { color: #7c3aed; }
-    .cm-lmd-y-comment { opacity: .5; font-style: italic; }
+    .cm-lmd-y-key     { color: var(--c-link); }
+    .cm-lmd-y-string  { color: color-mix(in srgb, var(--c-link) 45%, var(--c-fg)); }
+    .cm-lmd-y-number  { color: color-mix(in srgb, var(--c-link) 70%, var(--c-fg)); }
+    .cm-lmd-y-bool    { color: color-mix(in srgb, var(--c-link) 25%, var(--c-fg)); font-weight: 600; }
+    .cm-lmd-fm .cm-lmd-y-comment { opacity: .55; font-style: italic; }
     .cm-lmd-y-punct   { opacity: .55; }
   `;
   document.head.appendChild(s);
@@ -59,7 +59,7 @@ function injectCss() {
 // ── Decoration maps ───────────────────────────────────────────────────────────
 
 // Block-level nodes — always on distinct lines so never overlap within this set
-const BLOCK_NODES: Record<string, string> = {
+export const BLOCK_NODES: Record<string, string> = {
   ATXHeading1:    'cm-lmd-h1',
   ATXHeading2:    'cm-lmd-h2',
   ATXHeading3:    'cm-lmd-h3',
@@ -73,7 +73,7 @@ const BLOCK_NODES: Record<string, string> = {
 };
 
 // Inline nodes — may nest (e.g. bold inside italic); first-wins on overlap
-const INLINE_NODES: Record<string, string> = {
+export const INLINE_NODES: Record<string, string> = {
   StrongEmphasis: 'cm-lmd-bold',
   Emphasis:       'cm-lmd-italic',
   InlineCode:     'cm-lmd-code',
@@ -81,17 +81,59 @@ const INLINE_NODES: Record<string, string> = {
 
 // ── Plugin factory ────────────────────────────────────────────────────────────
 
-function buildDecos(view: EditorView, nodeClass: Record<string, string>): DecorationSet {
-  const { from, to } = view.viewport;
-  const marks: { from: number; to: number; cls: string }[] = [];
-  // Frontmatter is YAML, not markdown: its `---` pair parses as a setext heading, so skip it.
-  const fm = findFrontmatter(view.state.doc.toString());
-  const fmEnd = fm ? fm.end : -1;
+// ── Frontmatter state ─────────────────────────────────────────────────────────
+// Computed once per relevant change (head-only scan); plugins and decorations read it.
 
-  syntaxTree(view.state).iterate({
+interface FrontmatterState { end: number; decos: DecorationSet }
+
+function computeFrontmatter(state: EditorState): FrontmatterState | null {
+  const doc = state.doc;
+  const fm = findFrontmatter(doc.sliceString(0, Math.min(doc.length, FRONTMATTER_HEAD_CAP)));
+  if (!fm) return null;
+  const builder = new RangeSetBuilder<Decoration>();
+  const last = doc.lineAt(fm.end).number;
+  for (let n = 1; n <= last; n++) {
+    const line = doc.line(n);
+    builder.add(line.from, line.from, Decoration.line({ class: 'cm-lmd-fm' }));
+    if (n === 1 || n === last) {
+      if (line.length) builder.add(line.from, line.to, Decoration.mark({ class: 'cm-lmd-fm-delim' }));
+      continue;
+    }
+    for (const t of tokenizeYamlLine(line.text, line.from)) {
+      builder.add(t.from, t.to, Decoration.mark({ class: `cm-lmd-y-${t.kind}` }));
+    }
+  }
+  return { end: fm.end, decos: builder.finish() };
+}
+
+export const frontmatterField = StateField.define<FrontmatterState | null>({
+  create: computeFrontmatter,
+  update(value, tr) {
+    if (!tr.docChanged) return value;
+    // Re-scan only when an edit touches the head region (the block, or where one could appear).
+    const limit = value ? value.end : FRONTMATTER_HEAD_CAP;
+    let touched = false;
+    tr.changes.iterChangedRanges(fromA => { if (fromA <= limit) touched = true; });
+    return touched ? computeFrontmatter(tr.state) : value;
+  },
+  provide: f => EditorView.decorations.from(f, v => v?.decos ?? Decoration.none),
+});
+
+// ── Plugin factory ────────────────────────────────────────────────────────────
+
+export function buildMarkDecos(
+  state: EditorState, nodeClass: Record<string, string>, from: number, to: number,
+): DecorationSet {
+  const marks: { from: number; to: number; cls: string }[] = [];
+  // Frontmatter is YAML, not markdown: its `---` pair parses as a setext heading, so ignore it.
+  const fmEnd = state.field(frontmatterField, false)?.end ?? -1;
+
+  syntaxTree(state).iterate({
     from, to,
     enter: node => {
-      if (node.from < fmEnd) return false;
+      // Never prune the root Document node (it starts at 0).
+      if (node.name !== 'Document' && node.to <= fmEnd) return false;
+      if (node.from < fmEnd) return;
       const cls = nodeClass[node.type.name];
       if (cls) marks.push({ from: node.from, to: node.to, cls });
     },
@@ -110,6 +152,10 @@ function buildDecos(view: EditorView, nodeClass: Record<string, string>): Decora
   return builder.finish();
 }
 
+function buildDecos(view: EditorView, nodeClass: Record<string, string>): DecorationSet {
+  return buildMarkDecos(view.state, nodeClass, view.viewport.from, view.viewport.to);
+}
+
 function makeDecoPlugin(nodeClass: Record<string, string>) {
   return ViewPlugin.fromClass(
     class {
@@ -122,32 +168,6 @@ function makeDecoPlugin(nodeClass: Record<string, string>) {
     { decorations: v => v.decorations },
   );
 }
-
-function buildFrontmatterDecos(state: EditorState): DecorationSet {
-  const doc = state.doc;
-  const fm = findFrontmatter(doc.toString());
-  const builder = new RangeSetBuilder<Decoration>();
-  if (!fm) return builder.finish();
-  const last = doc.lineAt(fm.end).number;
-  for (let n = 1; n <= last; n++) {
-    const line = doc.line(n);
-    builder.add(line.from, line.from, Decoration.line({ class: 'cm-lmd-fm' }));
-    if (n === 1 || n === last) {
-      if (line.length) builder.add(line.from, line.to, Decoration.mark({ class: 'cm-lmd-fm-delim' }));
-      continue;
-    }
-    for (const t of tokenizeYamlLine(line.text, line.from)) {
-      builder.add(t.from, t.to, Decoration.mark({ class: `cm-lmd-y-${t.kind}` }));
-    }
-  }
-  return builder.finish();
-}
-
-const frontmatterField = StateField.define<DecorationSet>({
-  create: buildFrontmatterDecos,
-  update: (value, tr) => (tr.docChanged ? buildFrontmatterDecos(tr.state) : value),
-  provide: f => EditorView.decorations.from(f),
-});
 
 const blockPlugin  = makeDecoPlugin(BLOCK_NODES);
 const inlinePlugin = makeDecoPlugin(INLINE_NODES);
