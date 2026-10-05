@@ -17,6 +17,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { history, historyKeymap, defaultKeymap, cursorDocStart, cursorDocEnd, selectDocStart, selectDocEnd } from '@codemirror/commands';
 import { markdownFormattingKeymap } from './markdown-shortcuts.ts';
 import { seshatCitationAutocomplete } from '../../seshat-citations.ts';
+import { findFrontmatter, tokenizeYamlLine } from './frontmatter-yaml.ts';
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,17 @@ function injectCss() {
     }
     .cm-lmd-hr    { opacity: .22; letter-spacing: .25em; }
     .cm-lmd-quote { opacity: .62; }
+    .cm-lmd-fm, .cm-lmd-fm * {
+      font-family: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+      font-size: 1em; font-weight: 400; font-style: normal;
+    }
+    .cm-lmd-fm-delim { opacity: .4; }
+    .cm-lmd-y-key     { color: var(--c-link, #2563eb); }
+    .cm-lmd-y-string  { color: #15803d; }
+    .cm-lmd-y-number  { color: #b45309; }
+    .cm-lmd-y-bool    { color: #7c3aed; }
+    .cm-lmd-y-comment { opacity: .5; font-style: italic; }
+    .cm-lmd-y-punct   { opacity: .55; }
   `;
   document.head.appendChild(s);
 }
@@ -72,10 +84,14 @@ const INLINE_NODES: Record<string, string> = {
 function buildDecos(view: EditorView, nodeClass: Record<string, string>): DecorationSet {
   const { from, to } = view.viewport;
   const marks: { from: number; to: number; cls: string }[] = [];
+  // Frontmatter is YAML, not markdown: its `---` pair parses as a setext heading, so skip it.
+  const fm = findFrontmatter(view.state.doc.toString());
+  const fmEnd = fm ? fm.end : -1;
 
   syntaxTree(view.state).iterate({
     from, to,
     enter: node => {
+      if (node.from < fmEnd) return false;
       const cls = nodeClass[node.type.name];
       if (cls) marks.push({ from: node.from, to: node.to, cls });
     },
@@ -106,6 +122,32 @@ function makeDecoPlugin(nodeClass: Record<string, string>) {
     { decorations: v => v.decorations },
   );
 }
+
+function buildFrontmatterDecos(state: EditorState): DecorationSet {
+  const doc = state.doc;
+  const fm = findFrontmatter(doc.toString());
+  const builder = new RangeSetBuilder<Decoration>();
+  if (!fm) return builder.finish();
+  const last = doc.lineAt(fm.end).number;
+  for (let n = 1; n <= last; n++) {
+    const line = doc.line(n);
+    builder.add(line.from, line.from, Decoration.line({ class: 'cm-lmd-fm' }));
+    if (n === 1 || n === last) {
+      if (line.length) builder.add(line.from, line.to, Decoration.mark({ class: 'cm-lmd-fm-delim' }));
+      continue;
+    }
+    for (const t of tokenizeYamlLine(line.text, line.from)) {
+      builder.add(t.from, t.to, Decoration.mark({ class: `cm-lmd-y-${t.kind}` }));
+    }
+  }
+  return builder.finish();
+}
+
+const frontmatterField = StateField.define<DecorationSet>({
+  create: buildFrontmatterDecos,
+  update: (value, tr) => (tr.docChanged ? buildFrontmatterDecos(tr.state) : value),
+  provide: f => EditorView.decorations.from(f),
+});
 
 const blockPlugin  = makeDecoPlugin(BLOCK_NODES);
 const inlinePlugin = makeDecoPlugin(INLINE_NODES);
@@ -219,6 +261,7 @@ export function createLiveMdEditor(
       EditorView.lineWrapping,
       blockPlugin,
       inlinePlugin,
+      frontmatterField,
       liveMdTheme,
       annotationsField,
       options?.readOnly ? EditorState.readOnly.of(true) : [],
