@@ -78,6 +78,9 @@ const run = (cmd, cmdArgs, options = {}) => {
   try {
     execFileSync(cmd, cmdArgs, {
       stdio: 'inherit',
+      // Never block a build on an interactive git credential prompt: a repo
+      // the token can't read fails fast (and an optional source just warns).
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
       ...options,
     });
   } catch (err) {
@@ -164,12 +167,36 @@ const pullFromLocalPath = (source, targetDir) => {
     return false;
   }
 
+  // Copy into a sibling temp dir and swap it in only once the copy is
+  // complete, so a failed copy (e.g. a Google Drive hiccup) never leaves a
+  // half-copied checkout behind.
+  const tmpDir = `${targetDir}.tmp-${process.pid}`;
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  try {
+    fs.cpSync(localPath, tmpDir, {
+      recursive: true,
+      filter: (sourcePath) => !isIgnored(path.basename(sourcePath)),
+    });
+  } catch (error) {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    throw error;
+  }
   fs.rmSync(targetDir, { recursive: true, force: true });
-  fs.cpSync(localPath, targetDir, {
-    recursive: true,
-    filter: (sourcePath) => !isIgnored(path.basename(sourcePath)),
-  });
+  fs.renameSync(tmpDir, targetDir);
   return true;
+};
+
+// Local-dev override of a source's localPath, so machine-specific paths
+// (e.g. a Google Drive vault folder) never have to be committed to the
+// manifest: CONTENT_SOURCE_LOCAL_<ID>, with <ID> upper-cased and every
+// non-alphanumeric run turned into "_" (soog-instruments ->
+// CONTENT_SOURCE_LOCAL_SOOG_INSTRUMENTS). May be set in .env.
+const localPathEnvKey = (id) =>
+  `CONTENT_SOURCE_LOCAL_${String(id).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')}`;
+
+const withLocalPathOverride = (source) => {
+  const override = String(process.env[localPathEnvKey(source.id)] || '').trim();
+  return override ? { ...source, localPath: override } : source;
 };
 
 const pullFromRepo = (source, targetDir, token) => {
@@ -284,10 +311,11 @@ const main = () => {
   console.log(`[content:pull] strategy=${sourceStrategy}`);
 
   const knownIds = new Set();
-  for (const source of sources) {
-    if (!source.id) {
-      throw new Error(`Every source needs an "id". Invalid source: ${JSON.stringify(source)}`);
+  for (const manifestSource of sources) {
+    if (!manifestSource.id) {
+      throw new Error(`Every source needs an "id". Invalid source: ${JSON.stringify(manifestSource)}`);
     }
+    const source = withLocalPathOverride(manifestSource);
     knownIds.add(source.id);
     const targetDir = path.join(sourcesDir, source.id);
 
