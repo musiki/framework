@@ -439,3 +439,16 @@ Behavior: `buildTree` from the model; folders as `<details>` (roles `tree`/`tree
 - Tree phase 2 (move folders into folders, remembered state + search, keyboard + multi-select) is the next plan.
 - AI trace suggestions are hidden for non-Spanish content until the AI prompts are localized.
 - Dockview in the studio is a later sub-project.
+
+
+
+---
+1. artistic work 
+2. experiential quality of sound
+3. listening to the sound and what is the role ,AI
+
+
+
+
+
+

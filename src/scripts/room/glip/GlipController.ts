@@ -6,6 +6,7 @@ export type GlipAnnotationItem = {
   year?: number;
   tags?: string[];
   performer?: string;
+  notes?: string;
   provider?: string;
   url?: string;
   thumbnail?: string;
@@ -155,13 +156,39 @@ export class GlipController {
       if (this.cachedAnnotations.length === 0) {
         await this.fetchAnnotations();
       }
-      const filtered = this.cachedAnnotations.filter((a) => {
-        const text = [a.title, a.work, a.composer, a.performer, ...(a.tags || [])]
+      let filtered = this.cachedAnnotations.filter((a) => {
+        const text = [
+          a.id,
+          a.title,
+          a.work,
+          a.composer,
+          a.performer,
+          a.notes,
+          a.year ? String(a.year) : '',
+          a.url,
+          ...(a.tags || [])
+        ]
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
         return text.includes(query);
       });
+
+      // If local cache had no hits or might be stale, query server with q parameter
+      if (filtered.length === 0) {
+        try {
+          const res = await fetch(`${GLIP_HOST}/api/annotations?q=${encodeURIComponent(query)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              filtered = data;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       this.renderResults(filtered);
     }, 180);
   }

@@ -45,7 +45,7 @@ El protocolo interno vive en `src/lib/orf/schema.ts`. El registry minimo de capa
 
 ```ts
 type OrfResponse = {
-  summary: string;
+  def: string;
   actions: OrfAction[];
   citations?: OrfCitation[];
   warnings?: string[];

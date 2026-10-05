@@ -266,7 +266,7 @@ type: mcc
 mode: self
 title: Cierre de sección
 prompt: "Marca esta sección como completada."
-summary: "Usa este cierre cuando terminaste lectura, escucha y notas."
+def: "Usa este cierre cuando terminaste lectura, escucha y notas."
 objectives:
   - Identificar las familias instrumentales
   - Diferenciar materialidad y función

@@ -1637,7 +1637,7 @@ Append to `controller.ts` (inside class, before closing `}`):
       const resp = await fetch('/api/content-admin/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseId, targetPath, content: md, mode: 'create', editSummary: 'Re pod export' }),
+        body: JSON.stringify({ courseId, targetPath, content: md, mode: 'create', editdef: pod export' }),
       });
       if (!resp.ok) console.error('[Re] export failed', resp.status);
     } catch (e) { console.error('[Re] export error', e); }
