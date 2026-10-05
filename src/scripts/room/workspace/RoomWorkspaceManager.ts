@@ -24,6 +24,7 @@ export class RoomWorkspaceManager {
   private onNotesInit?: (element: HTMLElement) => PodDisposable;
   private onStrudelInit?: (element: HTMLElement) => PodDisposable;
   private onCentauroInit?: (element: HTMLElement) => PodDisposable;
+  private onGlipInit?: (element: HTMLElement) => PodDisposable;
   private isApplyingRemoteLayout = false;
   private isBatchLayoutUpdate = false;
   private panelCache = new Map<
@@ -236,6 +237,14 @@ export class RoomWorkspaceManager {
       color: "#FFD966",
       cat: "generators",
     },
+    {
+      id: "glip",
+      title: "GLIP",
+      icon: "Gl",
+      atomic: 25,
+      color: "#ffd60a",
+      cat: "visualizers",
+    },
   ];
 
   constructor(
@@ -258,6 +267,7 @@ export class RoomWorkspaceManager {
     onNotesInit?: (element: HTMLElement) => PodDisposable,
     onStrudelInit?: (element: HTMLElement) => PodDisposable,
     onCentauroInit?: (element: HTMLElement) => PodDisposable,
+    onGlipInit?: (element: HTMLElement) => PodDisposable,
   ) {
     this.container = container;
     this.canLeadSession = canLeadSession;
@@ -278,6 +288,7 @@ export class RoomWorkspaceManager {
     this.onNotesInit = onNotesInit;
     this.onStrudelInit = onStrudelInit;
     this.onCentauroInit = onCentauroInit;
+    this.onGlipInit = onGlipInit;
   }
 
   private rememberPodController(panelId: string, controller: PodDisposable) {
@@ -458,6 +469,10 @@ export class RoomWorkspaceManager {
               }
               if (id === "centauro" && this.onCentauroInit) {
                 controller = this.onCentauroInit(element);
+                this.rememberPodController(options.id, controller);
+              }
+              if (id === "glip" && this.onGlipInit) {
+                controller = this.onGlipInit(element);
                 this.rememberPodController(options.id, controller);
               }
               if (id === "graph") {

@@ -10,6 +10,7 @@ import VisualizerPanel from '../panels/visualizer/VisualizerPanel.astro';
 import RecursosPanel from '../panels/recursos/RecursosPanel.astro';
 import StrudelPanel from '../generators/strudel/StrudelPanel.astro';
 import CentauroPanel from '../generators/centauro/CentauroPanel.astro';
+import GlipPanel from '../panels/glip/GlipPanel.astro';
 import { t } from '../../../lib/i18n';
 import { TENANTS, DEFAULT_TENANT_ID } from '../../../lib/tenant/tenants';
 
@@ -342,6 +343,9 @@ const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
 
   <!-- Re: RECURSOS -->
   <RecursosPanel />
+
+  <!-- Gl: GLIP -->
+  <GlipPanel />
 
 </div>
 

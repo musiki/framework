@@ -287,6 +287,12 @@ export type ConferenceMessage =
       type: 'external-media';
     }
   | {
+      action: 'open' | 'close';
+      annotationId?: string;
+      title?: string;
+      type: 'glip-state';
+    }
+  | {
       type: 'sa-file-sync';
       url: string;
       fileName: string;
@@ -652,6 +658,17 @@ export const parseConferenceMessage = (payload: Uint8Array): ConferenceMessage |
         sourceUrl,
         title: normalizeText((parsed as { title?: string }).title) || 'YouTube',
         type: 'external-media',
+      };
+    }
+
+    if (parsed.type === 'glip-state') {
+      const action = normalizeText((parsed as { action?: string }).action);
+      if (action !== 'open' && action !== 'close') return null;
+      return {
+        type: 'glip-state',
+        action,
+        annotationId: normalizeText((parsed as { annotationId?: string }).annotationId) || undefined,
+        title: normalizeText((parsed as { title?: string }).title) || undefined,
       };
     }
 

@@ -32,6 +32,7 @@ import { RecursosController } from './room/recursos';
 import { HyperpianoController } from './room/hyperpiano/HyperpianoController';
 import { StrudelController } from './room/strudel/StrudelController';
 import { CentauroController } from './room/centauro/CentauroController';
+import { GlipController } from './room/glip/GlipController';
 import { normalizePreviewZoom, normalizeText } from './room/core/normalize';
 import { selectRoomElements } from './room/core/elements';
 import { buildRoomQueryUrl } from './room/layout';
@@ -11641,6 +11642,31 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
       }
     });
 
+    let glipControllerInstance: GlipController | null = null;
+    const onGlipInit = (container: HTMLElement) => {
+      const controller = new GlipController({
+        container,
+        publish: (msg) => void publishMessage(msg),
+        canLead: () => canLeadSession(),
+        onShareToRecursos: (item) => {
+          void shareLiveResource({
+            folder: 'recursos',
+            name: item.name,
+            source: 'external-media',
+            type: 'link',
+            url: item.url,
+          });
+        },
+      });
+      glipControllerInstance = controller;
+      return {
+        dispose: () => {
+          controller.dispose();
+          if (glipControllerInstance === controller) glipControllerInstance = null;
+        },
+      };
+    };
+
     const onLilypondInit = (container: HTMLElement) => {
       lilypondLive.init(container, localRole === 'teacher', setStatus);
       if (localRole === 'teacher') reinforceLilypondSession([180, 900]);
@@ -12125,6 +12151,7 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
     onNotesInit,
     onStrudelInit,
     onCentauroInit,
+    onGlipInit,
   );
 
 
@@ -14151,6 +14178,11 @@ export const mountLiveKitRoom = (root: HTMLElement) => {
           },
           'remote',
         );
+        return;
+      }
+
+      if (message.type === 'glip-state') {
+        glipControllerInstance?.handleRemoteMessage(message);
         return;
       }
 

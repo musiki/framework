@@ -1,0 +1,70 @@
+---
+import './glip-panel.css';
+---
+
+<div class="musiki-pod" data-pod="glip" data-pod-title="GLIP">
+  <section class="conference-stage-panel conference-stage-panel--glip" data-panel="glip">
+    <div class="glip-pod-body" data-glip-body>
+      <div class="glip-pod-frame-container" data-glip-frame-container hidden>
+        <iframe
+          class="glip-pod-frame"
+          data-glip-frame
+          title="GLIP Annotations Player"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowfullscreen
+        ></iframe>
+      </div>
+      <div class="glip-pod-empty" data-glip-empty>
+        <span>◈</span>
+        <p>GLIP · SELECCIONÁ O PEGÁ UNA ANOTACIÓN</p>
+      </div>
+    </div>
+
+    <div class="musiki-pod-toolbar glip-pod-toolbar" data-glip-toolbar>
+      <span class="glip-pod-badge" title="Gestural Library for Instruments and Performances">GL</span>
+      <button
+        type="button"
+        class="musiki-pod-btn"
+        data-action="glip-list-toggle"
+        title="Ver lista de anotaciones de GLIP"
+      >
+        ≡
+      </button>
+      <input
+        type="search"
+        class="musiki-pod-input"
+        placeholder="Buscar anotación o pegar link de glip..."
+        data-glip-input
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button
+        type="button"
+        class="musiki-pod-btn"
+        data-action="glip-open"
+        title="Cargar anotación en la sala"
+      >
+        O
+      </button>
+      <button
+        type="button"
+        class="musiki-pod-btn"
+        data-action="glip-ext"
+        title="Abrir en glip.zztt.org"
+      >
+        ↗
+      </button>
+      <button
+        type="button"
+        class="musiki-pod-btn musiki-pod-btn--danger"
+        data-action="glip-stop"
+        title="Cerrar anotación activa"
+      >
+        C
+      </button>
+
+      <div class="glip-pod-results" data-glip-results hidden></div>
+      <div class="musiki-pod-status" data-glip-status role="status" aria-live="polite"></div>
+    </div>
+  </section>
+</div>
