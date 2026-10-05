@@ -1064,9 +1064,17 @@ export function injectTraceCss() {
       position: sticky;
       top: 0;
       z-index: 2;
-      margin: 0 -8px 3px -26px;
-      padding: 3px 8px 3px 26px;
+      margin: 0 -8px 3px 0;
+      padding: 3px 8px 3px 0;
       background: var(--c-bg);
+    }
+    .cnw-trace-rail .tc-role-rail { z-index: 3; }
+    @media (max-width: 800px) {
+      .cnw-trace-host { flex-direction: column !important; overflow-y: auto !important; }
+      .cnw-trace-host > :first-child { flex: 1 0 280px !important; min-height: 280px; }
+      .cnw-trace-host .cnw-trace-col { flex: 0 0 auto; width: auto; min-width: 0; max-width: none; }
+      .cnw-trace-host .cnw-trace-rail { height: 220px; border-top: 1px solid var(--c-border, rgba(120,120,140,.22)); }
+      .cnw-trace-host .cnw-analysis-col { display: none; }
     }
     .cnw-trace-rail .tc-row:is(.is-active, :focus-within) {
       background: color-mix(in srgb, var(--c-link, #3b82f6) 4%, var(--c-bg));
@@ -2159,6 +2167,7 @@ export async function mountTraceMargin(
     editorContainer.style.minWidth = '0';
     editorContainer.style.overflow = 'hidden';
   }
+  panelBodyEl.classList.add('cnw-trace-host');
   panelBodyEl.style.display = 'flex';
   panelBodyEl.style.overflow = 'hidden';
 
@@ -2212,9 +2221,9 @@ export async function mountTraceMargin(
       labels,
       contentLang,
     );
-    syncEditorActivity(editorView, false);
     const renderedList = traceCol.querySelector<HTMLElement>('.tc-list');
     if (renderedList) renderedList.scrollTop = prevScroll;
+    syncEditorActivity(editorView, false);
     const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
     if (traceSection) {
       restartAnimation(traceSection, 'is-updating');
@@ -2277,6 +2286,7 @@ export async function mountTraceMargin(
         editorContainer.style.minWidth = '';
         editorContainer.style.overflow = '';
       }
+      panelBodyEl.classList.remove('cnw-trace-host');
       panelBodyEl.style.display = '';
       panelBodyEl.style.overflow = '';
     },
