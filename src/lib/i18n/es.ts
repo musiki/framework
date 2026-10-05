@@ -56,6 +56,9 @@ export const es: Dict = {
     editor: {
       title: 'Editor',
       lead: 'Acá se va a abrir el editor de escritura con trazado textual.',
+      publishing: 'Publicando…',
+      published: 'Publicado {time}',
+      publishFailed: 'Falló la publicación',
     },
     plugins: {
       title: 'Plugins',

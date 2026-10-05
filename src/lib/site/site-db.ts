@@ -12,7 +12,7 @@ import type { TenantId } from '../tenant/tenants.ts';
 import { buildSiteModel, type SiteFolder, type SiteModel, type SiteNote } from './site-model.ts';
 
 type FolderRow = { id: string; parentId: string | null; name: string; visibility: string | null; position: number | null };
-type NoteRow = { id: string; folderId: string | null; title: string; body: string; visibility: string | null; position: number | null };
+type NoteRow = { id: string; folderId: string | null; title: string; body: string; visibility: string | null; position: number | null; createdAt?: Date | string | null; updatedAt?: Date | string | null };
 
 /** Every folder id reachable from `rootId` by walking child links, excluding `rootId` itself. */
 function collectDescendantIds(rootId: string, folders: FolderRow[]): Set<string> {
@@ -69,7 +69,7 @@ export async function loadPublicSite(q: QueryFn, { tenantId }: { tenantId: Tenan
   const { data: noteRows, error: noteErr } = await q(
     // Never select "userId" (or any other author/email column) here — this
     // module backs the public, unauthenticated /api/public/site endpoint.
-    `SELECT id, "folderId", title, body, visibility, position FROM "LiveClassNote" WHERE "spaceId" = $1`,
+    `SELECT id, "folderId", title, body, visibility, position, "createdAt", "updatedAt" FROM "LiveClassNote" WHERE "spaceId" = $1`,
     [spaceId],
   );
   if (noteErr) throw noteErr instanceof Error ? noteErr : new Error(String((noteErr as any)?.message || noteErr));
@@ -78,7 +78,7 @@ export async function loadPublicSite(q: QueryFn, { tenantId }: { tenantId: Tenan
   const siteNotes: SiteNote[] = notes
     .filter((n) => n.folderId === siteFolder.id || (n.folderId !== null && descendantFolderIds.has(n.folderId)))
     .filter((n) => effectiveVisibility(n, foldersById) === 'public')
-    .map((n) => ({ id: n.id, folderId: n.folderId as string, title: n.title, body: n.body, position: n.position }));
+    .map((n) => ({ id: n.id, folderId: n.folderId as string, title: n.title, body: n.body, position: n.position, createdAt: n.createdAt, updatedAt: n.updatedAt }));
 
   return buildSiteModel({ siteFolderId: siteFolder.id, folders: siteFolders, notes: siteNotes });
 }

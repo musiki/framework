@@ -11,6 +11,9 @@ export type SiteFrontmatter = {
   layout?: 'page' | 'home' | 'blog' | 'tags';
   draft?: boolean;
   description?: string;
+  /** Raw valid date from `date:` (ISO string); invalid values dropped. */
+  date?: string;
+  tags?: string[];
 };
 
 const ALLOWED_LAYOUTS = new Set(['page', 'home', 'blog', 'tags']);
@@ -63,6 +66,16 @@ export function parseFrontmatter(markdown: string): { data: SiteFrontmatter; bod
   }
   if (typeof raw.description === 'string') {
     data.description = raw.description;
+  }
+
+  if (raw.date instanceof Date || typeof raw.date === 'string') {
+    const d = raw.date instanceof Date ? raw.date : new Date(raw.date);
+    if (!Number.isNaN(d.getTime())) data.date = d.toISOString();
+  }
+  if (Array.isArray(raw.tags)) {
+    data.tags = raw.tags.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean);
+  } else if (typeof raw.tags === 'string') {
+    data.tags = raw.tags.split(',').map((x) => x.trim()).filter(Boolean);
   }
 
   return { data, body: parsed.content };

@@ -29,3 +29,47 @@ export async function requestSiteRebuild(): Promise<void> {
     console.error('[site/rebuild] failed to touch rebuild trigger file:', err);
   }
 }
+
+export type PublishState = 'idle' | 'pending' | 'building' | 'published' | 'failed';
+
+export type PublishStatus = {
+  state: PublishState;
+  requestedAt: string | null;
+  startedAt: string | null;
+  publishedAt: string | null;
+  commit: string | null;
+  release: string | null;
+};
+
+const STATES: readonly PublishState[] = ['idle', 'pending', 'building', 'published', 'failed'];
+
+function statusPath(): string {
+  return process.env.SO_REBUILD_STATUS || '/opt/so/.rebuild-status.json';
+}
+
+const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+
+/** Pure: normalise parsed status JSON; anything unusable becomes idle. */
+export function normalizePublishStatus(raw: unknown): PublishStatus {
+  const idle: PublishStatus = { state: 'idle', requestedAt: null, startedAt: null, publishedAt: null, commit: null, release: null };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return idle;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.state !== 'string' || !STATES.includes(r.state as PublishState)) return idle;
+  return {
+    state: r.state as PublishState,
+    requestedAt: str(r.requestedAt),
+    startedAt: str(r.startedAt),
+    publishedAt: str(r.publishedAt),
+    commit: str(r.commit),
+    release: str(r.release),
+  };
+}
+
+/** Reads the watcher's status file. Never throws: missing/unreadable/invalid -> idle. */
+export async function readPublishStatus(path: string = statusPath()): Promise<PublishStatus> {
+  try {
+    return normalizePublishStatus(JSON.parse(await fs.readFile(path, 'utf8')));
+  } catch {
+    return normalizePublishStatus(null);
+  }
+}

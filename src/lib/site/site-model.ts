@@ -22,6 +22,8 @@ export type SiteNote = {
   title: string;
   body: string;
   position?: number | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 };
 
 export type SitePage = {
@@ -30,6 +32,10 @@ export type SitePage = {
   path: string;
   layout: 'page' | 'home' | 'blog' | 'tags';
   description?: string;
+  date: string | null;
+  tags: string[];
+  createdAt: string | null;
+  updatedAt: string | null;
   markdown: string;
 };
 
@@ -47,6 +53,12 @@ export type SiteModel = {
 type ParsedNote = SiteNote & { fm: SiteFrontmatter; markdown: string };
 
 type Item = { kind: 'folder'; folder: SiteFolder } | { kind: 'note'; note: ParsedNote };
+
+function toIso(v: Date | string | null | undefined): string | null {
+  if (v === null || v === undefined) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 /** Join a path prefix with a slug, treating '' and '/' as the same (root) prefix. */
 function joinPath(prefix: string, slug: string): string {
@@ -116,12 +128,17 @@ export function buildSiteModel(input: { siteFolderId: string; folders: SiteFolde
   }
 
   function pageFrom(note: ParsedNote, path: string): SitePage {
+    const createdAt = toIso(note.createdAt);
     return {
       id: note.id,
       title: note.title,
       path,
       layout: note.fm.layout ?? 'page',
       ...(note.fm.description !== undefined ? { description: note.fm.description } : {}),
+      date: note.fm.date ?? createdAt,
+      tags: note.fm.tags ?? [],
+      createdAt,
+      updatedAt: toIso(note.updatedAt),
       markdown: note.markdown,
     };
   }

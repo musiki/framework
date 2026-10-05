@@ -55,6 +55,9 @@ export const en = {
     editor: {
       title: 'Editor',
       lead: 'The writing editor with textual tracing will open here.',
+      publishing: 'Publishing…',
+      published: 'Published {time}',
+      publishFailed: 'Publish failed',
     },
     plugins: {
       title: 'Plugins',

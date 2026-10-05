@@ -20,9 +20,12 @@ const email = Astro.locals.session?.user?.email ?? '';
   {selectedSpace && noteId ? (
     <section id="studio-editor" class="cnw-shell" data-note={noteId} data-space={selectedSpace.spaceId}
       data-lang={selectedSpace.lang} data-labels={JSON.stringify(buildEditorLabels(locale))}
-      data-trace-labels={JSON.stringify(buildTraceLabels(locale))}>
+      data-trace-labels={JSON.stringify(buildTraceLabels(locale))}
+      data-publish-url={tenant.id === 'so' ? '/api/studio/site/publish-status' : undefined}
+      data-publish-labels={JSON.stringify({ publishing: t(locale, 'studio.editor.publishing'), published: t(locale, 'studio.editor.published'), failed: t(locale, 'studio.editor.publishFailed') })}>
       <div class="studio-toolbar cnw-hud">
         <span id="studio-status" class="cnw-status" role="status" aria-live="polite" />
+        <span id="studio-publish" class="so-muted" role="status" aria-live="polite" />
         <button id="studio-edit" type="button">{t(locale, 'studio.tree.edit')}</button>
         <button id="studio-trace" type="button">{t(locale, 'studio.tree.trace')}</button>
         <div class="cnw-hud-download">

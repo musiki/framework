@@ -7,6 +7,11 @@ import type { Dict, DeepPartial } from './en.ts';
 
 export const fr: DeepPartial<Omit<Dict, 'mm'>> = {
   studio: {
+    editor: {
+      publishing: 'Publication…',
+      published: 'Publié {time}',
+      publishFailed: 'Échec de la publication',
+    },
     tree: {
       rename: 'Renommer',
       delete: 'Supprimer',

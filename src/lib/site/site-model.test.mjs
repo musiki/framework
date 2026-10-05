@@ -420,3 +420,30 @@ test('parseFrontmatter: draft "true"/"yes" strings count as drafts; other string
   });
   assert.equal(model.pages.some((p) => p.id === 'd'), false);
 });
+
+test('pages carry date, tags, createdAt and updatedAt', () => {
+  const created = new Date('2026-01-02T03:04:05Z');
+  const mk = (id, title, body, extra = {}) => ({ id, folderId: 'site', title, body, createdAt: created, updatedAt: '2026-02-03T00:00:00Z', ...extra });
+  const model = buildSiteModel({
+    siteFolderId: 'site',
+    folders: [],
+    notes: [
+      mk('a', 'A', 'plain'),
+      mk('b', 'B', '---\ndate: 2025-12-24\ntags: [x, y, 3]\n---\nbody'),
+      mk('c', 'C', '---\ndate: not-a-date\ntags: "p, q ,"\n---\nbody'),
+      mk('d', 'D', 'x', { createdAt: undefined, updatedAt: null }),
+    ],
+  });
+  const by = Object.fromEntries(model.pages.map((p) => [p.id, p]));
+  assert.equal(by.a.date, '2026-01-02T03:04:05.000Z');
+  assert.deepEqual(by.a.tags, []);
+  assert.equal(by.a.createdAt, '2026-01-02T03:04:05.000Z');
+  assert.equal(by.a.updatedAt, '2026-02-03T00:00:00.000Z');
+  assert.equal(by.b.date, '2025-12-24T00:00:00.000Z');
+  assert.deepEqual(by.b.tags, ['x', 'y']);
+  assert.equal(by.c.date, '2026-01-02T03:04:05.000Z');
+  assert.deepEqual(by.c.tags, ['p', 'q']);
+  assert.equal(by.d.date, null);
+  assert.equal(by.d.createdAt, null);
+  assert.equal(by.d.updatedAt, null);
+});
