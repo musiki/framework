@@ -31,6 +31,6 @@ test('docs without frontmatter still style normally', () => {
 
 test('frontmatter field exposes block end and ignores a plain leading rule', () => {
   const mk = (doc) => EditorState.create({ doc, extensions: [markdown(), frontmatterField] }).field(frontmatterField);
-  assert.equal(mk('---\na: 1\n---\nx').end, 14);
+  assert.equal(mk('---\na: 1\n---\nx').end, 12);
   assert.equal(mk('---\n\ntext\n\n---\n'), null);
 });
