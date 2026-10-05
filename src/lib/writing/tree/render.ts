@@ -1,13 +1,20 @@
-import { buildTree, type TreeFolder, type TreeNote, type TreeNode } from './model.ts';
+import { buildTree, filterTree, matchRange, nodeKey, type TreeFilterResult, type TreeFolder, type TreeNote, type TreeNode } from './model.ts';
 import { VISIBILITIES, type Visibility } from '../notes/visibility.ts';
 
 export type TreeLabels = Record<'newNote' | 'newFolder' | 'rename' | 'delete' | 'visibility' | 'inherit' | 'private' | 'supervision' | 'committee' | 'public' | 'confirmDelete' | 'empty' | 'loading' | 'error' | 'up' | 'down' | 'actions', string> & {
   /** Shown instead of `error` after a failed create/rename/delete/reorder/etc. action. Falls back to `error` when absent. */
   actionError?: string;
+  /** Toolbar strings, used only when `toolbar` is on: search box name/placeholder, fold-all toggle name, its "unfold" tooltip, and the empty-search status. */
+  search?: string;
+  foldAll?: string;
+  unfoldAll?: string;
+  noMatches?: string;
 };
 export type TreeRenderOptions = {
   container: HTMLElement; labels: TreeLabels; locale: string; canManage: boolean;
   showVisibility: boolean; selectedNoteId?: string | null;
+  /** Opt-in search box + fold-all/unfold-all toggle above the tree (so studio). Off by default, so musiki's notes sidebar is unchanged. */
+  toolbar?: boolean;
   load(): Promise<{ folders: TreeFolder[]; notes: TreeNote[] }>;
   onOpenNote(id: string): void;
   /** Optional per-note icon (e.g. musiki's concept/draft glyph), prefixed onto the label text. */
@@ -40,10 +47,66 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
   const closed = new Set<string>();
   const status = document.createElement('p'); status.setAttribute('role', 'status');
   const content = document.createElement('div'); content.className = 'writing-tree';
-  container.replaceChildren(status, content);
   const button = (label: string, action: () => void) => {
     const el = document.createElement('button'); el.type = 'button'; el.textContent = label;
     el.addEventListener('click', e => { e.stopPropagation(); action(); }); return el;
+  };
+  // Last loaded tree, so search / fold-all can repaint without refetching.
+  let nodes: TreeNode[] | null = null;
+  let query = '';
+  let filter: TreeFilterResult | null = null;
+  const folderIds = (list: TreeNode[], out: string[] = []): string[] => {
+    for (const n of list) if (n.kind === 'folder') { out.push(n.folder.id); folderIds(n.children, out); }
+    return out;
+  };
+  let search: HTMLInputElement | null = null;
+  let foldToggle: HTMLButtonElement | null = null;
+  const syncFoldToggle = () => {
+    if (!foldToggle || !nodes) return;
+    const ids = folderIds(nodes);
+    const folded = ids.length > 0 && ids.every(id => closed.has(id));
+    foldToggle.setAttribute('aria-pressed', String(folded));
+    foldToggle.title = folded ? (l.unfoldAll ?? '') : (l.foldAll ?? '');
+    foldToggle.disabled = ids.length === 0 || filter !== null;
+  };
+  if (opts.toolbar) {
+    const bar = document.createElement('div'); bar.className = 'wt-toolbar';
+    search = document.createElement('input'); search.type = 'search'; search.className = 'wt-search';
+    search.setAttribute('aria-label', l.search ?? ''); search.placeholder = l.search ?? ''; search.autocomplete = 'off'; search.spellcheck = false;
+    search.addEventListener('input', () => { query = search!.value; paint(); });
+    search.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || !search!.value) return;
+      // Clear the search; keep Esc from also closing the (mobile) sidebar.
+      e.preventDefault(); e.stopPropagation();
+      search!.value = ''; query = ''; paint();
+    });
+    foldToggle = document.createElement('button'); foldToggle.type = 'button'; foldToggle.className = 'wt-fold';
+    const glyph = document.createElement('span'); glyph.textContent = '<>'; glyph.setAttribute('aria-hidden', 'true');
+    foldToggle.append(glyph);
+    foldToggle.setAttribute('aria-label', l.foldAll ?? ''); foldToggle.setAttribute('aria-pressed', 'false');
+    foldToggle.addEventListener('click', () => {
+      if (!nodes) return;
+      const ids = folderIds(nodes);
+      if (foldToggle!.getAttribute('aria-pressed') === 'true') closed.clear();
+      else for (const id of ids) closed.add(id);
+      paint();
+    });
+    bar.append(search, foldToggle);
+    container.replaceChildren(bar, status, content);
+    // `/` jumps to the search box while focus is anywhere in the tree.
+    content.addEventListener('keydown', e => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      e.preventDefault(); search!.focus();
+    });
+  } else container.replaceChildren(status, content);
+  /** Append `text` to `el`, wrapping the search match (if any) in a <mark>. Text only ever enters as text nodes. */
+  const appendHighlighted = (el: HTMLElement, text: string, hit: boolean) => {
+    const range = hit ? matchRange(text, query) : null;
+    if (!range) { el.append(document.createTextNode(text)); return; }
+    const mark = document.createElement('mark'); mark.textContent = text.slice(range[0], range[1]);
+    el.append(document.createTextNode(text.slice(0, range[0])), mark, document.createTextNode(text.slice(range[1])));
   };
   async function run(action: () => Promise<void>) {
     if (busy || !alive) return;
@@ -73,26 +136,25 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
       if (name) void run(() => actions.createFolder(parentId, name));
     })); return bar;
   }
-  function level(nodes: TreeNode[], parentId: string | null): HTMLUListElement {
-    const ul = document.createElement('ul');
+  function level(nodes: TreeNode[], parentId: string | null, depth = 0): HTMLUListElement {
+    const ul = document.createElement('ul'); ul.dataset.depth = String(depth);
     for (const node of nodes) {
+      if (filter && !filter.visible.has(nodeKey(node))) continue;
       const item = node.kind === 'folder' ? node.folder : node.note;
       const title = node.kind === 'folder' ? node.folder.name : node.note.title;
       const siblings = nodes.filter(n => n.kind === node.kind);
       const index = siblings.indexOf(node);
       const li = document.createElement('li'); const row = document.createElement('div'); row.className = 'wt-row';
-      let labelText = title || l.newNote;
-      if (node.kind === 'note') {
-        const icon = opts.noteIcon?.(node.note);
-        if (icon) labelText = `${icon} ${labelText}`;
-        const suffix = opts.noteSuffix?.(node.note);
-        if (suffix) labelText = `${labelText} ${suffix}`;
-      }
-      const label = button(labelText, () => {
+      const label = button('', () => {
         if (node.kind === 'note') opts.onOpenNote(item.id);
         else { details.open = !details.open; }
       });
       label.className = 'wt-label';
+      const icon = node.kind === 'note' ? opts.noteIcon?.(node.note) : null;
+      const suffix = node.kind === 'note' ? opts.noteSuffix?.(node.note) : null;
+      if (icon) label.append(document.createTextNode(`${icon} `));
+      appendHighlighted(label, title || l.newNote, !!filter?.matches.has(nodeKey(node)));
+      if (suffix) label.append(document.createTextNode(` ${suffix}`));
       if (node.kind === 'note' && opts.selectedNoteId === item.id) label.setAttribute('aria-current', 'page');
       row.append(label);
       if (opts.showVisibility) {
@@ -102,16 +164,19 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
       }
       const details = document.createElement('details');
       if (node.kind === 'folder') {
-        details.open = !closed.has(item.id);
+        // While searching, matches' ancestors are forced open and the user's
+        // own fold state (`closed`) is left untouched for when the search clears.
+        const searching = filter !== null;
+        details.open = searching ? filter!.expand.has(item.id) : !closed.has(item.id);
         const summary = document.createElement('summary'); summary.append(row); details.append(summary);
         label.addEventListener('click', e => e.preventDefault());
         details.addEventListener('toggle', () => {
-          if (details.open) closed.delete(item.id); else closed.add(item.id);
+          if (!searching) { if (details.open) closed.delete(item.id); else closed.add(item.id); syncFoldToggle(); }
           label.setAttribute('aria-expanded', String(details.open));
         });
         label.setAttribute('aria-expanded', String(details.open));
         if (opts.canManage) details.append(createButtons(item.id));
-        details.append(level(node.children, item.id)); li.append(details);
+        details.append(level(node.children, item.id, depth + 1)); li.append(details);
       } else li.append(row);
       if (opts.canManage) {
         const menu = document.createElement('details'); menu.className = 'wt-actions';
@@ -183,10 +248,18 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
     const current = ++generation; status.textContent = l.loading;
     try {
       const data = await opts.load(); if (!alive || current !== generation) return;
-      content.replaceChildren(); if (opts.canManage) content.append(createButtons(null));
-      const nodes = buildTree(data.folders, data.notes, opts.locale);
-      content.append(level(nodes, null)); status.textContent = nodes.length ? '' : l.empty;
+      nodes = buildTree(data.folders, data.notes, opts.locale);
+      paint();
     } catch { if (alive && current === generation) status.textContent = l.error; }
+  }
+  /** Re-render the last loaded tree under the current search / fold state (no fetch). */
+  function paint() {
+    if (!nodes || !alive) return;
+    filter = query.trim() ? filterTree(nodes, query) : null;
+    content.replaceChildren(); if (opts.canManage) content.append(createButtons(null));
+    content.append(level(nodes, null));
+    status.textContent = !nodes.length ? l.empty : filter && filter.visible.size === 0 ? (l.noMatches ?? l.empty) : '';
+    syncFoldToggle();
   }
   return { refresh, destroy() { alive = false; ++generation; container.replaceChildren(); } };
 }

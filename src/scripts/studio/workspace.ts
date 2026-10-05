@@ -14,7 +14,7 @@ for (const container of document.querySelectorAll<HTMLElement>('[data-studio-tre
   }
   const open = (id: string) => { window.location.href = `/studio/editor?space=${encodeURIComponent(spaceId)}&note=${encodeURIComponent(id)}`; };
   const tree = renderTree({ container, labels, locale: container.dataset.locale || 'en', canManage: container.dataset.role === 'author',
-    showVisibility: true, selectedNoteId: new URLSearchParams(location.search).get('note'),
+    showVisibility: true, toolbar: true, selectedNoteId: new URLSearchParams(location.search).get('note'),
     load: () => request<{ folders: TreeFolder[]; notes: TreeNote[] }>(base), onOpenNote: open,
     actions: {
       async createNote(folderId) {

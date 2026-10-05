@@ -162,3 +162,106 @@ test('create controls are compact glyph icons whose accessible name is the label
   icons[0].click(); await new Promise(r => setTimeout(r, 0)); assert.equal(created, null);
   tree.destroy();
 });
+
+// --- toolbar: search, fold-all, hierarchy -------------------------------------------------
+const nested = { folders: [{ id: 'f1', parentId: null, name: 'Capítulo' }, { id: 'f2', parentId: 'f1', name: 'Fuentes' }, { id: 'f3', parentId: null, name: 'Anexos' }],
+  notes: [{ id: 'n1', folderId: 'f2', title: 'Écriture' }, { id: 'n2', folderId: 'f3', title: 'Tabla' }, { id: 'n3', folderId: null, title: 'Root' }] };
+const tbLabels = { ...labels, search: 'Search', foldAll: 'Fold all', unfoldAll: 'Unfold all', noMatches: 'No matches' };
+function mountToolbar(extra = {}) {
+  const container = setup();
+  const tree = renderTree({ container, labels: tbLabels, locale: 'en', canManage: false, showVisibility: false, toolbar: true,
+    load: async () => nested, onOpenNote() {}, actions: {}, ...extra });
+  return { container, tree };
+}
+const typeSearch = (container, value) => {
+  const input = container.querySelector('.wt-search'); input.value = value;
+  input.dispatchEvent(new window.Event('input', { bubbles: true })); return input;
+};
+const shownLabels = container => [...container.querySelectorAll('.wt-label')].map(b => b.textContent);
+
+test('no toolbar unless opted in (musiki notes sidebar unchanged)', async () => {
+  const container = setup();
+  const tree = renderTree({ container, labels, locale: 'en', canManage: false, showVisibility: false, load: async () => nested, onOpenNote() {}, actions: {} });
+  await tree.refresh();
+  assert.equal(container.querySelector('.wt-toolbar'), null);
+  assert.equal(container.firstElementChild.getAttribute('role'), 'status');
+  tree.destroy();
+});
+
+test('toolbar renders a labelled search box and a fold toggle with aria-pressed', async () => {
+  const { container, tree } = mountToolbar(); await tree.refresh();
+  const input = container.querySelector('.wt-search');
+  assert.equal(input.getAttribute('aria-label'), 'Search');
+  const fold = container.querySelector('.wt-fold');
+  assert.equal(fold.getAttribute('aria-label'), 'Fold all');
+  assert.equal(fold.getAttribute('aria-pressed'), 'false');
+  assert.equal(fold.textContent, '<>');
+  tree.destroy();
+});
+
+test('search filters to matches, expands their ancestors, and highlights the match', async () => {
+  const { container, tree } = mountToolbar(); await tree.refresh();
+  typeSearch(container, 'ecri');
+  assert.deepEqual(shownLabels(container), ['Capítulo', 'Fuentes', 'Écriture']);
+  for (const d of container.querySelectorAll('.writing-tree details:not(.wt-actions)')) assert.equal(d.open, true);
+  const mark = container.querySelector('mark');
+  assert.equal(mark.textContent, 'Écri');
+  assert.equal(mark.closest('.wt-label').textContent, 'Écriture');
+  tree.destroy();
+});
+
+test('search with no matches shows the noMatches status; Esc clears and restores the full tree', async () => {
+  const { container, tree } = mountToolbar(); await tree.refresh();
+  const input = typeSearch(container, 'zzz');
+  assert.equal(container.querySelector('[role=status]').textContent, 'No matches');
+  assert.equal(container.querySelectorAll('.wt-label').length, 0);
+  const esc = new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+  input.dispatchEvent(esc);
+  assert.equal(esc.defaultPrevented, true);
+  assert.equal(input.value, '');
+  assert.equal(container.querySelector('[role=status]').textContent, '');
+  assert.equal(container.querySelectorAll('.wt-label').length, 6);
+  assert.equal(container.querySelector('mark'), null);
+  tree.destroy();
+});
+
+test('fold-all closes every folder and flips aria-pressed; pressing again unfolds', async () => {
+  const { container, tree } = mountToolbar(); await tree.refresh();
+  const folders = () => [...container.querySelectorAll('.writing-tree details:not(.wt-actions)')];
+  assert.ok(folders().every(d => d.open));
+  container.querySelector('.wt-fold').click();
+  assert.ok(folders().every(d => !d.open));
+  assert.equal(container.querySelector('.wt-fold').getAttribute('aria-pressed'), 'true');
+  assert.equal(container.querySelector('.wt-fold').title, 'Unfold all');
+  container.querySelector('.wt-fold').click();
+  assert.ok(folders().every(d => d.open));
+  assert.equal(container.querySelector('.wt-fold').getAttribute('aria-pressed'), 'false');
+  tree.destroy();
+});
+
+test('search ignores the fold state, and clearing it restores the folded tree', async () => {
+  const { container, tree } = mountToolbar(); await tree.refresh();
+  container.querySelector('.wt-fold').click();
+  typeSearch(container, 'ecri');
+  assert.ok([...container.querySelectorAll('.writing-tree details:not(.wt-actions)')].every(d => d.open));
+  typeSearch(container, '');
+  assert.ok([...container.querySelectorAll('.writing-tree details:not(.wt-actions)')].every(d => !d.open));
+  tree.destroy();
+});
+
+test('"/" inside the tree focuses the search box', async () => {
+  const { container, tree } = mountToolbar(); await tree.refresh();
+  const label = container.querySelector('.wt-label'); label.focus();
+  const slash = new window.KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+  label.dispatchEvent(slash);
+  assert.equal(slash.defaultPrevented, true);
+  assert.equal(document.activeElement, container.querySelector('.wt-search'));
+  tree.destroy();
+});
+
+test('nested lists carry their depth for indentation styling', async () => {
+  const { container, tree } = mountToolbar(); await tree.refresh();
+  const depths = [...container.querySelectorAll('.writing-tree ul')].map(u => u.dataset.depth);
+  assert.deepEqual(depths, ['0', '1', '1', '2']); // Anexos, Capítulo, Capítulo/Fuentes
+  tree.destroy();
+});

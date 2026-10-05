@@ -12,7 +12,7 @@ interface Props {
   sidebar?: { email: string; spaces: Membership[]; current?: StudioSection };
 }
 const { title, locale, sidebar } = Astro.props;
-const treeKeys = ['newNote','newFolder','rename','delete','visibility','inherit','private','supervision','committee','public','confirmDelete','empty','loading','error','actionError','up','down','actions'] as const;
+const treeKeys = ['newNote','newFolder','rename','delete','visibility','inherit','private','supervision','committee','public','confirmDelete','empty','loading','error','actionError','up','down','actions','search','foldAll','unfoldAll','noMatches'] as const;
 const treeLabels = Object.fromEntries(treeKeys.map(key => [key, t(locale, `studio.tree.${key}`)]));
 const brand = Astro.locals.tenant.brand.name;
 

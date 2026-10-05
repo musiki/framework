@@ -290,3 +290,101 @@ export function planReorder(
   const positions = renormalizedPositions(resultingIds.length);
   return resultingIds.map((id, i) => ({ id, position: positions[i] }));
 }
+
+// ---------------------------------------------------------------------------
+// Search / filter (pure, used by the tree renderer's search box)
+// ---------------------------------------------------------------------------
+
+/** Stable key for a node in filter results: folder and note ids live in different tables, so the kind is part of the key. */
+export function nodeKey(node: TreeNode): string {
+  return node.kind === 'folder' ? `folder:${node.folder.id}` : `note:${node.note.id}`;
+}
+
+/** Fold one character (or string) for matching: lower-case, combining marks (accents) stripped. */
+function fold(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
+/**
+ * Case- and accent-insensitive substring match of `query` in `text`,
+ * returned as `[start, end)` indices into the ORIGINAL `text` (so a
+ * renderer can wrap exactly that slice in a `<mark>`), or null.
+ * An empty/blank query never matches.
+ */
+export function matchRange(text: string, query: string): [number, number] | null {
+  const q = fold(query.trim());
+  if (!q || !text) return null;
+  // Fold char by char, remembering which original index each folded char came from.
+  let folded = '';
+  const origin: number[] = [];
+  let i = 0;
+  for (const ch of text) {
+    const f = fold(ch);
+    for (let k = 0; k < f.length; k++) origin.push(i);
+    folded += f;
+    i += ch.length;
+  }
+  const at = folded.indexOf(q);
+  if (at < 0) return null;
+  const start = origin[at];
+  const lastOrigin = origin[at + q.length - 1];
+  // End just past the original character that produced the last matched folded char.
+  let end = lastOrigin + (text.codePointAt(lastOrigin)! > 0xffff ? 2 : 1);
+  // Swallow trailing combining marks (decomposed accents fold to nothing) so they stay with their base letter.
+  while (end < text.length && fold(text[end]) === '') end++;
+  return [start, end];
+}
+
+export type TreeFilterResult = {
+  /** Keys (see `nodeKey`) of every node to show. */
+  visible: Set<string>;
+  /** Folder ids to force open so every match is reachable. */
+  expand: Set<string>;
+  /** Keys of the nodes whose own title/name matched. */
+  matches: Set<string>;
+};
+
+/**
+ * Filter a built tree by `query` (case- and accent-insensitive substring
+ * on folder names / note titles).
+ *
+ * - Empty/blank query: every node visible, nothing forced open, no matches.
+ * - A matching node is visible, and so are all its ancestor folders, which
+ *   are also listed in `expand`.
+ * - A matching folder's descendants stay visible too (so it can be opened
+ *   to see what it holds), but the folder itself is not forced open.
+ */
+export function filterTree(nodes: TreeNode[], query: string): TreeFilterResult {
+  const visible = new Set<string>();
+  const expand = new Set<string>();
+  const matches = new Set<string>();
+  const active = fold(query.trim()) !== '';
+
+  const showAll = (list: TreeNode[]) => {
+    for (const node of list) {
+      visible.add(nodeKey(node));
+      if (node.kind === 'folder') showAll(node.children);
+    }
+  };
+  if (!active) { showAll(nodes); return { visible, expand, matches }; }
+
+  // Returns true when this subtree contains anything visible.
+  const walk = (list: TreeNode[]): boolean => {
+    let any = false;
+    for (const node of list) {
+      const key = nodeKey(node);
+      const label = node.kind === 'folder' ? node.folder.name : node.note.title;
+      const hit = matchRange(label || '', query) !== null;
+      if (hit) matches.add(key);
+      if (node.kind === 'folder') {
+        const inside = walk(node.children);
+        if (inside) expand.add(node.folder.id);
+        if (hit) showAll(node.children);
+        if (hit || inside) { visible.add(key); any = true; }
+      } else if (hit) { visible.add(key); any = true; }
+    }
+    return any;
+  };
+  walk(nodes);
+  return { visible, expand, matches };
+}
