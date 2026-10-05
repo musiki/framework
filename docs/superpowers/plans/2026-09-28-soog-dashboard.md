@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-28-soog-dashboard-design.md`
 
-**Repos:** engine `/Users/zztt/projects/26-musiki/framework` (branch `feat/soog-dashboard`, worktree recommended), so-web `/Users/zztt/projects/25-soweb/so-web` (branch `feat/soog-dashboard`), package `/Users/zztt/projects/packages/soog-dashboard` (new repo `zzigo/soog-dashboard`, private). Vault (read-only): `/Users/zztt/Library/CloudStorage/GoogleDrive-lucianoazzigotti@gmail.com/My Drive/Obsidian/zzttobsidian/03-thesis/cases/case instruments` and `.../case instruments fictional`; original dashboard `.../03-thesis/03-soog/soog-dashboard.md` (first dataviewjs block).
+**Repos:** engine `/Users/zztt/projects/26-musiki/framework` (branch `feat/soog-dashboard`, worktree recommended), so-web `/Users/zztt/projects/25-soweb/so-web` (branch `feat/soog-dashboard`), package `/Users/zztt/projects/packages/soog-dashboard` (new repo `zzigo/soog-dashboard`, private). Vault (read-only): `<vault>/03-thesis/cases/case instruments` and `.../case instruments fictional`; original dashboard `.../03-thesis/03-soog/soog-dashboard.md` (first dataviewjs block).
 
 ## Global Constraints
 

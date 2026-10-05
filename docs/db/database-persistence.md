@@ -100,7 +100,7 @@ Para deployment, usar:
 ## Estado Actual
 
 Tu base de datos actualmente preserva:
-- ✅ Teacher user (lucianoazzigotti@gmail.com)
+- ✅ Teacher user (owner account)
 - ✅ Course "ejemplo-generative-art"
 - ✅ 4 Assignments para eval blocks
 - ❌ Otros usuarios (se pierden en restart)

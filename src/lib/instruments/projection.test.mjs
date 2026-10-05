@@ -291,21 +291,24 @@ body`);
 });
 
 // --- Real vault sweep --------------------------------------------------
-// Skipped (not failed) when the Obsidian vault isn't mounted at this path
-// (e.g. CI, or a machine without the Google Drive mount).
+// Opt-in: set INSTRUMENTS_VAULT_ROOT to the vault's `03-thesis/cases`
+// folder (machine-specific, never committed). Skipped (not failed) when
+// unset or when `case instruments` isn't there (e.g. CI). The
+// `case instruments fictional` folder is swept too when it exists.
 
-const VAULT_ROOT =
-  '/Users/zztt/Library/CloudStorage/GoogleDrive-lucianoazzigotti@gmail.com/My Drive/Obsidian/zzttobsidian/03-thesis/cases';
-const REAL_DIRS = [
-  { dir: path.join(VAULT_ROOT, 'case instruments'), fictional: false },
-  { dir: path.join(VAULT_ROOT, 'case instruments fictional'), fictional: true },
-];
+const VAULT_ROOT = String(process.env.INSTRUMENTS_VAULT_ROOT ?? '').trim();
+const REAL_DIRS = VAULT_ROOT
+  ? [
+      { dir: path.join(VAULT_ROOT, 'case instruments'), fictional: false },
+      { dir: path.join(VAULT_ROOT, 'case instruments fictional'), fictional: true },
+    ].filter(({ dir }) => fs.existsSync(dir))
+  : [];
 
-const vaultAvailable = REAL_DIRS.every(({ dir }) => fs.existsSync(dir));
+const vaultAvailable = REAL_DIRS.some(({ fictional }) => !fictional);
 
 test(
   'projectInstrument: runs over every real vault case-instrument note without throwing',
-  { skip: !vaultAvailable && 'vault not mounted at this path' },
+  { skip: !vaultAvailable && 'set INSTRUMENTS_VAULT_ROOT to the vault cases folder to run' },
   () => {
     let total = 0;
     let validVector = 0;
