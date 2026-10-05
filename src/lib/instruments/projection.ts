@@ -109,7 +109,7 @@ export const SAFE_ENGINES = { js: () => ({}), javascript: () => ({}) };
 /** Parses frontmatter with gray-matter, retrying once with Templater
  * expressions cleaned out if the raw markdown doesn't parse as YAML.
  * Returns `null` (never throws) if both attempts fail. */
-function parseFrontmatterRobust(markdown: string): Record<string, unknown> | null {
+export function parseFrontmatterRobust(markdown: string): Record<string, unknown> | null {
   // Passing `{ engines: ... }` (any options object, even empty) opts both
   // calls out of gray-matter's own content-keyed cache. Without it, a
   // first call that throws still poisons the cache with the pre-parse
@@ -237,7 +237,23 @@ export function projectInstrument(
 ): PublicInstrument | null {
   const data = parseFrontmatterRobust(note.body);
   if (!data) return null;
+  return projectInstrumentData(data, { id: note.id, title: note.title, fictional: opts?.fictional });
+}
+
+/**
+ * Same projection as {@link projectInstrument}, from already-parsed
+ * frontmatter `data` (the file-backed catalogue loader parses each note
+ * once and projects it per language). `fallback.title` is used when the
+ * frontmatter has no usable `title`. Returns `null` unless
+ * `data.type === 'instrument'`.
+ */
+export function projectInstrumentData(
+  data: Record<string, unknown>,
+  fallback: { id: string; title: string; fictional?: boolean },
+): PublicInstrument | null {
   if (data.type !== 'instrument') return null;
+  const note = { id: fallback.id, title: fallback.title };
+  const opts = { fictional: fallback.fictional };
 
   const title = str(data.title) ?? note.title;
 
