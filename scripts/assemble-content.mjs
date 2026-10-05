@@ -241,6 +241,10 @@ const main = () => {
       throw new Error(`Each source must include "id". Invalid source: ${JSON.stringify(source)}`);
     }
 
+    // Data sources (e.g. soog-instruments) are pulled into .content-sources
+    // and read at runtime; they are not courses and never enter src/content.
+    if (source.assemble === false) continue;
+
     const sourceCheckoutDir = path.join(sourcesDir, source.id);
     if (!fs.existsSync(sourceCheckoutDir)) {
       throw new Error(

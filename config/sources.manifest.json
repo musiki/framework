@@ -32,6 +32,16 @@
       "branch": "main",
       "contentRoot": ".",
       "localPath": "../s123"
+    },
+    {
+      "id": "soog-instruments",
+      "enabled": true,
+      "repo": "zzigo/soog-instruments",
+      "branch": "main",
+      "contentRoot": ".",
+      "localPath": "../../../Library/CloudStorage/GoogleDrive-lucianoazzigotti@gmail.com/My Drive/Obsidian/zzttobsidian/03-thesis/cases/case instruments",
+      "assemble": false,
+      "optional": true
     }
   ],
   "assembly": {

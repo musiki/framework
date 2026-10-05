@@ -150,6 +150,7 @@ const loadManifest = () => {
 
 const isIgnored = (name) =>
   name === '.git' ||
+  name === 'node_modules' ||
   name === '.obsidian' ||
   name === '.trash' ||
   name === '.github' ||
@@ -290,43 +291,50 @@ const main = () => {
     knownIds.add(source.id);
     const targetDir = path.join(sourcesDir, source.id);
 
-    if (source.localPath && sourceStrategy === 'prefer-local') {
-      const pulledFromLocalPath = pullFromLocalPath(source, targetDir);
-      if (!pulledFromLocalPath && !source.repo) {
-        throw new Error(
-          `Source "${source.id}" localPath does not exist and no "repo" fallback is configured: ${path.resolve(source.localPath)}`,
-        );
-      }
+    try {
+      if (source.localPath && sourceStrategy === 'prefer-local') {
+        const pulledFromLocalPath = pullFromLocalPath(source, targetDir);
+        if (!pulledFromLocalPath && !source.repo) {
+          throw new Error(
+            `Source "${source.id}" localPath does not exist and no "repo" fallback is configured: ${path.resolve(source.localPath)}`,
+          );
+        }
 
-      if (!pulledFromLocalPath) {
-        console.warn(
-          `Source "${source.id}" localPath not found. Falling back to repo "${source.repo}".`,
-        );
+        if (!pulledFromLocalPath) {
+          console.warn(
+            `Source "${source.id}" localPath not found. Falling back to repo "${source.repo}".`,
+          );
+          pullFromRepo(source, targetDir, token);
+        }
+      } else if (source.repo) {
+        if (source.localPath && sourceStrategy === 'remote-only') {
+          console.log(
+            `Source "${source.id}" ignoring localPath "${source.localPath}" because CONTENT_SOURCE_STRATEGY=remote-only.`,
+          );
+        }
         pullFromRepo(source, targetDir, token);
+      } else if (source.localPath) {
+        throw new Error(
+          `Source "${source.id}" is configured with localPath only, but CONTENT_SOURCE_STRATEGY=remote-only requires a repo.`,
+        );
+      } else {
+        throw new Error(`Source "${source.id}" needs either "repo" or "localPath".`);
       }
-    } else if (source.repo) {
-      if (source.localPath && sourceStrategy === 'remote-only') {
-        console.log(
-          `Source "${source.id}" ignoring localPath "${source.localPath}" because CONTENT_SOURCE_STRATEGY=remote-only.`,
+
+      const contentRoot = source.contentRoot || '.';
+      const vaultRoot = path.join(targetDir, contentRoot);
+      if (!fs.existsSync(vaultRoot)) {
+        throw new Error(
+          `Source "${source.id}" is missing vault root "${contentRoot}" at ${vaultRoot}`,
         );
       }
-      pullFromRepo(source, targetDir, token);
-    } else if (source.localPath) {
-      throw new Error(
-        `Source "${source.id}" is configured with localPath only, but CONTENT_SOURCE_STRATEGY=remote-only requires a repo.`,
-      );
-    } else {
-      throw new Error(`Source "${source.id}" needs either "repo" or "localPath".`);
+      console.log(`Synced source "${source.id}" -> ${targetDir}`);
+    } catch (error) {
+      // Optional sources (runtime data such as soog-instruments) must never
+      // break a deploy: warn and keep going without them.
+      if (source.optional !== true) throw error;
+      console.warn(`[content:pull] optional source "${source.id}" skipped: ${error?.message || error}`);
     }
-
-    const contentRoot = source.contentRoot || '.';
-    const vaultRoot = path.join(targetDir, contentRoot);
-    if (!fs.existsSync(vaultRoot)) {
-      throw new Error(
-        `Source "${source.id}" is missing vault root "${contentRoot}" at ${vaultRoot}`,
-      );
-    }
-    console.log(`Synced source "${source.id}" -> ${targetDir}`);
   }
 
   if (cleanMissing) {

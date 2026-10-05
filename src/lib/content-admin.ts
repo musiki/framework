@@ -11,6 +11,8 @@ type SourceManifestSource = {
   branch?: string;
   contentRoot?: string;
   localPath?: string;
+  /** `false` for data sources (not courses), e.g. soog-instruments. */
+  assemble?: boolean;
 };
 
 type SourceManifest = {
@@ -44,7 +46,11 @@ export function resolveCourseSource(courseId: string): SourceManifestSource | nu
 
   const manifest = readManifest();
   const sources = Array.isArray(manifest.sources) ? manifest.sources : [];
-  return sources.find((source) => normalizeText(source?.id) === normalizedCourseId) || null;
+  return (
+    sources.find(
+      (source) => source?.assemble !== false && normalizeText(source?.id) === normalizedCourseId,
+    ) || null
+  );
 }
 
 export function sourcePathFromFrameworkFilePath(filePath: unknown): string {

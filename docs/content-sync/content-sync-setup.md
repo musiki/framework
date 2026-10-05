@@ -77,6 +77,11 @@ Editar `config/sources.manifest.json` y agregar tu materia:
 }
 ```
 
+#### Fuentes de datos (no materias)
+Una fuente con `"assemble": false` se descarga en `.content-sources/<id>` pero nunca entra en `src/content` (no es una materia; tampoco la resuelve el admin de contenido como curso). Con `"optional": true`, un fallo al descargarla (repo inaccesible, `localPath` ausente sin repo) es sólo un warning y no rompe el build ni el deploy.
+
+Ejemplo: `soog-instruments` (repo `zzigo/soog-instruments`, `localPath` = carpeta `03-thesis/cases/case instruments` del vault en Google Drive, relativa a la raíz del framework). El runtime la lee en `GET /api/public/instruments` (`src/lib/instruments/catalogue.ts`; override con env `INSTRUMENTS_DIR`): sólo notas con `publish: true` y `type: instrument`, textos `<clave>_es` para musiki (es) y claves planas para so (en), `layer: fictional` → `fictional: true`. El manifiesto de hem (`config/sources.hem.json`) no la incluye.
+
 ### 3.3 GitHub Action en la Materia (Notifier)
 Dentro del repositorio del curso, crear `.github/workflows/notify-platform-on-content-change.yml` (se puede copiar desde `docs/templates/`).
 Debe inyectar como mínimo tu secret `CONTENT_BUS_SECRET`.
