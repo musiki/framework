@@ -7,6 +7,7 @@ import {
 } from '@codemirror/view';
 import { computeKwic, computeZipfProfile } from '../../notas/qa-analyzer-logic';
 import { getLangPack, traceStopwords, type ContentLang } from '../../../lib/writing/lang/index.ts';
+import { scrollTopToReveal } from './trace-layout.ts';
 import { DEFAULT_ES_TRACE_LABELS, formatLabel, type TraceLabels } from '../../../lib/writing/editor/labels.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -1030,44 +1031,47 @@ export function injectTraceCss() {
       100% { transform: scale(1); opacity: .6; }
     }
     .tc-list { padding: 4px 0; }
+    /* Trace rail: summary stays fixed, the list scrolls vertically; one in-flow
+       block per paragraph (document order), so long content wraps instead of
+       colliding. Each block's header sticks to the top while that block scrolls. */
     .cnw-trace-rail .tc-monitor,
     .cnw-trace-rail .tc-section--trace,
     .cnw-trace-rail .tc-section--trace .tc-section-body {
       height: 100%;
       min-height: 0;
-      position: relative;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
     }
     .cnw-trace-rail .tc-section--trace { border-bottom: none; }
-    .cnw-trace-rail .tc-section-summary {
-      position: absolute;
-      z-index: 4;
-      top: 0;
-      left: 0;
-      right: 0;
-      padding: 3px 6px;
-      background: color-mix(in srgb, var(--c-bg) 86%, transparent);
-    }
+    .cnw-trace-rail .tc-section-summary { flex-shrink: 0; padding: 3px 6px; flex-wrap: wrap; }
     .tc-section--trace .tc-section-summary::before { display: none; }
+    .cnw-trace-rail .tc-section--trace .tc-section-body { flex: 1; padding-bottom: 0; }
     .cnw-trace-rail .tc-list {
-      position: absolute;
-      inset: 0;
+      flex: 1;
+      min-height: 0;
       padding: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
     .cnw-trace-rail .tc-row {
-      position: absolute;
-      left: 0;
-      right: 0;
       box-sizing: border-box;
-      min-height: var(--tc-para-height, 34px);
-      height: var(--tc-para-height, 34px);
-      overflow: hidden;
-      z-index: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      border-bottom: 1px solid var(--c-border, rgba(120,120,140,.14));
     }
-    .cnw-trace-rail .tc-row:is(.is-active, .is-hovered, :focus-within) {
-      max-height: none;
-      overflow: visible;
-      z-index: 3;
+    .cnw-trace-rail .tc-row-head {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      margin: 0 -8px 3px -26px;
+      padding: 3px 8px 3px 26px;
+      background: var(--c-bg);
+    }
+    .cnw-trace-rail .tc-row:is(.is-active, :focus-within) {
+      background: color-mix(in srgb, var(--c-link, #3b82f6) 4%, var(--c-bg));
+    }
+    .cnw-trace-rail .tc-row:is(.is-active, :focus-within) .tc-row-head {
       background: color-mix(in srgb, var(--c-link, #3b82f6) 4%, var(--c-bg));
     }
     .tc-row {
@@ -1452,56 +1456,22 @@ function applyMonitorActivity(traceCol: HTMLElement, state: MonitorState, animat
   }
 }
 
-type TraceRowMeasurement = {
-  row: HTMLElement;
-  hidden: boolean;
-  top?: number;
-  height?: number;
-};
-
-function requestTraceRowsSync(traceCol: HTMLElement, paras: Paragraph[], editorView: EditorView) {
-  editorView.requestMeasure<TraceRowMeasurement[]>({
-    key: traceCol,
-    read: () => {
-      const list = traceCol.querySelector<HTMLElement>('.tc-list');
-      if (!list || !traceCol.isConnected) return [];
-      const listTop = list.getBoundingClientRect().top;
-      const listHeight = list.clientHeight;
-      const docLength = editorView.state.doc.length;
-      const measurements: TraceRowMeasurement[] = [];
-      for (const para of paras) {
-        const row = list.querySelector<HTMLElement>(`.tc-row[data-para-index="${para.index}"]`);
-        if (!row) continue;
-        const from = Math.min(para.from, docLength);
-        const to = Math.max(from, Math.min(para.to, docLength));
-        const start = editorView.coordsAtPos(from);
-        const end = editorView.coordsAtPos(to, -1);
-        if (!start || !end) {
-          measurements.push({ row, hidden: true });
-          continue;
-        }
-        const visualHeight = Math.max(start.bottom - start.top, end.bottom - start.top);
-        const compactShift = visualHeight < 34 ? 2 : 0;
-        const top = start.top - listTop + compactShift;
-        const height = Math.max(34, visualHeight - compactShift);
-        measurements.push({
-          row,
-          hidden: top + height < 0 || top > listHeight,
-          top: Math.round(top),
-          height: Math.round(height),
-        });
-      }
-      return measurements;
-    },
-    write: measurements => {
-      for (const measurement of measurements) {
-        measurement.row.hidden = measurement.hidden;
-        if (measurement.top === undefined || measurement.height === undefined) continue;
-        measurement.row.style.top = `${measurement.top}px`;
-        measurement.row.style.setProperty('--tc-para-height', `${measurement.height}px`);
-      }
-    },
+/** Keep the rail in step with the paragraph being edited: reveal its block. */
+function revealActiveTraceRow(traceCol: HTMLElement, paraIndex: number | null) {
+  if (paraIndex === null) return;
+  const list = traceCol.querySelector<HTMLElement>('.tc-list');
+  const row = list?.querySelector<HTMLElement>(`.tc-row[data-para-index="${paraIndex}"]`);
+  if (!list || !row) return;
+  const listRect = list.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  const next = scrollTopToReveal({
+    scrollTop: list.scrollTop,
+    viewHeight: list.clientHeight,
+    blockTop: rowRect.top - listRect.top + list.scrollTop,
+    blockHeight: rowRect.height,
+    stickyOffset: 0,
   });
+  if (Math.abs(next - list.scrollTop) > 1) list.scrollTop = next;
 }
 
 function renderKwicLines(target: HTMLElement, text: string, query: string, labels: TraceLabels) {
@@ -2205,7 +2175,7 @@ export async function mountTraceMargin(
     monitorState.visibleParagraphs = collectParagraphIndicesInRange(paras, view.viewport.from, view.viewport.to);
     applyMonitorActivity(traceCol, monitorState, animate && enteredParagraph, labels);
     applyMonitorActivity(analysisCol, monitorState, animate && enteredParagraph, labels);
-    requestTraceRowsSync(traceCol, paras, view);
+    if (enteredParagraph) revealActiveTraceRow(traceCol, nextActive);
     if (animate && enteredParagraph) {
       const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
       if (traceSection) {
@@ -2222,6 +2192,7 @@ export async function mountTraceMargin(
     currentCodes = newCodes;
     currentTraces = newTraces;
     editorView.dispatch({ effects: setCodeBars.of(currentCodes) });
+    const prevScroll = traceCol.querySelector<HTMLElement>('.tc-list')?.scrollTop ?? 0;
     renderMargin(
       traceCol,
       analysisCol,
@@ -2242,6 +2213,8 @@ export async function mountTraceMargin(
       contentLang,
     );
     syncEditorActivity(editorView, false);
+    const renderedList = traceCol.querySelector<HTMLElement>('.tc-list');
+    if (renderedList) renderedList.scrollTop = prevScroll;
     const traceSection = traceCol.querySelector<HTMLElement>('.tc-section--trace');
     if (traceSection) {
       restartAnimation(traceSection, 'is-updating');
@@ -2285,13 +2258,6 @@ export async function mountTraceMargin(
     ])),
   });
 
-  const onEditorScroll = () => requestTraceRowsSync(traceCol, paras, editorView);
-  editorView.scrollDOM.addEventListener('scroll', onEditorScroll, { passive: true });
-  const resizeObserver = typeof ResizeObserver !== 'undefined'
-    ? new ResizeObserver(() => requestTraceRowsSync(traceCol, paras, editorView))
-    : null;
-  resizeObserver?.observe(panelBodyEl);
-
   rerender(currentCodes, currentTraces);
   void loadStoredTraceData();
 
@@ -2301,8 +2267,6 @@ export async function mountTraceMargin(
       if (refreshTimer) clearTimeout(refreshTimer);
       if (pulseTimer) clearTimeout(pulseTimer);
       if (traversingTimer) clearTimeout(traversingTimer);
-      editorView.scrollDOM.removeEventListener('scroll', onEditorScroll);
-      resizeObserver?.disconnect();
       editorView.dispatch({ effects: setHighlight.of(new Set<number>()) });
       editorView.dispatch({ effects: setCodeBars.of([]) });
       editorView.dispatch({ effects: traceExtensions.reconfigure([]) });
