@@ -113,6 +113,8 @@ import { SOOG_DASHBOARD_LABELS_ES } from '../../lib/instruments/courses';
     flex-direction: column;
     overflow: auto;
     padding: 0 12px 12px;
+    /* full-height host: header 22px + bottom padding 12px */
+    --soog-sidebar-height: calc(100dvh - 22px - 12px);
   }
 
   .course-soog-body soog-dashboard {

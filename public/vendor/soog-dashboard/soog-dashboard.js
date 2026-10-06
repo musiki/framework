@@ -1,15 +1,19 @@
 /*!
- * soog-dashboard 0.1.1
- * SOOG_DASHBOARD_VERSION = '0.1.1'
+ * soog-dashboard 0.2.0
+ * SOOG_DASHBOARD_VERSION = '0.2.0'
  *
  * <soog-dashboard> — framework-free custom element showing the SOOG / MOAIE
- * dashboard (instrument chips, MOAIE radar, interface-profile radar,
- * instrument details, table view), fed live from a same-origin JSON endpoint
- * shaped `{ generatedAt, instruments: PublicInstrument[] }`.
+ * dashboard, fed live from a same-origin JSON endpoint shaped
+ * `{ generatedAt, instruments: PublicInstrument[] }`.
  *
- * Ported from the first dataviewjs block of the Obsidian `soog-dashboard.md`
- * (palette, axis/profile labels, radar options, DEFAULT_N = 4). No build step:
- * plain ESM, safe to vendor as a single file.
+ * Full mode: a searchable instrument sidebar (thumbnail, title, year · family,
+ * compare checkbox) next to two tabs — "Compare" (MOAIE radar, interface
+ * profile radar, legend, table, unscored list) and "Detail" (large image with
+ * a zoomable lightbox, metadata, tags, MOAIE texts + radar, connections and
+ * click-to-load videos). Compact mode: small radar + "Open dashboard" dialog.
+ *
+ * No build step: plain ESM, safe to vendor as a single file. Chart.js 4.4.4
+ * is the only external code and is loaded on demand from jsDelivr.
  *
  * Attributes
  *   src      same-origin path ("/..." but not "//..."), default /api/public/instruments
@@ -19,7 +23,7 @@
  *   labels   JSON object overriding UI strings (see DEFAULT_LABELS)
  */
 
-export const SOOG_DASHBOARD_VERSION = '0.1.1';
+export const SOOG_DASHBOARD_VERSION = '0.2.0';
 export const CHART_JS_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
 export const DEFAULT_SRC = '/api/public/instruments';
 export const DEFAULT_N = 4;
@@ -27,6 +31,9 @@ export const DEFAULT_N = 4;
 export const AXIS = ['M', 'O', 'A', 'I', 'E'];
 export const PROFILE_KEYS = ['affordance', 'liveness', 'playability', 'learnability', 'situatedness', 'mediality', 'mapping', 'sensorimotor_scheme', 'ergonomics', 'expressivity'];
 export const PALETTE = ['#1D9E75', '#3266ad', '#A32D2D', '#7F77DD', '#EF9F27', '#2AACBB', '#D4602A', '#B2983E', '#8A8A9A', '#1C3C78', '#C0518A', '#5BA646'];
+
+export const ZOOM_MIN = 1;
+export const ZOOM_MAX = 8;
 
 export const DEFAULT_LABELS = {
   title: 'MOAIE dashboard',
@@ -49,6 +56,7 @@ export const DEFAULT_LABELS = {
   profileHeading: 'Interface profile — 10 dimensions',
   moaieAria: 'MOAIE radar — five axes M O A I E, 0 to 1, one series per selected instrument.',
   profileAria: 'Interface profile radar — 10 dimensions, one series per selected instrument.',
+  detailAria: 'MOAIE radar of this instrument — five axes M O A I E, 0 to 1.',
   noProfile: 'No interface profile for the selected instruments.',
   noSelection: 'No instruments selected.',
   table: 'Table',
@@ -65,12 +73,28 @@ export const DEFAULT_LABELS = {
   yes: 'yes',
   no: 'no',
   connect: 'Connections',
+  hyper: 'Hyper',
   link: 'Website',
   fictional: 'fictional',
   instruments: 'instruments',
   scored: 'scored',
+  notScored: 'not scored',
   openDashboard: 'Open dashboard',
   close: 'Close',
+  // sidebar / tabs / detail
+  search: 'Search instruments…',
+  listHint: 'Arrow keys move, Enter opens the detail, Space adds to the comparison.',
+  addToCompare: 'Add to comparison',
+  compareTab: 'Compare',
+  detailTab: 'Detail',
+  videos: 'Videos',
+  playVideo: 'Play video',
+  tags: 'Tags',
+  openImage: 'Open image',
+  zoomIn: 'Zoom in',
+  zoomOut: 'Zoom out',
+  noResults: 'No instruments match the search.',
+  selectInstrument: 'Select an instrument in the list to see its details.',
   axisNames: { M: 'Material', O: 'Object', A: 'Agent', I: 'Interaction', E: 'Environment' },
   profileLabels: ['Affordance', 'Liveness', 'Playability', 'Learnability', 'Situatedness', 'Mediality', 'Mapping', 'Sensorimotor', 'Ergonomics', 'Expressivity'],
 };
@@ -102,6 +126,47 @@ function rgba(hex, a) {
 }
 function isHttps(u) { return typeof u === 'string' && /^https:\/\//i.test(u); }
 function str(x) { return x == null ? '' : String(x); }
+function strList(x) { return Array.isArray(x) ? x.map((v) => str(v).trim()).filter(Boolean) : []; }
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+/** Lower-case, accent-free text for search (NFD + strip combining marks). */
+export function normalizeText(s) {
+  return str(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+/** Searchable haystack of a record: title, family, person, authors, year, tags. */
+export function searchText(r) {
+  return normalizeText([r.title, r.family, r.person, ...(r.authors || []), r.year, ...(r.tags || [])].join(' \u0001 '));
+}
+
+/** Every whitespace-separated term of `query` must occur in the record. */
+export function matchesQuery(r, query) {
+  const terms = normalizeText(query).split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const hay = r._search != null ? r._search : searchText(r);
+  return terms.every((t) => hay.includes(t));
+}
+
+const YT_ID = /^[A-Za-z0-9_-]{6,32}$/;
+const VIMEO_ID = /^\d{1,15}$/;
+/** Normalise one video entry; unknown providers or malformed ids are dropped. */
+export function toVideo(v) {
+  if (!v || typeof v !== 'object') return null;
+  const provider = str(v.provider).toLowerCase();
+  const id = str(v.id).trim();
+  if (provider === 'youtube' ? !YT_ID.test(id) : provider === 'vimeo' ? !VIMEO_ID.test(id) : true) return null;
+  return { provider, id, url: isHttps(v.url) ? v.url : '' };
+}
+/** Privacy-friendly embed URL, only requested after a click. */
+export function videoEmbedUrl(v) {
+  return v.provider === 'youtube'
+    ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?autoplay=1`
+    : `https://player.vimeo.com/video/${encodeURIComponent(v.id)}?autoplay=1&dnt=1`;
+}
+/** Thumbnail URL (YouTube only; Vimeo uses a neutral local tile). */
+export function videoThumbUrl(v) {
+  return v.provider === 'youtube' ? `https://i.ytimg.com/vi/${encodeURIComponent(v.id)}/hqdefault.jpg` : '';
+}
 
 /** Normalise one PublicInstrument from the endpoint into the internal record. */
 export function toRecord(inst, index) {
@@ -109,14 +174,14 @@ export function toRecord(inst, index) {
   const v = Array.isArray(m.vector) && m.vector.length === 5 && m.vector.every((x) => typeof x === 'number' && Number.isFinite(x)) ? m.vector.slice() : null;
   const scored = !!v && !m.empty;
   const p = inst && inst.profile && typeof inst.profile === 'object' ? inst.profile : null;
-  return {
+  const r = {
     key: str(inst && inst.id) || `i${index}`,
     title: str(inst && inst.title) || '—',
     year: inst && inst.year != null && inst.year !== '' ? str(inst.year) : '',
     family: str(inst && inst.family),
     layer: str(inst && inst.layer),
     sh: str(inst && inst.sachsHornbostel),
-    authors: Array.isArray(inst && inst.authors) ? inst.authors.map(str).filter(Boolean) : [],
+    authors: strList(inst && inst.authors),
     person: str(inst && inst.person),
     url: isHttps(inst && inst.url) ? inst.url : '',
     img: isHttps(inst && inst.img) ? inst.img : '',
@@ -126,8 +191,13 @@ export function toRecord(inst, index) {
     vector: scored ? v : null,
     scored,
     profile: p ? PROFILE_KEYS.map((k) => num(p[k])) : null,
-    connect: Array.isArray(inst && inst.connect) ? inst.connect.map(str).filter(Boolean) : [],
+    connect: strList(inst && inst.connect),
+    hyper: strList(inst && inst.hyper),
+    tags: strList(inst && inst.tags),
+    videos: Array.isArray(inst && inst.videos) ? inst.videos.map(toVideo).filter(Boolean) : [],
   };
+  r._search = searchText(r);
+  return r;
 }
 
 // ── Chart.js: loaded once per page (shared module-level promise) ─────────
@@ -159,11 +229,14 @@ const STYLE = `
 :host {
   --_fg: var(--soog-fg, var(--so-fg, var(--c-text, var(--c-fg, currentColor))));
   --_bg: var(--soog-bg, var(--so-bg, var(--c-bg, Canvas)));
-  --_border: var(--soog-border, var(--so-border, var(--c-border, color-mix(in srgb, currentColor 16%, transparent))));
+  --_border: var(--soog-border, var(--so-border, var(--c-border, color-mix(in srgb, currentColor 18%, transparent))));
   --_surface: var(--soog-surface, var(--so-surface, color-mix(in srgb, currentColor 4%, transparent)));
+  --_accent: var(--soog-accent, var(--so-accent, var(--c-accent, #1D9E75)));
   --_button: color-mix(in srgb, currentColor 6%, transparent);
-  --_muted: color-mix(in srgb, currentColor 66%, transparent);
-  --_faint: color-mix(in srgb, currentColor 48%, transparent);
+  --_hover: color-mix(in srgb, currentColor 8%, transparent);
+  --_muted: color-mix(in srgb, currentColor 72%, transparent);
+  --_faint: color-mix(in srgb, currentColor 60%, transparent);
+  --_focus: color-mix(in srgb, currentColor 75%, transparent);
   display: block;
   container-type: inline-size;
   color: var(--_fg);
@@ -176,35 +249,67 @@ const STYLE = `
 :host([hidden]) { display: none; }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-.root { max-width: 960px; margin: 0 auto; padding: .5rem 0; }
+.root { max-width: 1320px; margin: 0 auto; padding: .5rem 0; }
+.root.compact { max-width: 960px; }
 h2 { font-size: 1.15em; font-weight: 600; margin: 0 0 .2rem; color: inherit; }
-.sub { font-size: .8em; color: var(--_muted); margin-bottom: 1.5rem; }
-.section { margin: 1.5rem 0; }
+.sub { font-size: .8em; color: var(--_muted); margin-bottom: 1rem; }
+.section { margin: 1.25rem 0; }
 .label { font-size: .7em; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--_muted); margin: 0 0 .6rem; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-.card { background: var(--_surface); border: 1px solid var(--_border); border-radius: 8px; padding: .65rem .9rem; }
-.card-val { font-size: 1.5em; font-weight: 500; }
+.card { background: var(--_surface); border: 1px solid var(--_border); border-radius: 8px; padding: .55rem .85rem; }
+.card-val { font-size: 1.4em; font-weight: 500; }
 .card-lbl { font-size: .75em; color: var(--_muted); margin-top: 2px; }
-button { font: inherit; color: inherit; }
+button, input { font: inherit; color: inherit; }
 .btn { background: var(--_button); border: 1px solid var(--_border); border-radius: 8px; padding: 4px 12px; font-size: .8em; cursor: pointer; color: var(--_muted); transition: color .15s, border-color .15s, background .15s; }
 .btn:hover, .btn[aria-pressed="true"] { color: var(--_fg); border-color: color-mix(in srgb, currentColor 34%, transparent); }
-.btn:focus-visible, .chip:focus-visible { outline: 2px solid color-mix(in srgb, currentColor 70%, transparent); outline-offset: 2px; }
-.controls { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: .6rem; }
-.chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 5px; }
-.chip { display: flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid var(--_border); border-radius: 6px; cursor: pointer; font-size: .78em; color: var(--_muted); background: var(--_button); text-align: left; min-width: 0; transition: color .15s, border-color .15s, background .15s; }
-.chip[aria-pressed="true"] { color: var(--_fg); background: var(--_surface); border-color: color-mix(in srgb, currentColor 34%, transparent); }
-.chip.fictional { border-style: dashed; }
-.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; border: 1px solid var(--_border); }
-.chip-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chip-meta { font-size: .85em; color: var(--_faint); }
+:focus-visible { outline: 2px solid var(--_focus); outline-offset: 2px; }
+.controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; margin-bottom: .6rem; }
+.controls .grow { flex: 1; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ── two-column layout ── */
+.layout { display: grid; grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+.side { position: sticky; top: 0; display: flex; flex-direction: column; max-height: var(--soog-sidebar-height, 85vh); min-height: 0; border: 1px solid var(--_border); border-radius: 10px; background: var(--_surface); overflow: hidden; }
+.search-wrap { padding: 8px; border-bottom: 1px solid var(--_border); background: var(--_bg); }
+.search { width: 100%; padding: 7px 10px; border: 1px solid var(--_border); border-radius: 7px; background: var(--_bg); font-size: .85em; }
+.search::placeholder { color: var(--_faint); opacity: 1; }
+.list-toggle { display: none; width: 100%; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; padding: 5px 8px; border: 1px solid var(--_border); border-radius: 7px; background: var(--_button); font-size: .8em; color: var(--_muted); cursor: pointer; }
+.list-toggle .chev { transition: transform .15s; }
+.list-toggle[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.list { list-style: none; margin: 0; padding: 4px; overflow-y: auto; flex: 1; min-height: 0; overscroll-behavior: contain; }
+.item { display: flex; align-items: center; gap: 2px; border-radius: 7px; }
+.item:hover { background: var(--_hover); }
+.row { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 7px; cursor: pointer; border-left: 3px solid transparent; }
+.row[aria-current="true"] { background: var(--_hover); border-left-color: var(--_accent); }
+.row[aria-current="true"] .name { font-weight: 600; }
+.thumb { width: 44px; height: 44px; flex: none; border-radius: 6px; overflow: hidden; background: var(--_button); border: 1px solid var(--_border); display: grid; place-items: center; color: var(--_faint); font-size: 1.1em; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.txt { min-width: 0; display: flex; flex-direction: column; }
+.name { font-size: .85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { font-size: .72em; color: var(--_muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fict { font-style: italic; }
+.cmp { flex: none; display: flex; align-items: center; gap: 5px; padding: 8px 8px; cursor: pointer; }
+.cmp input { width: 16px; height: 16px; margin: 0; accent-color: var(--_accent); cursor: pointer; }
+.cmp input:disabled { cursor: not-allowed; opacity: .45; }
+.swatch-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--_border); background: transparent; }
+.list .note { padding: .75rem; }
+
+/* ── tabs ── */
+.tablist { display: flex; gap: 2px; border-bottom: 1px solid var(--_border); margin-bottom: 1rem; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 7px 14px; font-size: .85em; color: var(--_muted); cursor: pointer; }
+.tab:hover { color: var(--_fg); }
+.tab[aria-selected="true"] { color: var(--_fg); font-weight: 600; border-bottom-color: var(--_accent); }
+
 .unscored { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; padding: 0; margin: 0; }
 .unscored li, .tag { border: 1px dashed var(--_border); border-radius: 4px; padding: 1px 7px; font-size: .75em; color: var(--_muted); }
 .tag { border-style: solid; background: var(--_button); display: inline-block; margin: 2px 4px 2px 0; }
+.tag.chip { border-radius: 999px; padding: 1px 9px; }
 .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
 .chart-title { font-size: .7em; font-weight: 600; letter-spacing: .04em; color: var(--_faint); margin-bottom: .5rem; text-transform: uppercase; }
 .radar { position: relative; height: 280px; }
 .radar.profile { height: 360px; }
 .radar.small { height: 190px; }
+.radar.detail { height: 220px; }
 .note { font-size: .8em; color: var(--_muted); }
 .legend { margin-top: .75rem; }
 .legend-row { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: .8em; color: var(--_muted); line-height: 1.5; }
@@ -217,33 +322,78 @@ caption { text-align: left; font-size: .9em; color: var(--_muted); margin-bottom
 th, td { border-bottom: 1px solid var(--_border); padding: 4px 8px; text-align: right; }
 th:first-child, td:first-child { text-align: left; }
 thead th { font-weight: 600; color: var(--_muted); }
-.details { display: grid; grid-template-columns: minmax(0, 160px) 1fr; gap: 1rem; align-items: start; background: var(--_surface); border: 1px solid var(--_border); border-radius: 8px; padding: .9rem 1rem; }
-.details.noimg { grid-template-columns: 1fr; }
-.details img { width: 100%; height: auto; border-radius: 6px; display: block; background: var(--_button); }
-.details h3 { margin: 0 0 .35rem; font-size: 1em; font-weight: 600; }
-.badge { font-size: .7em; font-weight: 500; border: 1px dashed var(--_border); border-radius: 4px; padding: 0 5px; margin-left: 6px; color: var(--_muted); vertical-align: 2px; }
-dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; font-size: .8em; }
-dt { color: var(--_faint); }
+
+/* ── detail ── */
+.detail h3 { margin: 0 0 .75rem; font-size: 1.25em; font-weight: 600; }
+.detail h4 { font-size: .7em; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--_muted); margin: 1.25rem 0 .5rem; }
+.badge { font-size: .55em; font-weight: 500; border: 1px dashed var(--_border); border-radius: 4px; padding: 0 5px; margin-left: 8px; color: var(--_muted); vertical-align: 4px; }
+.detail-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.detail-top.noimg { grid-template-columns: 1fr; }
+.img-btn { display: block; width: 100%; padding: 0; border: 1px solid var(--_border); border-radius: 8px; overflow: hidden; background: var(--_button); cursor: zoom-in; position: relative; }
+.img-btn img { display: block; width: 100%; height: auto; max-height: 460px; object-fit: contain; }
+.img-btn .hint { position: absolute; right: 6px; bottom: 6px; font-size: .7em; padding: 2px 7px; border-radius: 4px; background: rgba(0,0,0,.66); color: #fff; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; font-size: .82em; }
+dt { color: var(--_muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
-.moaie-text { margin-top: .6rem; font-size: .8em; }
-.moaie-text p { margin: .2rem 0; }
+.tags { margin-top: .75rem; }
+.detail-moaie { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 260px); gap: 1.25rem; align-items: start; }
+.detail-moaie.novec { grid-template-columns: 1fr; }
+.moaie-text { font-size: .85em; }
+.moaie-text p { margin: .25rem 0 .5rem; }
 .moaie-text b { font-weight: 600; }
 a { color: inherit; text-underline-offset: 2px; }
+.videos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.video { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #111; border: 1px solid var(--_border); }
+.video-tile { all: unset; box-sizing: border-box; position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer; color: #fff; background: #1b1b1f center / cover no-repeat; }
+.video-tile:focus-visible { outline: 2px solid var(--_focus); outline-offset: -4px; }
+.video-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.video-tile .play { position: relative; width: 56px; height: 40px; border-radius: 10px; background: rgba(0,0,0,.72); display: grid; place-items: center; font-size: 18px; }
+.video-tile:hover .play { background: rgba(0,0,0,.88); }
+.video-tile .prov { position: absolute; left: 8px; bottom: 6px; font-size: .72em; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.66); }
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
 .msg { border: 1px solid var(--_border); background: var(--_surface); color: var(--_muted); border-radius: 8px; padding: .75rem 1rem; font-size: .85em; }
 .msg.error { border-color: color-mix(in srgb, #A32D2D 55%, transparent); }
+
+/* ── lightbox ── */
+.lightbox { position: fixed; inset: 0; width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: rgba(8, 8, 10, .94); color: #fff; z-index: 2147483000; overflow: hidden; }
+.lightbox::backdrop { background: rgba(0, 0, 0, .6); }
+.lb-bar { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; z-index: 2; }
+.lb-btn { min-width: 40px; height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: rgba(20,20,24,.75); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.lb-btn:hover:not(:disabled) { background: rgba(60,60,66,.9); }
+.lb-btn:disabled { opacity: .4; cursor: default; }
+.lb-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.lb-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; cursor: zoom-in; }
+.lb-stage.zoomed { cursor: grab; }
+.lb-stage.panning { cursor: grabbing; }
+.lb-img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; user-select: none; -webkit-user-drag: none; transition: transform .12s ease-out; }
+.lb-stage.panning .lb-img { transition: none; }
+.lb-caption { position: absolute; left: 12px; bottom: 10px; right: 12px; font-size: .85em; color: rgba(255,255,255,.9); text-shadow: 0 1px 2px #000; pointer-events: none; }
+
 .compact h2 { font-size: .95em; }
 .compact .count { font-size: .78em; color: var(--_muted); margin: .4rem 0 .6rem; }
 .compact .legend-row { font-size: .75em; margin: 3px 0; }
 .compact .open { width: 100%; padding: 6px 10px; }
-dialog { color: var(--_fg); background: var(--_bg); border: 1px solid var(--_border); border-radius: 10px; padding: 0; width: min(1040px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; }
-dialog::backdrop { background: rgba(0, 0, 0, .45); }
+dialog.full-dialog { color: var(--_fg); background: var(--_bg); border: 1px solid var(--_border); border-radius: 10px; padding: 0; width: min(1240px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; }
+dialog.full-dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .dialog-bar { position: sticky; top: 0; display: flex; justify-content: flex-end; padding: .5rem .75rem 0; background: var(--_bg); z-index: 1; }
 .dialog-body { padding: 0 1.25rem 1rem; }
-@container (max-width: 640px) {
+
+@container (max-width: 960px) {
   .compare { grid-template-columns: 1fr; }
-  .details { grid-template-columns: 1fr; }
-  .details img { max-width: 200px; }
-  .chips { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .detail-top { grid-template-columns: 1fr; }
+  .img-btn img { max-height: 360px; }
+}
+@container (max-width: 699px) {
+  .layout { grid-template-columns: 1fr; gap: 1rem; }
+  .side { position: static; max-height: none; }
+  .list-toggle { display: flex; }
+  .side.collapsed .list { display: none; }
+  .list { max-height: var(--soog-list-height, 260px); }
+  .detail-moaie { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 `;
 
@@ -258,8 +408,12 @@ export class SoogDashboard extends Base {
     this._registry = [];
     this._selected = new Set();
     this._focusKey = null;
+    this._activeKey = null;
+    this._query = '';
+    this._tab = 'compare';
     this._showTable = false;
     this._chartFailed = false;
+    this._listCollapsed = false;
     this._gen = 0;
     /** Optional preloaded payload (used by compact mode for its dialog instance). */
     this.preloadedData = null;
@@ -279,6 +433,11 @@ export class SoogDashboard extends Base {
     return Number.isFinite(n) && n >= 0 ? n : DEFAULT_N;
   }
   get heading() { return this.getAttribute('data-soog-title') || this.labels.title; }
+
+  /** Public read-only view of the state (handy for hosts and tests). */
+  get state() {
+    return { query: this._query, tab: this._tab, selectedKey: this._focusKey, compare: [...this._selected] };
+  }
 
   attributeChangedCallback(name, oldV, newV) {
     if (name === 'title' && newV != null) {
@@ -302,6 +461,7 @@ export class SoogDashboard extends Base {
   disconnectedCallback() {
     this._connected = false;
     this._destroyCharts();
+    this._closeLightbox(false);
     if (this._mo) { this._mo.disconnect(); this._mo = null; }
     if (this._mq && this._mqHandler) { this._mq.removeEventListener?.('change', this._mqHandler); this._mq = null; }
   }
@@ -315,6 +475,10 @@ export class SoogDashboard extends Base {
 
   // ── theme ────────────────────────────────────────────────────────────
   _win() { return this.ownerDocument.defaultView || globalThis.window; }
+  _reducedMotion() {
+    const mq = this._win().matchMedia?.('(prefers-reduced-motion: reduce)');
+    return !!(mq && mq.matches);
+  }
   _syncScheme() {
     const html = this.ownerDocument.documentElement;
     const theme = (html.getAttribute('data-theme') || '').toLowerCase();
@@ -343,7 +507,7 @@ export class SoogDashboard extends Base {
     const cs = this._win().getComputedStyle(this);
     const text = cs.color || '#2c2c2a';
     const m = text.match(/rgba?\(([^)]+)\)/);
-    const muted = m ? `rgba(${m[1].split(',').slice(0, 3).join(',')},0.65)` : '#888780';
+    const muted = m ? `rgba(${m[1].split(',').slice(0, 3).join(',')},0.7)` : '#6b6b66';
     return { text, muted, grid: 'rgba(128,128,128,.22)' };
   }
 
@@ -354,8 +518,15 @@ export class SoogDashboard extends Base {
     if (text != null) e.textContent = text;
     return e;
   }
+  _button(cls, text, role) {
+    const b = this._el('button', cls, text);
+    b.type = 'button';
+    if (role) b.dataset.role = role;
+    return b;
+  }
   _reset() {
     this._destroyCharts();
+    this._closeLightbox(false);
     const sr = this.shadowRoot;
     while (sr.firstChild) sr.removeChild(sr.firstChild);
     const style = this._el('style');
@@ -364,6 +535,7 @@ export class SoogDashboard extends Base {
     const root = this._el('div', `root ${this.mode}`);
     root.setAttribute('part', 'root');
     sr.appendChild(root);
+    this._root = root;
     return root;
   }
   _message(root, text, error) {
@@ -372,15 +544,14 @@ export class SoogDashboard extends Base {
     root.appendChild(m);
     return m;
   }
+  _active() { return this.shadowRoot ? this.shadowRoot.activeElement : null; }
 
   // ── data ─────────────────────────────────────────────────────────────
   async _load() {
     const gen = ++this._gen;
-    // A previous load's chart failure (Chart.js failed to load) must not
-    // stick around after a reload — e.g. an attribute change re-triggers
-    // _load() with a fresh `src`/`mode` that may render charts fine this
-    // time, or fail again and want to show the message again either way.
+    // A previous load's chart failure must not stick around after a reload.
     this._chartFailed = false;
+    this._parts = null;
     const L = this.labels;
     const root = this._reset();
     const src = this.getAttribute('src') ?? DEFAULT_SRC;
@@ -414,29 +585,299 @@ export class SoogDashboard extends Base {
     this._registry.forEach((r, i) => { r.color = PALETTE[i % PALETTE.length]; });
     const scored = this._registry.filter((r) => r.scored);
     this._selected = new Set(scored.slice(0, this.initial).map((r) => r.key));
-    this._focusKey = [...this._selected].pop() || null;
+    if (!this._registry.some((r) => r.key === this._focusKey)) this._focusKey = null;
     if (this.mode === 'compact') this._renderCompact(root); else this._renderFull(root);
     await this._renderCharts();
   }
 
+  _record(key) { return this._registry.find((x) => x.key === key) || null; }
   _selectedRecords() { return this._registry.filter((r) => this._selected.has(r.key)); }
-  _colorOf(key) {
-    if (!this._selected.has(key)) return null;
-    const r = this._registry.find((x) => x.key === key);
-    return r ? r.color : null;
-  }
+  _visibleRecords() { return this._registry.filter((r) => matchesQuery(r, this._query)); }
 
   // ── full mode ────────────────────────────────────────────────────────
   _renderFull(root) {
     const L = this.labels;
     const reg = this._registry;
-    const scored = reg.filter((r) => r.scored);
-    const unscored = reg.filter((r) => !r.scored);
-
     root.appendChild(this._el('h2', null, this.heading));
     root.appendChild(this._el('div', 'sub', L.subtitle));
-
     if (!reg.length) { this._message(root, L.empty, false); return; }
+
+    const layout = this._el('div', 'layout');
+    const side = this._renderSidebar();
+    const main = this._el('div', 'main');
+
+    // tabs
+    const tablist = this._el('div', 'tablist');
+    tablist.setAttribute('role', 'tablist');
+    tablist.setAttribute('aria-label', this.heading);
+    const mkTab = (name, text) => {
+      const t = this._button('tab', text, `tab-${name}`);
+      t.id = `soog-tab-${name}`;
+      t.setAttribute('role', 'tab');
+      t.setAttribute('aria-controls', `soog-panel-${name}`);
+      t.addEventListener('click', () => this._setTab(name));
+      return t;
+    };
+    const tabCompare = mkTab('compare', L.compareTab);
+    const tabDetail = mkTab('detail', L.detailTab);
+    tablist.append(tabCompare, tabDetail);
+    tablist.addEventListener('keydown', (e) => {
+      const order = ['compare', 'detail'];
+      let i = order.indexOf(this._tab);
+      if (e.key === 'ArrowRight') i = (i + 1) % order.length;
+      else if (e.key === 'ArrowLeft') i = (i + order.length - 1) % order.length;
+      else if (e.key === 'Home') i = 0;
+      else if (e.key === 'End') i = order.length - 1;
+      else return;
+      e.preventDefault();
+      this._setTab(order[i], true);
+    });
+    const mkPanel = (name) => {
+      const p = this._el('section', 'panel');
+      p.id = `soog-panel-${name}`;
+      p.dataset.role = `panel-${name}`;
+      p.setAttribute('role', 'tabpanel');
+      p.setAttribute('aria-labelledby', `soog-tab-${name}`);
+      p.tabIndex = 0;
+      return p;
+    };
+    const panelCompare = mkPanel('compare');
+    const panelDetail = mkPanel('detail');
+    main.append(tablist, panelCompare, panelDetail);
+    layout.append(side, main);
+    root.appendChild(layout);
+
+    this._parts = { side, tabCompare, tabDetail, panelCompare, panelDetail };
+    this._renderComparePanel(panelCompare);
+    const detBody = this._el('div', 'detail');
+    detBody.dataset.role = 'details';
+    panelDetail.appendChild(detBody);
+    this._parts.detBody = detBody;
+
+    this._applyFilter();
+    this._syncList();
+    this._renderLegend();
+    this._renderTable();
+    this._renderDetails();
+    this._setTab(this._tab, false, true);
+  }
+
+  _renderSidebar() {
+    const L = this.labels;
+    const side = this._el('aside', this._listCollapsed ? 'side collapsed' : 'side');
+    side.setAttribute('aria-label', L.statInstruments);
+    const sw = this._el('div', 'search-wrap');
+    const input = this._el('input', 'search');
+    input.type = 'search';
+    input.placeholder = L.search;
+    input.setAttribute('aria-label', L.search);
+    input.setAttribute('aria-controls', 'soog-list');
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('spellcheck', 'false');
+    input.dataset.role = 'search';
+    input.value = this._query;
+    input.addEventListener('input', () => this.setQuery(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); this._focusRow(this._activeKey || (this._visibleRecords()[0] || {}).key); }
+      // Esc clears the query without also closing a host overlay listening on window
+      else if ((e.key === 'Escape' || e.key === 'Esc') && input.value) { e.preventDefault(); e.stopPropagation(); this.setQuery(''); }
+    });
+    const toggle = this._button('list-toggle', null, 'list-toggle');
+    toggle.setAttribute('aria-controls', 'soog-list');
+    toggle.setAttribute('aria-expanded', String(!this._listCollapsed));
+    const tl = this._el('span');
+    const chev = this._el('span', 'chev', '▾');
+    chev.setAttribute('aria-hidden', 'true');
+    toggle.append(tl, chev);
+    toggle.addEventListener('click', () => {
+      this._listCollapsed = !this._listCollapsed;
+      side.classList.toggle('collapsed', this._listCollapsed);
+      toggle.setAttribute('aria-expanded', String(!this._listCollapsed));
+    });
+    const live = this._el('div', 'sr-only');
+    live.setAttribute('role', 'status');
+    live.dataset.role = 'result-count';
+    sw.append(input, toggle, live);
+
+    const hint = this._el('p', 'sr-only', L.listHint);
+    hint.id = 'soog-list-hint';
+    const list = this._el('ul', 'list');
+    list.id = 'soog-list';
+    list.dataset.role = 'list';
+    list.setAttribute('aria-label', L.statInstruments);
+    list.setAttribute('aria-describedby', 'soog-list-hint');
+    this._rowEls = new Map();
+    for (const r of this._registry) list.appendChild(this._renderRow(r));
+    const none = this._el('li', 'note', L.noResults);
+    none.dataset.role = 'no-results';
+    none.hidden = true;
+    list.appendChild(none);
+    list.addEventListener('keydown', (e) => this._onListKey(e));
+    side.append(sw, hint, list);
+    this._side = { input, toggle, toggleLabel: tl, live, list, none };
+    return side;
+  }
+
+  _renderRow(r) {
+    const L = this.labels;
+    const li = this._el('li', 'item');
+    li.dataset.key = r.key;
+    const row = this._el('div', 'row');
+    row.setAttribute('role', 'button');
+    row.tabIndex = -1;
+    row.dataset.role = 'row';
+    const thumb = this._el('span', 'thumb');
+    thumb.setAttribute('aria-hidden', 'true');
+    const glyph = () => { thumb.replaceChildren(); thumb.textContent = '◇'; };
+    if (r.img) {
+      const img = this._el('img');
+      img.alt = '';
+      img.setAttribute('loading', 'lazy');
+      img.setAttribute('decoding', 'async');
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.addEventListener('error', glyph, { once: true });
+      img.src = r.img;
+      thumb.appendChild(img);
+    } else glyph();
+    const txt = this._el('span', 'txt');
+    const name = this._el('span', r.fictional ? 'name fict' : 'name', r.title);
+    const metaBits = [r.year, r.family].filter(Boolean);
+    if (!r.scored) metaBits.push(L.notScored);
+    const meta = this._el('span', 'meta', metaBits.join(' · '));
+    txt.append(name, meta);
+    row.append(thumb, txt);
+    row.addEventListener('click', () => this.select(r.key));
+
+    const cmp = this._el('label', 'cmp');
+    const cb = this._el('input');
+    cb.type = 'checkbox';
+    cb.tabIndex = -1;
+    cb.dataset.role = 'compare';
+    cb.setAttribute('aria-label', `${L.addToCompare}: ${r.title}`);
+    cb.title = r.scored ? L.addToCompare : `${L.notScored}`;
+    cb.disabled = !r.scored;
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', () => this.toggleCompare(r.key, cb.checked));
+    const dot = this._el('span', 'swatch-dot');
+    dot.setAttribute('aria-hidden', 'true');
+    cmp.append(cb, dot);
+    li.append(row, cmp);
+    this._rowEls.set(r.key, { li, row, cb, dot });
+    return li;
+  }
+
+  _onListKey(e) {
+    if (e.target.dataset.role !== 'row') return;
+    const vis = this._visibleRecords().map((r) => r.key);
+    const key = e.target.closest('.item').dataset.key;
+    let i = vis.indexOf(key);
+    switch (e.key) {
+      case 'ArrowDown': i = Math.min(vis.length - 1, i + 1); break;
+      case 'ArrowUp':
+        if (i <= 0) { e.preventDefault(); this._side.input.focus(); return; }
+        i -= 1; break;
+      case 'Home': i = 0; break;
+      case 'End': i = vis.length - 1; break;
+      case 'Enter': e.preventDefault(); this.select(key); return;
+      case ' ': case 'Spacebar': {
+        e.preventDefault();
+        if (this._record(key) && this._record(key).scored) this.toggleCompare(key);
+        return;
+      }
+      default: return;
+    }
+    e.preventDefault();
+    if (vis[i]) this._focusRow(vis[i]);
+  }
+
+  _focusRow(key) {
+    if (!key || !this._rowEls || !this._rowEls.has(key)) return;
+    this._activeKey = key;
+    this._syncRoving();
+    this._rowEls.get(key).row.focus();
+  }
+
+  _syncRoving() {
+    if (!this._rowEls) return;
+    const vis = new Set(this._visibleRecords().map((r) => r.key));
+    if (!vis.has(this._activeKey)) this._activeKey = vis.has(this._focusKey) ? this._focusKey : ([...vis][0] || null);
+    for (const [key, { row }] of this._rowEls) row.tabIndex = key === this._activeKey ? 0 : -1;
+  }
+
+  /** Live filter (title, family, person, authors, year, tags; accent-insensitive). */
+  setQuery(q) {
+    this._query = str(q);
+    if (this._side && this._side.input.value !== this._query) this._side.input.value = this._query;
+    this._applyFilter();
+  }
+
+  _applyFilter() {
+    if (!this._rowEls) return;
+    const L = this.labels;
+    let n = 0;
+    for (const r of this._registry) {
+      const ok = matchesQuery(r, this._query);
+      this._rowEls.get(r.key).li.hidden = !ok;
+      if (ok) n++;
+    }
+    this._side.none.hidden = n > 0;
+    this._side.live.textContent = n ? `${n} ${L.instruments}` : L.noResults;
+    this._side.toggleLabel.textContent = `${L.statInstruments} (${n})`;
+    this._syncRoving();
+  }
+
+  _syncList() {
+    if (!this._rowEls) return;
+    for (const [key, { row, cb, dot }] of this._rowEls) {
+      const on = this._selected.has(key);
+      cb.checked = on;
+      const r = this._record(key);
+      dot.style.background = on && r ? r.color : 'transparent';
+      if (key === this._focusKey) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current');
+    }
+  }
+
+  _setTab(name, focus, initial) {
+    const p = this._parts;
+    if (!p || !p.tabCompare) return;
+    this._tab = name === 'detail' ? 'detail' : 'compare';
+    const isC = this._tab === 'compare';
+    for (const [tab, panel, on] of [[p.tabCompare, p.panelCompare, isC], [p.tabDetail, p.panelDetail, !isC]]) {
+      tab.setAttribute('aria-selected', String(on));
+      tab.tabIndex = on ? 0 : -1;
+      panel.hidden = !on;
+    }
+    if (focus) (isC ? p.tabCompare : p.tabDetail).focus();
+    // charts drawn in a hidden panel have no size: redraw on show
+    if (!initial) this._renderCharts();
+  }
+
+  /** Select an instrument (sidebar row) and open the Detail tab. */
+  select(key, { openDetail = true } = {}) {
+    if (!this._record(key)) return;
+    this._focusKey = key;
+    if (matchesQuery(this._record(key), this._query)) this._activeKey = key;
+    this._syncRoving();
+    this._syncList();
+    this._renderDetails();
+    if (openDetail && this._parts && this._parts.tabDetail) this._setTab('detail');
+    else this._renderCharts();
+  }
+
+  /** Add/remove an instrument to/from the comparison (scored only). */
+  toggleCompare(key, force) {
+    const r = this._record(key);
+    if (!r || !r.scored) return;
+    const on = force == null ? !this._selected.has(key) : !!force;
+    if (on) this._selected.add(key); else this._selected.delete(key);
+    this._update();
+  }
+
+  _renderComparePanel(panel) {
+    const L = this.labels;
+    const reg = this._registry;
+    const scored = reg.filter((r) => r.scored);
+    const unscored = reg.filter((r) => !r.scored);
 
     const cards = this._el('div', 'cards');
     for (const [val, lbl, role] of [[reg.length, L.statInstruments, 'stat-instruments'], [scored.length, L.statScored, 'stat-scored'], [reg.filter((r) => r.fictional).length, L.statFictional, 'stat-fictional']]) {
@@ -446,82 +887,32 @@ export class SoogDashboard extends Base {
       c.append(v, this._el('div', 'card-lbl', lbl));
       cards.appendChild(c);
     }
-    root.appendChild(cards);
+    panel.appendChild(cards);
 
-    // selection
-    const sel = this._el('section', 'section');
-    sel.appendChild(this._el('h3', 'label', L.selectHeading));
-    const controls = this._el('div', 'controls');
-    const all = this._el('button', 'btn', L.selectAll);
-    all.type = 'button'; all.dataset.role = 'select-all';
-    const none = this._el('button', 'btn', L.clear);
-    none.type = 'button'; none.dataset.role = 'clear';
-    controls.append(all, none);
-    sel.appendChild(controls);
-    const chips = this._el('div', 'chips');
-    chips.setAttribute('role', 'group');
-    chips.setAttribute('aria-label', L.selectHeading);
-    this._chipEls = new Map();
-    for (const r of scored) {
-      const b = this._el('button', r.fictional ? 'chip fictional' : 'chip');
-      b.type = 'button';
-      b.dataset.key = r.key;
-      const dot = this._el('span', 'dot');
-      dot.setAttribute('aria-hidden', 'true');
-      const name = this._el('span', 'chip-name', r.title);
-      b.append(dot, name);
-      if (r.year) b.appendChild(this._el('span', 'chip-meta', r.year));
-      if (r.fictional) b.setAttribute('aria-description', L.fictional);
-      b.addEventListener('click', () => this._toggle(r.key));
-      this._chipEls.set(r.key, b);
-      chips.appendChild(b);
-    }
-    sel.appendChild(chips);
-    all.addEventListener('click', () => { scored.forEach((r) => this._selected.add(r.key)); this._focusKey = [...this._selected].pop() || null; this._update(); });
-    none.addEventListener('click', () => { this._selected.clear(); this._focusKey = null; this._update(); });
-    root.appendChild(sel);
-
-    if (unscored.length) {
-      const us = this._el('section', 'section');
-      us.dataset.role = 'unscored';
-      us.appendChild(this._el('h3', 'label', `${L.unscoredHeading} (${unscored.length})`));
-      const ul = this._el('ul', 'unscored');
-      for (const r of unscored) ul.appendChild(this._el('li', null, r.title));
-      us.appendChild(ul);
-      root.appendChild(us);
-    }
-
-    // compare
     const cmp = this._el('section', 'section');
     const head = this._el('div', 'controls');
-    head.style.justifyContent = 'space-between';
-    head.style.alignItems = 'baseline';
-    const lab = this._el('h3', 'label', L.compareHeading);
+    const lab = this._el('h3', 'label grow', L.compareHeading);
     lab.style.margin = '0';
-    const tbtn = this._el('button', 'btn', L.table);
-    tbtn.type = 'button';
-    tbtn.dataset.role = 'table-toggle';
+    const all = this._button('btn', L.selectAll, 'select-all');
+    const none = this._button('btn', L.clear, 'clear');
+    const tbtn = this._button('btn', L.table, 'table-toggle');
     tbtn.setAttribute('aria-pressed', String(this._showTable));
-    head.append(lab, tbtn);
+    head.append(lab, all, none, tbtn);
     cmp.appendChild(head);
+    all.addEventListener('click', () => { scored.forEach((r) => this._selected.add(r.key)); this._update(); });
+    none.addEventListener('click', () => { this._selected.clear(); this._update(); });
 
     const row = this._el('div', 'compare');
     const left = this._el('div');
     left.appendChild(this._el('div', 'chart-title', L.moaieHeading));
     const w1 = this._el('div', 'radar');
-    const c1 = this._el('canvas');
-    c1.setAttribute('role', 'img');
-    c1.setAttribute('aria-label', L.moaieAria);
-    c1.dataset.role = 'moaie-radar';
+    const c1 = this._canvas(L.moaieAria, 'moaie-radar');
     w1.appendChild(c1);
     left.appendChild(w1);
     const right = this._el('div');
     right.appendChild(this._el('div', 'chart-title', L.profileHeading));
     const w2 = this._el('div', 'radar profile');
-    const c2 = this._el('canvas');
-    c2.setAttribute('role', 'img');
-    c2.setAttribute('aria-label', L.profileAria);
-    c2.dataset.role = 'profile-radar';
+    const c2 = this._canvas(L.profileAria, 'profile-radar');
     w2.appendChild(c2);
     const pnote = this._el('p', 'note', L.noProfile);
     pnote.hidden = true;
@@ -539,53 +930,35 @@ export class SoogDashboard extends Base {
       tableWrap.hidden = !this._showTable;
     });
     cmp.appendChild(tableWrap);
-
     const legend = this._el('div', 'legend');
     cmp.appendChild(legend);
-    root.appendChild(cmp);
+    panel.appendChild(cmp);
 
-    const det = this._el('section', 'section');
-    det.appendChild(this._el('h3', 'label', L.detailsHeading));
-    const detBody = this._el('div');
-    detBody.dataset.role = 'details';
-    detBody.setAttribute('aria-live', 'polite');
-    det.appendChild(detBody);
-    root.appendChild(det);
-
-    this._parts = { c1, c2, w2, pnote, tableWrap, tbtn, legend, detBody };
-    this._syncChips();
-    this._renderLegend();
-    this._renderTable();
-    this._renderDetails();
+    if (unscored.length) {
+      const us = this._el('section', 'section');
+      us.dataset.role = 'unscored';
+      us.appendChild(this._el('h3', 'label', `${L.unscoredHeading} (${unscored.length})`));
+      const ul = this._el('ul', 'unscored');
+      for (const r of unscored) ul.appendChild(this._el('li', null, r.title));
+      us.appendChild(ul);
+      panel.appendChild(us);
+    }
+    Object.assign(this._parts, { c1, c2, w2, pnote, tableWrap, tbtn, legend });
   }
 
-  _toggle(key) {
-    if (this._selected.has(key)) {
-      this._selected.delete(key);
-      if (this._focusKey === key) this._focusKey = [...this._selected].pop() || null;
-    } else {
-      this._selected.add(key);
-      this._focusKey = key;
-    }
-    this._update();
+  _canvas(aria, role) {
+    const c = this._el('canvas');
+    c.setAttribute('role', 'img');
+    c.setAttribute('aria-label', aria);
+    c.dataset.role = role;
+    return c;
   }
 
   _update() {
-    this._syncChips();
+    this._syncList();
     this._renderLegend();
     this._renderTable();
-    this._renderDetails();
     this._renderCharts();
-  }
-
-  _syncChips() {
-    if (!this._chipEls) return;
-    for (const [key, b] of this._chipEls) {
-      const on = this._selected.has(key);
-      b.setAttribute('aria-pressed', String(on));
-      const c = this._colorOf(key);
-      b.querySelector('.dot').style.background = on && c ? c : 'transparent';
-    }
   }
 
   _renderLegend() {
@@ -595,10 +968,10 @@ export class SoogDashboard extends Base {
     legend.replaceChildren();
     const sel = this._selectedRecords();
     if (!sel.length) { legend.appendChild(this._el('div', 'note', L.noSelection)); return; }
-    sel.forEach((r, i) => legend.appendChild(this._legendRow(r, i, this.mode !== 'compact')));
+    sel.forEach((r) => legend.appendChild(this._legendRow(r, this.mode !== 'compact')));
   }
 
-  _legendRow(r, i, verbose) {
+  _legendRow(r, verbose) {
     const L = this.labels;
     const rowEl = this._el('div', 'legend-row');
     const sw = this._el('span', 'swatch');
@@ -664,39 +1037,47 @@ export class SoogDashboard extends Base {
     wrap.appendChild(t);
   }
 
+  // ── detail ───────────────────────────────────────────────────────────
   _renderDetails() {
     const body = this._parts && this._parts.detBody;
     if (!body) return;
     const L = this.labels;
     body.replaceChildren();
-    const r = this._registry.find((x) => x.key === this._focusKey);
-    if (!r) { body.appendChild(this._el('div', 'note', L.noSelection)); return; }
-    const card = this._el('div', r.img ? 'details' : 'details noimg');
-    if (r.img) {
-      const img = this._el('img');
-      img.src = r.img;
-      img.alt = r.title;
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      img.referrerPolicy = 'no-referrer';
-      img.addEventListener('error', () => { img.remove(); card.className = 'details noimg'; });
-      card.appendChild(img);
-    }
-    const info = this._el('div');
+    this._parts.c3 = null;
+    const r = this._record(this._focusKey);
+    if (!r) { body.appendChild(this._el('p', 'note', L.selectInstrument)); return; }
+
     const h = this._el('h3', null, r.title);
-    const c = this._colorOf(r.key);
-    if (c) { h.style.borderLeft = `3px solid ${c}`; h.style.paddingLeft = '8px'; }
     if (r.fictional) h.appendChild(this._el('span', 'badge', L.fictional));
-    info.appendChild(h);
+    body.appendChild(h);
+
+    const top = this._el('div', r.img ? 'detail-top' : 'detail-top noimg');
+    if (r.img) {
+      const btn = this._button('img-btn', null, 'open-image');
+      btn.setAttribute('aria-label', `${L.openImage}: ${r.title}`);
+      btn.setAttribute('aria-haspopup', 'dialog');
+      const img = this._el('img');
+      img.alt = r.title;
+      img.setAttribute('decoding', 'async');
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.addEventListener('error', () => { btn.remove(); top.className = 'detail-top noimg'; }, { once: true });
+      img.src = r.img;
+      const hint = this._el('span', 'hint', '⤢');
+      hint.setAttribute('aria-hidden', 'true');
+      btn.append(img, hint);
+      btn.addEventListener('click', () => this.openLightbox(btn));
+      top.appendChild(btn);
+    }
+    const info = this._el('div', 'info');
     const dl = this._el('dl');
     const add = (k, v) => { if (!v) return; dl.append(this._el('dt', null, k), this._el('dd', null, v)); };
     add(L.year, r.year);
-    add(L.person, r.person);
-    add(L.authors, r.authors.join(', '));
     add(L.family, r.family);
     add(L.layer, r.layer);
     add(L.sachsHornbostel, r.sh);
-    add('MOAIE', r.vector ? `[${r.vector.map((x) => x.toFixed(2)).join(', ')}]` : '');
+    add(L.person, r.person);
+    add(L.authors, r.authors.join(', '));
+    add('MOAIE', r.vector ? `[${r.vector.map((x) => x.toFixed(2)).join(', ')}]` : L.notScored);
     add(L.recursive, r.recursive ? L.yes : L.no);
     if (r.url) {
       const a = this._el('a', null, r.url.replace(/^https:\/\//i, '').replace(/\/$/, ''));
@@ -708,8 +1089,21 @@ export class SoogDashboard extends Base {
       dl.append(this._el('dt', null, L.link), dd);
     }
     info.appendChild(dl);
+    if (r.tags.length) {
+      const tg = this._el('div', 'tags');
+      tg.dataset.role = 'tags';
+      tg.setAttribute('aria-label', L.tags);
+      tg.setAttribute('role', 'group');
+      for (const t of r.tags) tg.appendChild(this._el('span', 'tag chip', t));
+      info.appendChild(tg);
+    }
+    top.appendChild(info);
+    body.appendChild(top);
+
     const texts = AXIS.filter((k) => typeof r.text[k] === 'string' && r.text[k].trim());
-    if (texts.length) {
+    if (texts.length || r.vector) {
+      body.appendChild(this._el('h4', null, 'MOAIE'));
+      const mo = this._el('div', r.vector ? 'detail-moaie' : 'detail-moaie novec');
       const tx = this._el('div', 'moaie-text');
       for (const k of texts) {
         const p = this._el('p');
@@ -717,16 +1111,226 @@ export class SoogDashboard extends Base {
         p.appendChild(this.ownerDocument.createTextNode(r.text[k]));
         tx.appendChild(p);
       }
-      info.appendChild(tx);
+      mo.appendChild(tx);
+      if (r.vector) {
+        const w = this._el('div', 'radar detail');
+        const c3 = this._canvas(L.detailAria, 'detail-radar');
+        w.appendChild(c3);
+        mo.appendChild(w);
+        this._parts.c3 = c3;
+        this._parts.w3 = w;
+      }
+      body.appendChild(mo);
     }
-    if (r.connect.length) {
-      const cn = this._el('div', 'moaie-text');
-      cn.appendChild(this._el('div', 'chart-title', L.connect));
-      for (const n of r.connect) cn.appendChild(this._el('span', 'tag', n));
-      info.appendChild(cn);
+
+    for (const [label, list, role] of [[L.connect, r.connect, 'connect'], [L.hyper, r.hyper, 'hyper']]) {
+      if (!list.length) continue;
+      body.appendChild(this._el('h4', null, label));
+      const box = this._el('div');
+      box.dataset.role = role;
+      for (const n of list) box.appendChild(this._el('span', 'tag', n));
+      body.appendChild(box);
     }
-    card.appendChild(info);
-    body.appendChild(card);
+
+    if (r.videos.length) {
+      body.appendChild(this._el('h4', null, L.videos));
+      const grid = this._el('div', 'videos');
+      grid.dataset.role = 'videos';
+      r.videos.forEach((v, i) => grid.appendChild(this._videoTile(r, v, i)));
+      body.appendChild(grid);
+    }
+  }
+
+  _videoTile(r, v, i) {
+    const L = this.labels;
+    const prov = v.provider === 'youtube' ? 'YouTube' : 'Vimeo';
+    const box = this._el('div', 'video');
+    const tile = this._button('video-tile', null, 'video-tile');
+    tile.dataset.provider = v.provider;
+    tile.setAttribute('aria-label', `${L.playVideo}: ${r.title}${r.videos.length > 1 ? ` (${i + 1})` : ''} — ${prov}`);
+    const thumb = videoThumbUrl(v);
+    if (thumb) {
+      const img = this._el('img');
+      img.alt = '';
+      img.setAttribute('loading', 'lazy');
+      img.setAttribute('decoding', 'async');
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.addEventListener('error', () => img.remove(), { once: true });
+      img.src = thumb;
+      tile.appendChild(img);
+    }
+    const play = this._el('span', 'play', '▶');
+    play.setAttribute('aria-hidden', 'true');
+    const label = this._el('span', 'prov', prov);
+    label.setAttribute('aria-hidden', 'true');
+    tile.append(play, label);
+    tile.addEventListener('click', () => {
+      const f = this._el('iframe');
+      f.src = videoEmbedUrl(v);
+      f.title = `${r.title} — ${prov}`;
+      f.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
+      f.setAttribute('allowfullscreen', '');
+      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+      f.dataset.role = 'video-frame';
+      tile.replaceWith(f);
+      try { f.focus(); } catch { /* ignore */ }
+    });
+    box.appendChild(tile);
+    return box;
+  }
+
+  // ── lightbox ─────────────────────────────────────────────────────────
+  /** Full-screen image viewer with zoom/pan; focus is trapped and restored. */
+  openLightbox(opener) {
+    const r = this._record(this._focusKey);
+    if (!r || !r.img || this._lb) return;
+    const L = this.labels;
+    const dlg = this._el('dialog', 'lightbox');
+    dlg.dataset.role = 'lightbox';
+    dlg.setAttribute('aria-modal', 'true');
+    dlg.setAttribute('aria-label', r.title);
+    const bar = this._el('div', 'lb-bar');
+    const zOut = this._button('lb-btn', '−', 'zoom-out');
+    zOut.setAttribute('aria-label', L.zoomOut);
+    zOut.title = L.zoomOut;
+    const zIn = this._button('lb-btn', '+', 'zoom-in');
+    zIn.setAttribute('aria-label', L.zoomIn);
+    zIn.title = L.zoomIn;
+    const close = this._button('lb-btn', '×', 'lightbox-close');
+    close.setAttribute('aria-label', L.close);
+    close.title = L.close;
+    bar.append(zOut, zIn, close);
+    const stage = this._el('div', 'lb-stage');
+    const img = this._el('img', 'lb-img');
+    img.alt = r.title;
+    img.draggable = false;
+    img.setAttribute('referrerpolicy', 'no-referrer');
+    img.src = r.img;
+    stage.appendChild(img);
+    const cap = this._el('div', 'lb-caption', r.title);
+    cap.setAttribute('aria-hidden', 'true');
+    dlg.append(stage, bar, cap);
+    this._root.appendChild(dlg);
+
+    const z = { s: 1, x: 0, y: 0 };
+    const lb = { dlg, img, stage, zIn, zOut, close, z, opener: opener || this._active(), pointers: new Map() };
+    this._lb = lb;
+
+    const apply = () => {
+      const w = stage.clientWidth || 0;
+      const h = stage.clientHeight || 0;
+      const iw = img.offsetWidth || w;
+      const ih = img.offsetHeight || h;
+      const mx = Math.max(0, (iw * z.s - w) / 2);
+      const my = Math.max(0, (ih * z.s - h) / 2);
+      if (z.s <= ZOOM_MIN) { z.x = 0; z.y = 0; } else { z.x = clamp(z.x, -mx, mx); z.y = clamp(z.y, -my, my); }
+      img.style.transform = `translate(${z.x}px, ${z.y}px) scale(${z.s})`;
+      dlg.dataset.scale = String(Math.round(z.s * 100) / 100);
+      stage.classList.toggle('zoomed', z.s > ZOOM_MIN);
+      zOut.disabled = z.s <= ZOOM_MIN;
+      zIn.disabled = z.s >= ZOOM_MAX;
+    };
+    // zoom so that the stage point (px, py) — relative to the stage centre — stays put
+    const zoomAt = (ns, px = 0, py = 0) => {
+      ns = clamp(ns, ZOOM_MIN, ZOOM_MAX);
+      const k = ns / z.s;
+      z.x = px - (px - z.x) * k;
+      z.y = py - (py - z.y) * k;
+      z.s = ns;
+      apply();
+    };
+    const rel = (cx, cy) => {
+      const b = stage.getBoundingClientRect();
+      return [cx - (b.left + b.width / 2), cy - (b.top + b.height / 2)];
+    };
+    lb.zoomAt = zoomAt;
+
+    zIn.addEventListener('click', () => zoomAt(z.s * 1.5));
+    zOut.addEventListener('click', () => zoomAt(z.s / 1.5));
+    close.addEventListener('click', () => this._closeLightbox(true));
+    stage.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const [px, py] = rel(e.clientX, e.clientY);
+      zoomAt(z.s * Math.exp(-clamp(e.deltaY, -100, 100) * 0.0035), px, py);
+    }, { passive: false });
+    stage.addEventListener('dblclick', (e) => {
+      const [px, py] = rel(e.clientX, e.clientY);
+      if (z.s > ZOOM_MIN) zoomAt(ZOOM_MIN); else zoomAt(2.5, px, py);
+    });
+    // click on the dark area (not the image) at 1× closes
+    stage.addEventListener('click', (e) => { if (e.target === stage && z.s <= ZOOM_MIN && !lb.moved) this._closeLightbox(true); });
+    // pointer: one finger/mouse pans when zoomed, two fingers pinch
+    const P = lb.pointers;
+    let pinch = null;
+    let last = null;
+    stage.addEventListener('pointerdown', (e) => {
+      P.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { stage.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      lb.moved = false;
+      if (P.size === 2) {
+        const [a, b] = [...P.values()];
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: z.s };
+      } else last = { x: e.clientX, y: e.clientY };
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (!P.has(e.pointerId)) return;
+      P.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (P.size >= 2 && pinch) {
+        const [a, b] = [...P.values()];
+        const [px, py] = rel((a.x + b.x) / 2, (a.y + b.y) / 2);
+        zoomAt(pinch.s * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.d), px, py);
+        lb.moved = true;
+      } else if (last && z.s > ZOOM_MIN) {
+        z.x += e.clientX - last.x;
+        z.y += e.clientY - last.y;
+        last = { x: e.clientX, y: e.clientY };
+        stage.classList.add('panning');
+        lb.moved = true;
+        apply();
+      }
+    });
+    const up = (e) => {
+      P.delete(e.pointerId);
+      if (P.size < 2) pinch = null;
+      if (P.size === 1) { const [p] = [...P.values()]; last = { x: p.x, y: p.y }; } else last = null;
+      if (!P.size) stage.classList.remove('panning');
+    };
+    stage.addEventListener('pointerup', up);
+    stage.addEventListener('pointercancel', up);
+
+    dlg.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        // keep host overlays (e.g. a full-screen pod closing on Esc) open
+        e.preventDefault();
+        e.stopPropagation();
+        this._closeLightbox(true);
+      } else if (e.key === 'Tab') {
+        const f = [zOut, zIn, close].filter((b) => !b.disabled);
+        const i = f.indexOf(this._active());
+        e.preventDefault();
+        const n = e.shiftKey ? (i <= 0 ? f.length - 1 : i - 1) : (i === -1 || i === f.length - 1 ? 0 : i + 1);
+        f[n].focus();
+      } else if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomAt(z.s * 1.5); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomAt(z.s / 1.5); }
+      else if (e.key === '0') { e.preventDefault(); zoomAt(ZOOM_MIN); }
+    });
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); this._closeLightbox(true); });
+
+    if (typeof dlg.showModal === 'function') {
+      try { dlg.showModal(); } catch { dlg.setAttribute('open', ''); }
+    } else dlg.setAttribute('open', '');
+    img.addEventListener('load', apply);
+    apply();
+    close.focus();
+  }
+
+  _closeLightbox(restore) {
+    const lb = this._lb;
+    if (!lb) return;
+    this._lb = null;
+    try { if (typeof lb.dlg.close === 'function' && lb.dlg.open) lb.dlg.close(); } catch { /* ignore */ }
+    lb.dlg.remove();
+    if (restore && lb.opener && lb.opener.isConnected && typeof lb.opener.focus === 'function') lb.opener.focus();
   }
 
   // ── compact mode ─────────────────────────────────────────────────────
@@ -735,36 +1339,27 @@ export class SoogDashboard extends Base {
     const reg = this._registry;
     const scored = reg.filter((r) => r.scored);
     root.appendChild(this._el('h2', null, this.heading));
-    // With no scored instruments there is nothing to plot — a canvas with
-    // no datasets just renders a blank radar. Show the empty-state message
-    // instead, the same as full mode does when there is nothing to show.
+    // With no scored instruments there is nothing to plot: show the message.
     if (!scored.length) { this._parts = null; this._message(root, L.empty, false); return; }
     const w = this._el('div', 'radar small');
-    const c1 = this._el('canvas');
-    c1.setAttribute('role', 'img');
-    c1.setAttribute('aria-label', L.moaieAria);
-    c1.dataset.role = 'moaie-radar';
+    const c1 = this._canvas(L.moaieAria, 'moaie-radar');
     w.appendChild(c1);
     root.appendChild(w);
     const count = this._el('div', 'count', `${reg.length} ${L.instruments} · ${scored.length} ${L.scored}`);
     count.dataset.role = 'count';
     root.appendChild(count);
     const legend = this._el('div', 'legend');
-    this._selectedRecords().forEach((r, i) => legend.appendChild(this._legendRow(r, i, false)));
+    this._selectedRecords().forEach((r) => legend.appendChild(this._legendRow(r, false)));
     root.appendChild(legend);
 
-    const btn = this._el('button', 'btn open', L.openDashboard);
-    btn.type = 'button';
-    btn.dataset.role = 'open';
+    const btn = this._button('btn open', L.openDashboard, 'open');
     btn.setAttribute('aria-haspopup', 'dialog');
     root.appendChild(btn);
 
-    const dlg = this._el('dialog');
+    const dlg = this._el('dialog', 'full-dialog');
     dlg.setAttribute('aria-label', this.heading);
     const bar = this._el('div', 'dialog-bar');
-    const close = this._el('button', 'btn', L.close);
-    close.type = 'button';
-    close.dataset.role = 'close';
+    const close = this._button('btn', L.close, 'close');
     bar.appendChild(close);
     const body = this._el('div', 'dialog-body');
     dlg.append(bar, body);
@@ -804,7 +1399,7 @@ export class SoogDashboard extends Base {
     return {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 250 },
+      animation: this._reducedMotion() ? false : { duration: 250 },
       plugins: {
         legend: legend ? { display: true, position: 'bottom', labels: { font: { size: 11 }, color: t.text, boxWidth: 12, padding: 14 } } : { display: false },
       },
@@ -822,7 +1417,7 @@ export class SoogDashboard extends Base {
 
   _ds(r) {
     const c = r.color;
-    return { label: r.title, fill: true, backgroundColor: rgba(c, 0.10), borderColor: c, borderWidth: 1.5, pointBackgroundColor: c, pointRadius: 2.5 };
+    return { label: r.title, fill: true, backgroundColor: rgba(c, 0.12), borderColor: c, borderWidth: 1.5, pointBackgroundColor: c, pointRadius: 2.5 };
   }
 
   async _renderCharts() {
@@ -832,6 +1427,8 @@ export class SoogDashboard extends Base {
     try {
       Chart = await loadChart(this._win());
     } catch {
+      if (parts !== this._parts) return;
+      if (parts.w3) parts.w3.hidden = true;
       if (!this._chartFailed) {
         this._chartFailed = true;
         // message where the radars would be; hide the empty canvases
@@ -856,7 +1453,7 @@ export class SoogDashboard extends Base {
       options: this._radarOpts(t, false, small),
     }));
     if (parts.c2) {
-      const withP = sel.map((r, i) => ({ r, i })).filter((o) => o.r.profile);
+      const withP = sel.filter((r) => r.profile);
       parts.w2.hidden = !withP.length;
       parts.pnote.hidden = !!withP.length;
       const L = this.labels;
@@ -864,10 +1461,18 @@ export class SoogDashboard extends Base {
       if (withP.length) {
         this._charts.push(new Chart(parts.c2, {
           type: 'radar',
-          data: { labels: pl, datasets: withP.map((o) => ({ ...this._ds(o.r), data: o.r.profile })) },
+          data: { labels: pl, datasets: withP.map((r) => ({ ...this._ds(r), data: r.profile })) },
           options: this._radarOpts(t, true, false),
         }));
       }
+    }
+    const fr = this._record(this._focusKey);
+    if (parts.c3 && parts.c3.isConnected && fr && fr.vector) {
+      this._charts.push(new Chart(parts.c3, {
+        type: 'radar',
+        data: { labels: AXIS, datasets: [{ ...this._ds(fr), data: fr.vector }] },
+        options: this._radarOpts(t, false, true),
+      }));
     }
   }
 }
