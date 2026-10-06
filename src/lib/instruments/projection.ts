@@ -8,6 +8,9 @@
 // frontmatter fields listed in spec §2 are read.
 
 import matter from 'gray-matter';
+import { extractVideos, type PublicVideo } from './videos.ts';
+
+export type { PublicVideo };
 
 export type MoaieAxis = 'M' | 'O' | 'A' | 'I' | 'E';
 
@@ -47,6 +50,10 @@ export type PublicInstrument = {
   > | null;
   connect: string[];
   hyper: string[];
+  /** Note tags as written (trimmed, deduped); `dss*` internal taxonomy excluded. */
+  tags: string[];
+  /** YouTube/Vimeo videos referenced anywhere in the note (URLs only, max 12). */
+  videos: PublicVideo[];
 };
 
 const PROFILE_KEYS = [
@@ -106,10 +113,11 @@ export function cleanTemplater(
 // below.
 export const SAFE_ENGINES = { js: () => ({}), javascript: () => ({}) };
 
-/** Parses frontmatter with gray-matter, retrying once with Templater
+/** Parses a note with gray-matter, retrying once with Templater
  * expressions cleaned out if the raw markdown doesn't parse as YAML.
- * Returns `null` (never throws) if both attempts fail. */
-export function parseFrontmatterRobust(markdown: string): Record<string, unknown> | null {
+ * Returns `null` (never throws) if both attempts fail. `content` is the
+ * markdown body after the frontmatter block. */
+export function parseNoteRobust(markdown: string): { data: Record<string, unknown>; content: string } | null {
   // Passing `{ engines: ... }` (any options object, even empty) opts both
   // calls out of gray-matter's own content-keyed cache. Without it, a
   // first call that throws still poisons the cache with the pre-parse
@@ -118,15 +126,22 @@ export function parseFrontmatterRobust(markdown: string): Record<string, unknown
   // there's no Templater tag) would silently return `{}` instead of
   // re-throwing.
   try {
-    return matter(markdown, { engines: SAFE_ENGINES }).data ?? {};
+    const r = matter(markdown, { engines: SAFE_ENGINES });
+    return { data: r.data ?? {}, content: r.content ?? '' };
   } catch {
     // fall through
   }
   try {
-    return matter(cleanTemplater(markdown), { engines: SAFE_ENGINES }).data ?? {};
+    const r = matter(cleanTemplater(markdown), { engines: SAFE_ENGINES });
+    return { data: r.data ?? {}, content: r.content ?? '' };
   } catch {
     return null;
   }
+}
+
+/** Frontmatter-only variant of {@link parseNoteRobust}. */
+export function parseFrontmatterRobust(markdown: string): Record<string, unknown> | null {
+  return parseNoteRobust(markdown)?.data ?? null;
 }
 
 /** Reduces every `[[Target]]` / `[[Target|Alias]]` wikilink inside `s` to
@@ -164,6 +179,25 @@ function strArray(value: unknown): string[] {
     if (out.length >= MAX_ARRAY_ITEMS) break;
     const s = str(item);
     if (s !== undefined) out.push(truncate(s, MAX_ARRAY_ITEM_LEN));
+  }
+  return out;
+}
+
+const MAX_TAGS = 50;
+
+/** Tags from a YAML array or comma string: trimmed, leading `#` dropped,
+ * deduped (first-seen), `dss*` (internal taxonomy) excluded. */
+function readTags(value: unknown): string[] {
+  const raw: unknown[] = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (out.length >= MAX_TAGS) break;
+    if (typeof item !== 'string' && typeof item !== 'number') continue;
+    const tag = truncate(String(item).trim().replace(/^#+/, '').trim(), MAX_ARRAY_ITEM_LEN);
+    if (tag === '' || /^dss/i.test(tag) || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
   }
   return out;
 }
@@ -235,9 +269,14 @@ export function projectInstrument(
   note: { id: string; title: string; body: string },
   opts?: { fictional?: boolean },
 ): PublicInstrument | null {
-  const data = parseFrontmatterRobust(note.body);
-  if (!data) return null;
-  return projectInstrumentData(data, { id: note.id, title: note.title, fictional: opts?.fictional });
+  const parsed = parseNoteRobust(note.body);
+  if (!parsed) return null;
+  return projectInstrumentData(parsed.data, {
+    id: note.id,
+    title: note.title,
+    fictional: opts?.fictional,
+    videos: extractVideos(parsed.data, parsed.content),
+  });
 }
 
 /**
@@ -245,11 +284,12 @@ export function projectInstrument(
  * frontmatter `data` (the file-backed catalogue loader parses each note
  * once and projects it per language). `fallback.title` is used when the
  * frontmatter has no usable `title`. Returns `null` unless
- * `data.type === 'instrument'`.
+ * `data.type === 'instrument'`. `fallback.videos` carries videos already
+ * extracted from the whole note (frontmatter + body).
  */
 export function projectInstrumentData(
   data: Record<string, unknown>,
-  fallback: { id: string; title: string; fictional?: boolean },
+  fallback: { id: string; title: string; fictional?: boolean; videos?: PublicVideo[] },
 ): PublicInstrument | null {
   if (data.type !== 'instrument') return null;
   const note = { id: fallback.id, title: fallback.title };
@@ -277,6 +317,9 @@ export function projectInstrumentData(
     profile: readProfile(data.interface_profile),
     connect: strArray(data.connect),
     hyper: strArray(data.hyper),
+    tags: readTags(data.tags),
+    // Without a body (frontmatter-only callers) scan the YAML values alone.
+    videos: fallback.videos ?? extractVideos(data, ''),
   };
 
   const year = finiteNumber(data.year);

@@ -20,7 +20,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { TENANTS } from '../tenant/tenants.ts';
-import { parseFrontmatterRobust, projectInstrumentData, type PublicInstrument } from './projection.ts';
+import { parseNoteRobust, projectInstrumentData, type PublicInstrument } from './projection.ts';
+import { extractVideos, type PublicVideo } from './videos.ts';
 
 export type InstrumentsLang = 'en' | 'es';
 
@@ -40,6 +41,8 @@ export type CatalogueRecord = {
   /** Path relative to the catalogue root, `/`-separated. */
   rel: string;
   data: Record<string, unknown>;
+  /** Videos found in the frontmatter values and the note body (body itself is not kept). */
+  videos: PublicVideo[];
 };
 
 /** Catalogue directory: `INSTRUMENTS_DIR` or `<cwd>/.content-sources/soog-instruments`. */
@@ -130,9 +133,13 @@ export function loadCatalogue(dir: string): CatalogueRecord[] | null {
     } catch {
       continue;
     }
-    const data = parseFrontmatterRobust(markdown);
-    if (!data) continue;
-    records.push({ rel: path.relative(dir, s.abs).split(path.sep).join('/'), data });
+    const parsed = parseNoteRobust(markdown);
+    if (!parsed) continue;
+    records.push({
+      rel: path.relative(dir, s.abs).split(path.sep).join('/'),
+      data: parsed.data,
+      videos: extractVideos(parsed.data, parsed.content),
+    });
   }
   cache.set(dir, { signature, records });
   return records;
@@ -215,6 +222,7 @@ export function publicInstrumentsFromRecords(records: CatalogueRecord[], lang: I
       id,
       title: fileName.replace(/\.md$/i, ''),
       fictional: isFictional(record.data),
+      videos: record.videos,
     });
     if (!projected) continue;
     seen.add(id);

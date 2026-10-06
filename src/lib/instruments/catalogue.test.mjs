@@ -163,3 +163,16 @@ test('instrumentsDir: INSTRUMENTS_DIR override, else .content-sources/soog-instr
   assert.equal(instrumentsDir({ INSTRUMENTS_DIR: '/data/cat' }, '/repo'), '/data/cat');
   assert.equal(instrumentsDir({ INSTRUMENTS_DIR: 'rel/cat' }, '/repo'), path.join('/repo', 'rel', 'cat'));
 });
+
+test('tags and videos reach the payload (body urls included, body text not)', () => {
+  const dir = tempCatalogue({
+    'Vid.md': md(
+      'type: instrument\npublish: true\ntags: [noise, dss/case]\nlink: https://vimeo.com/55',
+      'Secret prose https://www.youtube.com/watch?v=dQw4w9WgXcQ and <iframe src="https://player.vimeo.com/video/55"></iframe>',
+    ),
+  });
+  const [inst] = loadPublicInstruments({ dir, lang: 'en' });
+  assert.deepEqual(inst.tags, ['noise']);
+  assert.deepEqual(inst.videos.map((v) => `${v.provider}:${v.id}`), ['vimeo:55', 'youtube:dQw4w9WgXcQ']);
+  assert.ok(!JSON.stringify(inst).includes('Secret prose'));
+});

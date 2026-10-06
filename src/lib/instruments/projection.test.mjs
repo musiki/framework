@@ -335,3 +335,23 @@ test(
     assert.ok(total > 0, 'expected to find real vault files');
   },
 );
+
+test('projectInstrument: tags from array, dedupe, drop dss*, strip #', () => {
+  const body = `---\ntype: instrument\ntags:\n  - " noise "\n  - noise\n  - "#sensor"\n  - dss/case/instruments\n  - DSS\n  - a/b\n---\nx`;
+  assert.deepEqual(projectInstrument(note(body)).tags, ['noise', 'sensor', 'a/b']);
+});
+
+test('projectInstrument: tags from comma string; absent -> []', () => {
+  assert.deepEqual(projectInstrument(note(`---\ntype: instrument\ntags: "a, b ,a,dss/x, "\n---\n`)).tags, ['a', 'b']);
+  assert.deepEqual(projectInstrument(note(`---\ntype: instrument\n---\n`)).tags, []);
+});
+
+test('projectInstrument: videos from frontmatter and body, no body leak', () => {
+  const body = `---\ntype: instrument\nvideo: https://youtu.be/dQw4w9WgXcQ\n---\nPRIVATE BODY [v](https://vimeo.com/123?h=ab) text`;
+  const r = projectInstrument(note(body));
+  assert.deepEqual(r.videos, [
+    { provider: 'youtube', id: 'dQw4w9WgXcQ', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+    { provider: 'vimeo', id: '123', url: 'https://vimeo.com/123?h=ab' },
+  ]);
+  assert.ok(!JSON.stringify(r).includes('PRIVATE BODY'));
+});
