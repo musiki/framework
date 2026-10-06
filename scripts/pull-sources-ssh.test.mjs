@@ -68,7 +68,7 @@ test("HTTPS clone fails -> retried over SSH, token never logged", () => {
   assert.equal(clones.length, 2);
   assert.ok(clones[0].args.some((a) => a.startsWith(`https://${TOKEN}@github.com/zzigo/soog-instruments.git`)));
   assert.ok(clones[1].args.includes("git@github.com:zzigo/soog-instruments.git"));
-  assert.equal(clones[1].ssh, "ssh -o BatchMode=yes -o ConnectTimeout=15");
+  assert.equal(clones[1].ssh, "ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new");
   assert.equal(clones[1].prompt, "0");
   assert.ok(fs.existsSync(path.join(t.target, "FRESH")));
   assert.ok(!fs.readdirSync(t.sources).some((n) => n.includes(".tmp-")));
@@ -125,7 +125,7 @@ test("existing SSH-cloned checkout updates over SSH first, falls back to HTTPS",
 
   const t2 = setup({ existing: "git" });
   const r2 = t2.run({ FAKE_ORIGIN: "git@github.com:zzigo/soog-instruments.git", FAKE_GIT_FAIL: "fetch .*--depth 1 origin main" , });
-  // both fetches fail here; fresh clone then replaces the checkout via HTTPS
+  // both in-place fetches fail (ssh, then https); the fresh clone (ssh first, as the origin is ssh) replaces the checkout
   assert.equal(r2.status, 0, r2.out);
   const urls = r2.calls.filter((c) => c.args.includes("set-url")).map((c) => c.args[c.args.length - 1]);
   assert.equal(urls[0], "git@github.com:zzigo/soog-instruments.git");

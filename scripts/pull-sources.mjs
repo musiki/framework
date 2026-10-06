@@ -134,7 +134,9 @@ const readOriginUrl = (targetDir) => {
 // GIT_SSH_COMMAND (custom key, port...) is respected.
 const sshGitEnv = () => ({
   GIT_TERMINAL_PROMPT: '0',
-  GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || 'ssh -o BatchMode=yes -o ConnectTimeout=15',
+  GIT_SSH_COMMAND:
+    process.env.GIT_SSH_COMMAND ||
+    'ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new',
 });
 
 // SSH twin of a GitHub repo (slug or https URL); '' when there is none.
@@ -292,8 +294,26 @@ const pullFromRepo = (source, targetDir, token) => {
 
   // Clone into a sibling temp dir (HTTPS first, then SSH) and swap it in only
   // once it is complete: an existing checkout survives any failure.
+  const swapIn = (tmpDir) => {
+    const oldDir = `${targetDir}.old-${process.pid}`;
+    const hadOld = fs.existsSync(targetDir);
+    if (hadOld) fs.renameSync(targetDir, oldDir);
+    try {
+      fs.renameSync(tmpDir, targetDir);
+    } catch (error) {
+      if (hadOld) fs.renameSync(oldDir, targetDir);
+      throw error;
+    }
+    if (hadOld) fs.rmSync(oldDir, { recursive: true, force: true });
+  };
+
   const freshClone = (preferSsh) => {
     const tmpDir = `${targetDir}.tmp-${process.pid}`;
+    for (const entry of fs.readdirSync(sourcesDir)) {
+      if (entry.startsWith(`${source.id}.tmp-`) || entry.startsWith(`${source.id}.old-`)) {
+        fs.rmSync(path.join(sourcesDir, entry), { recursive: true, force: true });
+      }
+    }
     const failures = [];
     for (const transport of transportsFor(preferSsh)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -303,8 +323,7 @@ const pullFromRepo = (source, targetDir, token) => {
           env: transport.env,
         });
         checkoutDesiredCommit(tmpDir, transport.env);
-        fs.rmSync(targetDir, { recursive: true, force: true });
-        fs.renameSync(tmpDir, targetDir);
+        swapIn(tmpDir);
         return;
       } catch (error) {
         fs.rmSync(tmpDir, { recursive: true, force: true });
