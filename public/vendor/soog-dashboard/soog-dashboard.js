@@ -163,10 +163,6 @@ export function videoEmbedUrl(v) {
     ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?autoplay=1`
     : `https://player.vimeo.com/video/${encodeURIComponent(v.id)}?autoplay=1&dnt=1`;
 }
-/** Thumbnail URL (YouTube only; Vimeo uses a neutral local tile). */
-export function videoThumbUrl(v) {
-  return v.provider === 'youtube' ? `https://i.ytimg.com/vi/${encodeURIComponent(v.id)}/hqdefault.jpg` : '';
-}
 
 /** Normalise one PublicInstrument from the endpoint into the internal record. */
 export function toRecord(inst, index) {
@@ -346,7 +342,8 @@ a { color: inherit; text-underline-offset: 2px; }
 .video { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #111; border: 1px solid var(--_border); }
 .video-tile { all: unset; box-sizing: border-box; position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer; color: #fff; background: #1b1b1f center / cover no-repeat; }
 .video-tile:focus-visible { outline: 2px solid var(--_focus); outline-offset: -4px; }
-.video-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.video-tile { background: linear-gradient(135deg, #24242a, #121216); }
+.video-tile .cap { position: absolute; left: 10px; right: 10px; top: 8px; font-size: .78em; line-height: 1.3; color: rgba(255,255,255,.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .video-tile .play { position: relative; width: 56px; height: 40px; border-radius: 10px; background: rgba(0,0,0,.72); display: grid; place-items: center; font-size: 18px; }
 .video-tile:hover .play { background: rgba(0,0,0,.88); }
 .video-tile .prov { position: absolute; left: 8px; bottom: 6px; font-size: .72em; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,.66); }
@@ -581,6 +578,14 @@ export class SoogDashboard extends Base {
     }
     this._data = data;
     this._registry = data.instruments.map(toRecord);
+    // duplicate ids would collide in the row map / selection set: suffix them
+    const seen = new Set();
+    for (const r of this._registry) {
+      let k = r.key;
+      for (let n = 2; seen.has(k); n++) k = `${r.key}~${n}`;
+      r.key = k;
+      seen.add(k);
+    }
     // stable colour per instrument: its index in the full registry
     this._registry.forEach((r, i) => { r.color = PALETTE[i % PALETTE.length]; });
     const scored = this._registry.filter((r) => r.scored);
@@ -849,7 +854,7 @@ export class SoogDashboard extends Base {
     }
     if (focus) (isC ? p.tabCompare : p.tabDetail).focus();
     // charts drawn in a hidden panel have no size: redraw on show
-    if (!initial) this._renderCharts();
+    if (!initial) this._renderCharts(this._tab);
   }
 
   /** Select an instrument (sidebar row) and open the Detail tab. */
@@ -861,7 +866,8 @@ export class SoogDashboard extends Base {
     this._syncList();
     this._renderDetails();
     if (openDetail && this._parts && this._parts.tabDetail) this._setTab('detail');
-    else this._renderCharts();
+    else if (this._tab === 'detail') this._renderCharts('detail');
+    else this._destroyCharts('detail'); // canvas replaced; drawn when the Detail tab is shown
   }
 
   /** Add/remove an instrument to/from the comparison (scored only). */
@@ -958,7 +964,7 @@ export class SoogDashboard extends Base {
     this._syncList();
     this._renderLegend();
     this._renderTable();
-    this._renderCharts();
+    this._renderCharts('compare');
   }
 
   _renderLegend() {
@@ -1148,17 +1154,10 @@ export class SoogDashboard extends Base {
     const tile = this._button('video-tile', null, 'video-tile');
     tile.dataset.provider = v.provider;
     tile.setAttribute('aria-label', `${L.playVideo}: ${r.title}${r.videos.length > 1 ? ` (${i + 1})` : ''} — ${prov}`);
-    const thumb = videoThumbUrl(v);
-    if (thumb) {
-      const img = this._el('img');
-      img.alt = '';
-      img.setAttribute('loading', 'lazy');
-      img.setAttribute('decoding', 'async');
-      img.setAttribute('referrerpolicy', 'no-referrer');
-      img.addEventListener('error', () => img.remove(), { once: true });
-      img.src = thumb;
-      tile.appendChild(img);
-    }
+    // Neutral local tile for every provider: no third-party request before the click.
+    const cap = this._el('span', 'cap', r.videos.length > 1 ? `${r.title} · ${i + 1}` : r.title);
+    cap.setAttribute('aria-hidden', 'true');
+    tile.appendChild(cap);
     const play = this._el('span', 'play', '▶');
     play.setAttribute('aria-hidden', 'true');
     const label = this._el('span', 'prov', prov);
@@ -1171,6 +1170,7 @@ export class SoogDashboard extends Base {
       f.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
       f.setAttribute('allowfullscreen', '');
       f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+      f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox');
       f.dataset.role = 'video-frame';
       tile.replaceWith(f);
       try { f.focus(); } catch { /* ignore */ }
@@ -1315,6 +1315,8 @@ export class SoogDashboard extends Base {
       else if (e.key === '0') { e.preventDefault(); zoomAt(ZOOM_MIN); }
     });
     dlg.addEventListener('cancel', (e) => { e.preventDefault(); this._closeLightbox(true); });
+    // closed some other way (e.g. Android back without a cancel event): clean up so it can reopen
+    dlg.addEventListener('close', () => { if (this._lb === lb) this._closeLightbox(false); });
 
     if (typeof dlg.showModal === 'function') {
       try { dlg.showModal(); } catch { dlg.setAttribute('open', ''); }
@@ -1390,9 +1392,19 @@ export class SoogDashboard extends Base {
   }
 
   // ── charts ───────────────────────────────────────────────────────────
-  _destroyCharts() {
-    for (const c of this._charts) { try { c.destroy(); } catch { /* ignore */ } }
-    this._charts = [];
+  /** Destroy charts of one scope ('compare' | 'detail') or all of them. */
+  _destroyCharts(scope = 'all') {
+    const keep = [];
+    for (const c of this._charts) {
+      if (scope !== 'all' && c.__soogScope !== scope) { keep.push(c); continue; }
+      try { c.destroy(); } catch { /* ignore */ }
+    }
+    this._charts = keep;
+  }
+  _addChart(Chart, canvas, config, scope) {
+    const c = new Chart(canvas, config);
+    c.__soogScope = scope;
+    this._charts.push(c);
   }
 
   _radarOpts(t, legend, small) {
@@ -1420,7 +1432,12 @@ export class SoogDashboard extends Base {
     return { label: r.title, fill: true, backgroundColor: rgba(c, 0.12), borderColor: c, borderWidth: 1.5, pointBackgroundColor: c, pointRadius: 2.5 };
   }
 
-  async _renderCharts() {
+  /**
+   * scope 'all' (load, theme change), 'compare' (compare set changed / tab
+   * shown) or 'detail' (selected instrument changed / tab shown): only the
+   * charts of that scope are rebuilt.
+   */
+  async _renderCharts(scope = 'all') {
     const parts = this._parts;
     if (!parts || !parts.c1) return;
     let Chart;
@@ -1443,15 +1460,20 @@ export class SoogDashboard extends Base {
       return;
     }
     if (!this._connected || parts !== this._parts) return;
-    this._destroyCharts();
+    this._destroyCharts(scope);
     const t = this._theme();
+    if (scope !== 'detail') this._renderCompareCharts(Chart, parts, t);
+    if (scope !== 'compare') this._renderDetailChart(Chart, parts, t);
+  }
+
+  _renderCompareCharts(Chart, parts, t) {
     const sel = this._selectedRecords();
     const small = this.mode === 'compact';
-    this._charts.push(new Chart(parts.c1, {
+    this._addChart(Chart, parts.c1, {
       type: 'radar',
       data: { labels: AXIS, datasets: sel.map((r) => ({ ...this._ds(r), data: r.vector })) },
       options: this._radarOpts(t, false, small),
-    }));
+    }, 'compare');
     if (parts.c2) {
       const withP = sel.filter((r) => r.profile);
       parts.w2.hidden = !withP.length;
@@ -1459,20 +1481,23 @@ export class SoogDashboard extends Base {
       const L = this.labels;
       const pl = Array.isArray(L.profileLabels) && L.profileLabels.length === 10 ? L.profileLabels : DEFAULT_LABELS.profileLabels;
       if (withP.length) {
-        this._charts.push(new Chart(parts.c2, {
+        this._addChart(Chart, parts.c2, {
           type: 'radar',
           data: { labels: pl, datasets: withP.map((r) => ({ ...this._ds(r), data: r.profile })) },
           options: this._radarOpts(t, true, false),
-        }));
+        }, 'compare');
       }
     }
+  }
+
+  _renderDetailChart(Chart, parts, t) {
     const fr = this._record(this._focusKey);
     if (parts.c3 && parts.c3.isConnected && fr && fr.vector) {
-      this._charts.push(new Chart(parts.c3, {
+      this._addChart(Chart, parts.c3, {
         type: 'radar',
         data: { labels: AXIS, datasets: [{ ...this._ds(fr), data: fr.vector }] },
         options: this._radarOpts(t, false, true),
-      }));
+      }, 'detail');
     }
   }
 }
