@@ -6050,7 +6050,7 @@ function renderLessonsTreeHTML(
 
       {!isPublicReaderMode && <CoursePodWorkspace />}
       {!isPublicReaderMode && <CourseTuningWorkspace />}
-      {!isPublicReaderMode && showsSoogDashboard(canonicalCourseIdToUse || courseSlug) && <CourseSoogWorkspace />}
+      {!isPublicReaderMode && showsSoogDashboard(canonicalCourseId || courseSlug) && <CourseSoogWorkspace />}
     </main>
     <script>
       import { hydrateLazyYouTubeEmbeds } from '../scripts/course/lazy-youtube.ts';

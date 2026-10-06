@@ -122,6 +122,18 @@ import CentauroPanel from '../room/generators/centauro/CentauroPanel.astro';
 <script>
   import { CentauroController } from '../../scripts/room/centauro/CentauroController';
 
+  type PodHandle = { id: string; open: () => void; close: () => void; isOpen: () => boolean };
+  let pod: PodHandle | null = null;
+
+  window.addEventListener('musiki:open-centauro', () => pod?.open());
+  window.addEventListener('musiki:pod-open', (event) => {
+    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+    if (pod && id !== pod.id && pod.isOpen()) pod.close();
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && pod?.isOpen()) pod.close();
+  });
+
   function boot() {
     const overlay = document.getElementById('course-tuning-workspace');
     if (!overlay) return;
@@ -142,6 +154,7 @@ import CentauroPanel from '../room/generators/centauro/CentauroPanel.astro';
     };
 
     const open = () => {
+      window.dispatchEvent(new CustomEvent('musiki:pod-open', { detail: { id: 'centauro' } }));
       overlay.classList.add('is-open');
       overlay.setAttribute('aria-hidden', 'false');
       ensureController();
@@ -157,10 +170,7 @@ import CentauroPanel from '../room/generators/centauro/CentauroPanel.astro';
     };
 
     closeButton.addEventListener('click', close);
-    window.addEventListener('musiki:open-centauro', open);
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && overlay.classList.contains('is-open')) close();
-    });
+    pod = { id: 'centauro', open, close, isOpen: () => overlay.classList.contains('is-open') };
   }
 
   boot();

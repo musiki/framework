@@ -105,14 +105,12 @@ import { SOOG_DASHBOARD_LABELS_ES } from '../../lib/instruments/courses';
     opacity: 1;
   }
 
+
   .course-soog-body {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-  }
-
-  .course-soog-body {
     overflow: auto;
     padding: 0 12px 12px;
   }
@@ -125,6 +123,18 @@ import { SOOG_DASHBOARD_LABELS_ES } from '../../lib/instruments/courses';
 
 <script>
   const SOOG_SCRIPT_SRC = '/vendor/soog-dashboard/soog-dashboard.js';
+
+  type PodHandle = { id: string; open: () => void; close: () => void; isOpen: () => boolean };
+  let pod: PodHandle | null = null;
+
+  window.addEventListener('musiki:open-soog', () => pod?.open());
+  window.addEventListener('musiki:pod-open', (event) => {
+    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+    if (pod && id !== pod.id && pod.isOpen()) pod.close();
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && pod?.isOpen()) pod.close();
+  });
 
   function boot() {
     const overlay = document.getElementById('course-soog-workspace');
@@ -144,6 +154,7 @@ import { SOOG_DASHBOARD_LABELS_ES } from '../../lib/instruments/courses';
     };
 
     const open = () => {
+      window.dispatchEvent(new CustomEvent('musiki:pod-open', { detail: { id: 'soog' } }));
       overlay.classList.add('is-open');
       overlay.setAttribute('aria-hidden', 'false');
       ensureScript();
@@ -155,10 +166,7 @@ import { SOOG_DASHBOARD_LABELS_ES } from '../../lib/instruments/courses';
     };
 
     closeButton.addEventListener('click', close);
-    window.addEventListener('musiki:open-soog', open);
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && overlay.classList.contains('is-open')) close();
-    });
+    pod = { id: 'soog', open, close, isOpen: () => overlay.classList.contains('is-open') };
   }
 
   boot();
