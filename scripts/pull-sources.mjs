@@ -80,8 +80,8 @@ const run = (cmd, cmdArgs, options = {}) => {
       stdio: 'inherit',
       // Never block a build on an interactive git credential prompt: a repo
       // the token can't read fails fast (and an optional source just warns).
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
       ...options,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(options.env || {}) },
     });
   } catch (err) {
     // Redact potential tokens from error messages
@@ -119,6 +119,32 @@ const sleep = (ms) => {
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
 const readHeadSha = (targetDir) =>
   execFileSync('git', ['-C', targetDir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const readOriginUrl = (targetDir) => {
+  try {
+    return execFileSync('git', ['-C', targetDir, 'config', '--get', 'remote.origin.url'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return '';
+  }
+};
+
+// Env for git commands over SSH: never prompt, fail fast. An existing
+// GIT_SSH_COMMAND (custom key, port...) is respected.
+const sshGitEnv = () => ({
+  GIT_TERMINAL_PROMPT: '0',
+  GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || 'ssh -o BatchMode=yes -o ConnectTimeout=15',
+});
+
+// SSH twin of a GitHub repo (slug or https URL); '' when there is none.
+const toSshUrl = (repo) => {
+  const text = String(repo || '').trim();
+  if (text.startsWith('git@') || /^ssh:\/\//i.test(text)) return text;
+  if (/^https?:\/\//i.test(text) && !/^https?:\/\/github\.com\//i.test(text)) return '';
+  const slug = normalizeRepoSlug(text);
+  return slug ? `git@github.com:${slug}.git` : '';
+};
 
 const describeTokenSource = () => {
   if (process.env.CONTENT_SOURCE_READ_TOKEN) {
@@ -212,14 +238,25 @@ const pullFromRepo = (source, targetDir, token) => {
       : '';
   const repoUrl = toRepoUrl(source.repo);
   const authRepoUrl = withTokenIfNeeded(repoUrl, token);
-  const maskedUrl = authRepoUrl.replace(token, '****');
-  const checkoutDesiredCommit = () => {
+  const sshRepoUrl = toSshUrl(source.repo);
+  const isSshUrl = (url) => url.startsWith('git@') || /^ssh:\/\//i.test(url);
+  // Ordered transports to try. Each: { label, url, env }.
+  const httpsTransport = { label: 'https', url: authRepoUrl, env: {} };
+  const sshTransport = sshRepoUrl ? { label: 'ssh', url: sshRepoUrl, env: sshGitEnv() } : null;
+  const transportsFor = (preferSsh) => {
+    if (isSshUrl(authRepoUrl)) return [{ label: 'ssh', url: authRepoUrl, env: sshGitEnv() }];
+    const list = preferSsh && sshTransport ? [sshTransport, httpsTransport] : [httpsTransport, sshTransport];
+    return list.filter(Boolean);
+  };
+  const maskUrl = (url) => (token ? url.split(token).join('****') : url);
+
+  const checkoutDesiredCommit = (dir, env) => {
     if (!desiredSha) {
-      console.log(`[content:pull] ${source.id} HEAD ${readHeadSha(targetDir)}`);
+      console.log(`[content:pull] ${source.id} HEAD ${readHeadSha(dir)}`);
       return;
     }
 
-    const currentHead = readHeadSha(targetDir).toLowerCase();
+    const currentHead = readHeadSha(dir).toLowerCase();
     if (currentHead === desiredSha) {
       console.log(`[content:pull] ${source.id} already at requested sha ${currentHead}`);
       return;
@@ -229,10 +266,10 @@ const pullFromRepo = (source, targetDir, token) => {
     let lastError = null;
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
-        run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', desiredSha]);
-        run('git', ['-C', targetDir, 'checkout', '-B', desiredBranch, 'FETCH_HEAD']);
-        run('git', ['-C', targetDir, 'clean', '-fd']);
-        const resolvedHead = readHeadSha(targetDir).toLowerCase();
+        run('git', ['-C', dir, 'fetch', '--depth', '1', 'origin', desiredSha], { env });
+        run('git', ['-C', dir, 'checkout', '-B', desiredBranch, 'FETCH_HEAD']);
+        run('git', ['-C', dir, 'clean', '-fd']);
+        const resolvedHead = readHeadSha(dir).toLowerCase();
         if (resolvedHead !== desiredSha) {
           throw new Error(
             `Requested sha ${desiredSha} for ${source.id}, but resolved ${resolvedHead} instead.`,
@@ -253,32 +290,57 @@ const pullFromRepo = (source, targetDir, token) => {
     throw lastError;
   };
 
-  const doClone = () => {
-    console.log(`[content:pull] Cloning ${source.id} from ${maskedUrl}...`);
-    run('git', ['clone', '--depth', '1', '--branch', desiredBranch, authRepoUrl, targetDir]);
-    checkoutDesiredCommit();
+  // Clone into a sibling temp dir (HTTPS first, then SSH) and swap it in only
+  // once it is complete: an existing checkout survives any failure.
+  const freshClone = (preferSsh) => {
+    const tmpDir = `${targetDir}.tmp-${process.pid}`;
+    const failures = [];
+    for (const transport of transportsFor(preferSsh)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      try {
+        console.log(`[content:pull] Cloning ${source.id} over ${transport.label} from ${maskUrl(transport.url)}...`);
+        run('git', ['clone', '--depth', '1', '--branch', desiredBranch, transport.url, tmpDir], {
+          env: transport.env,
+        });
+        checkoutDesiredCommit(tmpDir, transport.env);
+        fs.rmSync(targetDir, { recursive: true, force: true });
+        fs.renameSync(tmpDir, targetDir);
+        return;
+      } catch (error) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        failures.push(`${transport.label}: ${error?.message || error}`);
+        console.warn(`[content:pull] ${source.id} clone over ${transport.label} failed.`);
+      }
+    }
+    throw new Error(`Could not clone ${source.id} (${failures.join(' | ')})`);
   };
 
   if (!fs.existsSync(targetDir) || !fs.existsSync(path.join(targetDir, '.git'))) {
-    fs.rmSync(targetDir, { recursive: true, force: true });
-    doClone();
+    freshClone(false);
     return;
   }
 
-  try {
-    console.log(`[content:pull] Updating ${source.id} via fetch...`);
-    run('git', ['-C', targetDir, 'remote', 'set-url', 'origin', authRepoUrl]);
-    run('git', ['-C', targetDir, 'reset', '--hard', 'HEAD']);
-    run('git', ['-C', targetDir, 'clean', '-fd']);
-    run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', desiredBranch]);
-    run('git', ['-C', targetDir, 'checkout', '-B', desiredBranch, 'FETCH_HEAD']);
-    run('git', ['-C', targetDir, 'clean', '-fd']);
-    checkoutDesiredCommit();
-  } catch (err) {
-    console.warn(`[content:pull] Update failed for ${source.id}, retrying with fresh clone...`);
-    fs.rmSync(targetDir, { recursive: true, force: true });
-    doClone();
+  // Existing checkout: update in place with whichever remote it was cloned
+  // over first, then the other one.
+  const preferSsh = isSshUrl(readOriginUrl(targetDir));
+  for (const transport of transportsFor(preferSsh)) {
+    try {
+      console.log(`[content:pull] Updating ${source.id} via fetch over ${transport.label}...`);
+      run('git', ['-C', targetDir, 'remote', 'set-url', 'origin', transport.url]);
+      run('git', ['-C', targetDir, 'reset', '--hard', 'HEAD']);
+      run('git', ['-C', targetDir, 'clean', '-fd']);
+      run('git', ['-C', targetDir, 'fetch', '--depth', '1', 'origin', desiredBranch], { env: transport.env });
+      run('git', ['-C', targetDir, 'checkout', '-B', desiredBranch, 'FETCH_HEAD']);
+      run('git', ['-C', targetDir, 'clean', '-fd']);
+      checkoutDesiredCommit(targetDir, transport.env);
+      return;
+    } catch (err) {
+      console.warn(`[content:pull] Update of ${source.id} over ${transport.label} failed.`);
+    }
   }
+
+  console.warn(`[content:pull] Update failed for ${source.id}, retrying with fresh clone...`);
+  freshClone(preferSsh);
 };
 
 const cleanRemovedSources = (knownIds) => {
