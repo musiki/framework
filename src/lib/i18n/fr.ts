@@ -69,6 +69,7 @@ export const fr: DeepPartial<Omit<Dict, 'mm'>> = {
     progressPath: 'Progression du parcours',
     progressTitle: 'Progression (parcours)',
     openCentauro: 'Ouvrir Centauro (micro-accordage)',
+    openSoog: 'Ouvrir SOOG',
     myCourses: 'Mes cours',
     myCoursesActive: 'Mes cours — cours actif : {code}',
     myCoursesHeader: 'Mes cours',

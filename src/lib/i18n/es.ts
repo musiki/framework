@@ -282,6 +282,7 @@ export const es: Dict = {
     progressPath: 'Progreso del recorrido',
     progressTitle: 'Progreso (recorrido)',
     openCentauro: 'Abrir Centauro (Microafinación)',
+    openSoog: 'Abrir SOOG',
     myCourses: 'Mis cursos',
     myCoursesActive: 'Mis cursos — curso activo: {code}',
     myCoursesHeader: 'Mis Cursos',

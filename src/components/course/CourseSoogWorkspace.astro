@@ -1,0 +1,166 @@
+---
+import { SOOG_DASHBOARD_LABELS_ES } from '../../lib/instruments/courses';
+---
+
+<div class="course-soog-workspace" id="course-soog-workspace" aria-hidden="true">
+  <section class="course-soog-shell">
+    <header class="course-soog-header">
+      <span class="course-soog-title">SOOG · MOAIE</span>
+      <div class="course-soog-actions">
+        <button
+          type="button"
+          class="course-soog-header-btn course-soog-close"
+          data-course-soog-close
+          aria-label="Cerrar SOOG (Esc)"
+          title="Cerrar (Esc)"
+        >×</button>
+      </div>
+    </header>
+    <div class="course-soog-body" id="course-soog-body">
+      <soog-dashboard
+        mode="full"
+        src="/api/public/instruments"
+        title={SOOG_DASHBOARD_LABELS_ES.title}
+        labels={JSON.stringify(SOOG_DASHBOARD_LABELS_ES)}
+      ></soog-dashboard>
+    </div>
+  </section>
+</div>
+
+<style>
+  .course-soog-workspace {
+    position: fixed;
+    inset: 0 0 0 var(--ribbon-width, 44px);
+    z-index: 30;
+    display: flex;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+
+  .course-soog-workspace.is-open {
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .course-soog-shell {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--c-bg);
+  }
+
+  .course-soog-header {
+    display: flex;
+    height: 22px;
+    flex: 0 0 22px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    background: transparent;
+  }
+
+  .course-soog-title {
+    flex: 1;
+    overflow: hidden;
+    color: #10b981;
+    font-size: 0.5rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    line-height: 1;
+    opacity: 0.75;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .course-soog-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .course-soog-header-btn {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    font-size: 10px;
+    opacity: 0.8;
+  }
+
+  .course-soog-header-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 1;
+  }
+
+  .course-soog-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .course-soog-body {
+    overflow: auto;
+    padding: 0 12px 12px;
+  }
+
+  .course-soog-body soog-dashboard {
+    display: block;
+    width: 100%;
+  }
+</style>
+
+<script>
+  const SOOG_SCRIPT_SRC = '/vendor/soog-dashboard/soog-dashboard.js';
+
+  function boot() {
+    const overlay = document.getElementById('course-soog-workspace');
+    if (!overlay || overlay.dataset.bound === 'true') return;
+    overlay.dataset.bound = 'true';
+
+    const closeButton = overlay.querySelector('[data-course-soog-close]');
+    if (!closeButton) return;
+
+    const ensureScript = () => {
+      if (document.querySelector(`script[data-soog-dashboard]`)) return;
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.src = SOOG_SCRIPT_SRC;
+      script.dataset.soogDashboard = 'true';
+      document.head.appendChild(script);
+    };
+
+    const open = () => {
+      overlay.classList.add('is-open');
+      overlay.setAttribute('aria-hidden', 'false');
+      ensureScript();
+    };
+
+    const close = () => {
+      overlay.classList.remove('is-open');
+      overlay.setAttribute('aria-hidden', 'true');
+    };
+
+    closeButton.addEventListener('click', close);
+    window.addEventListener('musiki:open-soog', open);
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && overlay.classList.contains('is-open')) close();
+    });
+  }
+
+  boot();
+  document.addEventListener('astro:page-load', boot);
+</script>

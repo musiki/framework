@@ -36,6 +36,7 @@ const ROWS = [
   ["ribbon.progressPath", "Progreso del recorrido"],
   ["ribbon.progressTitle", "Progreso (recorrido)"],
   ["ribbon.openCentauro", "Abrir Centauro (Microafinación)"],
+  ["ribbon.openSoog", "Abrir SOOG"],
   ["ribbon.myCourses", "Mis cursos"],
   ["ribbon.myCoursesActive", {"code": "ARM1"}, "Mis cursos — curso activo: ARM1"],
   ["ribbon.myCoursesHeader", "Mis Cursos"],

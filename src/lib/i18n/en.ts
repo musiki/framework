@@ -281,6 +281,7 @@ export const en = {
     progressPath: 'Path progress',
     progressTitle: 'Progress (path)',
     openCentauro: 'Open Centauro (microtuning)',
+    openSoog: 'Open SOOG',
     myCourses: 'My courses',
     myCoursesActive: 'My courses — active course: {code}',
     myCoursesHeader: 'My courses',
