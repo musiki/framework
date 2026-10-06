@@ -50,7 +50,7 @@ export type PublicInstrument = {
   > | null;
   connect: string[];
   hyper: string[];
-  /** Note tags as written (trimmed, deduped); `dss*` internal taxonomy excluded. */
+  /** Note tags: trimmed, all leading `#` characters removed, deduped; `dss*` internal taxonomy excluded. */
   tags: string[];
   /** YouTube/Vimeo videos referenced anywhere in the note (URLs only, max 12). */
   videos: PublicVideo[];
@@ -185,7 +185,7 @@ function strArray(value: unknown): string[] {
 
 const MAX_TAGS = 50;
 
-/** Tags from a YAML array or comma string: trimmed, leading `#` dropped,
+/** Tags from a YAML array or comma string: trimmed, all leading `#` characters removed,
  * deduped (first-seen), `dss*` (internal taxonomy) excluded. */
 function readTags(value: unknown): string[] {
   const raw: unknown[] = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
