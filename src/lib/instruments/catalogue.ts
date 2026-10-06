@@ -138,7 +138,8 @@ export function loadCatalogue(dir: string): CatalogueRecord[] | null {
     records.push({
       rel: path.relative(dir, s.abs).split(path.sep).join('/'),
       data: parsed.data,
-      videos: extractVideos(parsed.data, parsed.content),
+      // Only published notes ever reach the payload; skip scanning the rest.
+      videos: isPublished(parsed.data) ? extractVideos(parsed.data, parsed.content) : [],
     });
   }
   cache.set(dir, { signature, records });

@@ -89,3 +89,16 @@ test('urls ending a sentence or inside markdown links parse cleanly', () => {
   assert.deepEqual(extractVideos({}, `See https://youtu.be/${ID}.`), [yt()]);
   assert.deepEqual(extractVideos({}, `[x](https://youtu.be/${ID})`), [yt()]);
 });
+
+test('trailing underscore/dash in a youtube id is preserved', () => {
+  assert.equal(extractVideos({}, 'https://youtu.be/abcdefghij_')[0].id, 'abcdefghij_');
+  assert.equal(extractVideos({}, 'https://youtu.be/abcdefghij-.')[0].id, 'abcdefghij-');
+  assert.equal(extractVideos({}, `_https://youtu.be/${ID}_`)[0].id, ID);
+});
+
+test('urls glued to a preceding char, live and /v/ paths', () => {
+  assert.equal(extractVideos({}, `see:https://youtu.be/${ID}`)[0].id, ID);
+  assert.equal(extractVideos({}, `*https://vimeo.com/77*`)[0].id, '77');
+  assert.equal(parseVideoUrl(`https://www.youtube.com/live/${ID}`).id, ID);
+  assert.equal(parseVideoUrl(`https://www.youtube.com/v/${ID}`).id, ID);
+});

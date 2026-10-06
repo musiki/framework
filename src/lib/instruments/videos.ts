@@ -11,6 +11,7 @@ export const MAX_VIDEOS = 12;
 
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
 const VIMEO_ID = /^\d+$/;
+// Vimeo privacy hashes are hex in practice; alphanumeric is accepted to be safe.
 const VIMEO_HASH = /^[A-Za-z0-9]+$/;
 
 const YT_HOSTS = new Set(['youtube.com', 'm.youtube.com', 'music.youtube.com']);
@@ -35,7 +36,7 @@ export function parseVideoUrl(raw: string): PublicVideo | null {
   if (host === 'youtu.be') return seg.length >= 1 ? yt(seg[0]) : null;
   if (YT_HOSTS.has(host)) {
     if (seg[0] === 'watch' && seg.length === 1) return yt(u.searchParams.get('v') ?? undefined);
-    if ((seg[0] === 'embed' || seg[0] === 'shorts') && seg.length === 2) return yt(seg[1]);
+    if ((seg[0] === 'embed' || seg[0] === 'shorts' || seg[0] === 'live' || seg[0] === 'v') && seg.length === 2) return yt(seg[1]);
     return null;
   }
   if (host === 'youtube-nocookie.com') {
@@ -59,14 +60,20 @@ export function parseVideoUrl(raw: string): PublicVideo | null {
   return null;
 }
 
-// `(?<![\w/:.-])` keeps the protocol-relative branch from matching inside
-// the `//` of an `https://` URL or a longer path.
-const URL_RE = /(?<![\w/:.-])(?:https?:)?\/\/[^\s"'<>()[\]{}`\\]+/gi;
+// Scheme-qualified URLs match anywhere (even glued to a preceding char like
+// `see:https://…`); the protocol-relative branch needs the lookbehind so it
+// doesn't match inside the `//` of an `https://` URL or a longer path.
+const URL_RE = /https?:\/\/[^\s"'<>()[\]{}`\\]+|(?<![\w/:.-])\/\/[^\s"'<>()[\]{}`\\]+/gi;
 
-function scanText(text: string, add: (raw: string) => void): void {
+function scanText(text: string, add: (raw: string) => boolean): void {
   const normalised = text.replace(/&amp;/gi, '&');
   for (const m of normalised.matchAll(URL_RE)) {
-    add(m[0].replace(/[.,;:!?*_]+$/, ''));
+    // Raw first: a YouTube ID may legitimately end in `_` (or `-`); only
+    // then fall back to the variant without trailing prose punctuation.
+    const raw = m[0];
+    if (add(raw)) continue;
+    const stripped = raw.replace(/[.,;:!?*_]+$/, '');
+    if (stripped !== raw) add(stripped);
   }
 }
 
@@ -90,14 +97,16 @@ export function extractVideos(
 ): PublicVideo[] {
   const found: PublicVideo[] = [];
   const seen = new Set<string>();
-  const add = (raw: string) => {
-    if (found.length >= MAX_VIDEOS) return;
+  /** Returns true when `raw` is a recognised video URL (even a duplicate). */
+  const add = (raw: string): boolean => {
     const v = parseVideoUrl(raw);
-    if (!v) return;
+    if (!v) return false;
     const key = `${v.provider}:${v.id}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    found.push(v);
+    if (!seen.has(key) && found.length < MAX_VIDEOS) {
+      seen.add(key);
+      found.push(v);
+    }
+    return true;
   };
 
   const strings: string[] = [];
@@ -105,7 +114,7 @@ export function extractVideos(
   for (const s of strings) {
     const trimmed = s.trim();
     // A bare scheme-less value like `youtu.be/ID` is a whole-field URL.
-    if (/^[\w.-]+\.[a-z]{2,}\/\S*$/i.test(trimmed) && !/\s/.test(trimmed)) add(`https://${trimmed}`);
+    if (/^[\w.-]+\.[a-z]{2,}\/\S*$/i.test(trimmed)) add(`https://${trimmed}`);
     scanText(s, add);
   }
   if (typeof body === 'string') scanText(body, add);
