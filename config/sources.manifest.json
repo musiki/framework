@@ -36,7 +36,7 @@
     {
       "id": "soog-instruments",
       "enabled": true,
-      "repo": "zzigo/soog-instruments",
+      "repo": "zzigo/som-registry",
       "branch": "main",
       "contentRoot": ".",
       "assemble": false,

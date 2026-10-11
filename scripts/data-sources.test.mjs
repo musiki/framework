@@ -124,7 +124,7 @@ test("musiki manifest carries soog-instruments as an optional data source; hem m
   const read = (name) => JSON.parse(fs.readFileSync(new URL(`../config/${name}`, import.meta.url), "utf8"));
   const musiki = read("sources.manifest.json").sources.find((s) => s.id === "soog-instruments");
   assert.ok(musiki);
-  assert.equal(musiki.repo, "zzigo/soog-instruments");
+  assert.equal(musiki.repo, "zzigo/som-registry");
   assert.equal(musiki.assemble, false);
   assert.equal(musiki.optional, true);
   assert.equal(musiki.enabled, true);
