@@ -28,7 +28,7 @@ env:
 jobs:
   validate:
     name: Validate Content Assembly
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, musiki-framework]
     steps:
       - name: Checkout platform repo
         uses: actions/checkout@v4
