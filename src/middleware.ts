@@ -54,9 +54,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // mm public pages are served from the internal /mm-app/* mount. Applied via
   // next(path) at the end so the rest of this middleware still runs and the
   // internal path never goes through the tenant check (which 404s it).
+  const isCoursesAlias =
+    tenantDecision.tenant.routes === "all" &&
+    (pathname === "/courses" || pathname === "/courses/");
   const internalPath = "rewrite" in tenantDecision && tenantDecision.rewrite
     ? `${tenantDecision.rewrite}${url.search}`
-    : null;
+    : isCoursesAlias
+      ? `/cursos${url.search}`
+      : null;
   const proceed = () => (internalPath ? next(internalPath) : next());
 
   // Skip header access and session check for known static or prerendered paths (search.json, assets, etc)
