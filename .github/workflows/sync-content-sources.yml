@@ -92,6 +92,9 @@ jobs:
             --exclude 'node_modules' \
             --exclude '.tmp' \
             --exclude 'src/content' \
+            --exclude 'public/vault-embeddings.json' \
+            --exclude 'public/search-index.json' \
+            --exclude 'public/graph-data.json' \
             --exclude 'dist' \
             --exclude 'dist_tmp' \
             --exclude 'dist_old' \
