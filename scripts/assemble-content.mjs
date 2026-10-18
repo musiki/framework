@@ -229,10 +229,26 @@ const main = () => {
 
       const rel = path.relative(sourceRoot, filePath);
       const destination = path.join(destinationRoot, rel);
+      let fileInjectFrontmatter = injectFrontmatter;
+      if (mode === 'courses' && isMarkdown(filePath)) {
+        const relParts = normalizeRel(rel).split('/').filter(Boolean);
+        const fileName = relParts[relParts.length - 1] || '';
+        const isIndexFile = /^_?index\.mdx?$/i.test(fileName);
+        if (!isIndexFile) {
+          const extra = { ...(injectFrontmatter || {}) };
+          if (relParts.length >= 3) {
+            extra.chapter = relParts.slice(1, -1).join('/');
+          }
+          if (injectFrontmatter?.tenant === 'hem') {
+            extra.status = 'published';
+          }
+          fileInjectFrontmatter = extra;
+        }
+      }
       registerCopy(filePath, destination, {
         sourceLabel: `${sourceId}:${normalizeRel(path.relative(path.dirname(sourceRoot), filePath))}`,
         mode,
-      }, injectFrontmatter);
+      }, fileInjectFrontmatter);
     }
   };
 

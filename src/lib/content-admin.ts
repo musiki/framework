@@ -43,6 +43,40 @@ function readManifest(): SourceManifest {
   return cachedManifest || {};
 }
 
+function findMatchingSubdirectory(parentDir: string, targetName: string): string | null {
+  if (!fs.existsSync(parentDir) || !fs.statSync(parentDir).isDirectory()) return null;
+  const exactPath = path.join(parentDir, targetName);
+  if (fs.existsSync(exactPath) && fs.statSync(exactPath).isDirectory()) {
+    return targetName;
+  }
+  const targetSlug = normalizeContentSlug(targetName);
+  if (!targetSlug) return null;
+  for (const entry of fs.readdirSync(parentDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && normalizeContentSlug(entry.name) === targetSlug) {
+      return entry.name;
+    }
+  }
+  return null;
+}
+
+export function resolveCourseFolderName(source: SourceManifestSource | null, courseId: string): string {
+  const normalizedCourseId = normalizeText(courseId);
+  if (!source?.id || !normalizedCourseId) return normalizedCourseId;
+  const coursesDir = normalizeText(source.coursesDir) || 'cursos';
+  const parentDirs = [
+    path.join(process.cwd(), '.content-sources', source.id, coursesDir),
+    path.join(process.cwd(), 'src', 'content', 'cursos'),
+  ];
+  if (source.localPath) {
+    parentDirs.unshift(path.join(path.resolve(process.cwd(), source.localPath), coursesDir));
+  }
+  for (const parentDir of parentDirs) {
+    const matched = findMatchingSubdirectory(parentDir, normalizedCourseId);
+    if (matched) return matched;
+  }
+  return normalizedCourseId;
+}
+
 export function resolveCourseSource(courseId: string): SourceManifestSource | null {
   const normalizedCourseId = normalizeText(courseId);
   if (!normalizedCourseId) return null;
@@ -54,17 +88,17 @@ export function resolveCourseSource(courseId: string): SourceManifestSource | nu
   );
   if (exact) return exact;
 
-  // Also check if courseId is a subfolder inside a source's coursesDir (e.g. "agentic music" inside "internetmusic")
+  // Also check if courseId is a subfolder inside a source's coursesDir (e.g. "agentic music" or "agentic-music" inside "internetmusic")
   for (const source of sources) {
     if (!source?.id || source.assemble === false) continue;
     const coursesDir = normalizeText(source.coursesDir) || 'cursos';
-    const candidates = [
-      path.join(process.cwd(), '.content-sources', source.id, coursesDir, normalizedCourseId),
+    const parentDirs = [
+      path.join(process.cwd(), '.content-sources', source.id, coursesDir),
     ];
     if (source.localPath) {
-      candidates.unshift(path.join(path.resolve(process.cwd(), source.localPath), coursesDir, normalizedCourseId));
+      parentDirs.unshift(path.join(path.resolve(process.cwd(), source.localPath), coursesDir));
     }
-    if (candidates.some((p) => fs.existsSync(p) && fs.statSync(p).isDirectory())) {
+    if (parentDirs.some((parentDir) => Boolean(findMatchingSubdirectory(parentDir, normalizedCourseId)))) {
       return source;
     }
   }
@@ -224,12 +258,24 @@ function buildLocalEditableCandidatePaths(source: SourceManifestSource | null, r
   if (!normalizedRepoPath || !source?.id) return [];
 
   const coursesDir = normalizeText(source.coursesDir) || 'cursos';
-  const sourceRelPath = coursesDir !== 'cursos' && normalizedRepoPath.startsWith('cursos/')
-    ? `${coursesDir}/${normalizedRepoPath.slice('cursos/'.length)}`
-    : normalizedRepoPath;
+  let resolvedRepoPath = normalizedRepoPath;
+  if (normalizedRepoPath.startsWith('cursos/')) {
+    const rest = normalizedRepoPath.slice('cursos/'.length);
+    const slashIdx = rest.indexOf('/');
+    if (slashIdx > 0) {
+      const requestedCourseFolder = rest.slice(0, slashIdx);
+      const actualCourseFolder = resolveCourseFolderName(source, requestedCourseFolder);
+      resolvedRepoPath = `cursos/${actualCourseFolder}${rest.slice(slashIdx)}`;
+    }
+  }
+
+  const sourceRelPath = coursesDir !== 'cursos' && resolvedRepoPath.startsWith('cursos/')
+    ? `${coursesDir}/${resolvedRepoPath.slice('cursos/'.length)}`
+    : resolvedRepoPath;
 
   const candidates = [
     path.join(process.cwd(), '.content-sources', source.id, sourceRelPath),
+    path.join(process.cwd(), 'src/content', resolvedRepoPath),
     path.join(process.cwd(), 'src/content', normalizedRepoPath),
   ];
 

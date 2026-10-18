@@ -3,7 +3,7 @@ import { cleanString, ensureDbUserFromSession, json } from '../../../lib/forum-s
 import { query } from '../../../lib/db/pool';
 import { segmentParagraphs } from '../../../../src/scripts/course/notes/trace-utils.mjs';
 
-const DEFAULT_MODEL = 'gemma4:31b-cloud';
+const DEFAULT_MODEL = 'llama3.2:3b';
 const timeoutMs = 60000;
 
 const ROLE_SETS: Record<string, string[]> = {

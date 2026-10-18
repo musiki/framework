@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { formatOrfCapabilityPrompt } from '../../../lib/orf/capabilities';
 import { normalizeOrfResponse, stringifyOrfForHumans } from '../../../lib/orf/schema';
+import { sanitizeRequestedModel } from '../../../lib/ai/model-priority.mjs';
 
 const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 600000);
 const maxPromptChars = Number(import.meta.env.CORRECTION_API_MAX_PROMPT_CHARS || 50000);
@@ -428,7 +429,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const sessionId = ensureText(body.scope?.sessionId);
   const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN || 'local-dev-token';
   const provider = ensureText(body.provider || body.options?.provider).toLowerCase() || 'ollama';
-  const model = ensureText(body.options?.model) || undefined;
+  const rawModel = ensureText(body.options?.model);
+  const model = (provider === 'ollama' || provider === 'orf')
+    ? (sanitizeRequestedModel(rawModel) || undefined)
+    : (rawModel || undefined);
 
   const contextBlocks = await performHybridRetrieval(message, { courseId, sessionId }, correctionApiToken);
   const webBlocks = shouldUseWebSearch(message, body.context?.webSearch)
@@ -484,7 +488,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       body: JSON.stringify({
         task,
         prompt,
-        model: ensureText(body.options?.model) || undefined,
+        model,
         options: {
           temperature: typeof body.options?.temperature === 'number' ? body.options.temperature : 0.2,
           num_predict: typeof body.options?.maxTokens === 'number' ? body.options.maxTokens : 800,
@@ -503,7 +507,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           body: JSON.stringify({
             texto: message,
             rubrica: prompt,
-            model: ensureText(body.options?.model) || undefined,
+            model,
             promptOverride: prompt,
           }),
         });

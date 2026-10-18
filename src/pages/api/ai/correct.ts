@@ -1,6 +1,14 @@
 import type { APIRoute } from 'astro';
 import { buildPatchEvaluationPrompt } from '../../../lib/ai/patch-prompt';
 import { buildCorrectionApiUrl } from '../../../lib/ai/correction-api-url';
+import {
+  DEFAULT_OLLAMA_PRIORITY_MODELS,
+  pickBestAvailableOllamaModel,
+  sanitizeRequestedModel,
+} from '../../../lib/ai/model-priority.mjs';
+
+const DEFAULT_ORF_API_URL = 'http://127.0.0.1:3141';
+const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
 
 const timeoutMs = Number(import.meta.env.CORRECTION_API_TIMEOUT_MS || 65000);
 const maxTextChars = 12000;
@@ -408,8 +416,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const texto = ensureText(body.texto);
   const rubrica = ensureText(body.rubrica) || undefined;
-  const model = ensureText(body.model) || undefined;
+  const rawModel = ensureText(body.model);
   const provider = ensureText(body.provider).toLowerCase() || 'ollama';
+  const model = (provider === 'ollama' || provider === 'orf')
+    ? (sanitizeRequestedModel(rawModel) || undefined)
+    : (rawModel || undefined);
   const taskType = ensureText(body.taskType || body.type).toLowerCase();
   const explicitPromptOverride = ensureText(body.promptOverride);
   let requestPayload: CorrectionRequest = {
@@ -528,86 +539,270 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return handleGemini(requestPayload);
   }
 
-  return handleOllama(requestPayload);
+  return handleOllama(requestPayload, provider);
 };
 
-async function handleOllama({ texto, rubrica, model, promptOverride }: CorrectionRequest): Promise<Response> {
-  const correctionApiUrl = import.meta.env.CORRECTION_API_URL;
-  const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN;
-
-  if (!correctionApiUrl || !correctionApiToken) {
-    return json(
-      {
-        error: 'Correction API is not configured',
-        missing: {
-          CORRECTION_API_URL: !correctionApiUrl,
-          CORRECTION_API_TOKEN: !correctionApiToken,
-        },
-      },
-      500,
-    );
+async function discoverInstalledOllamaModels(
+  orfApiUrl: string,
+  correctionApiUrl?: string,
+  correctionApiToken?: string,
+  ollamaBaseUrl = DEFAULT_OLLAMA_BASE_URL,
+): Promise<string[]> {
+  // 1. Try ORF /v1/models/installed
+  try {
+    const orfResp = await fetch(`${orfApiUrl.replace(/\/+$/, '')}/v1/models/installed`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(3500),
+    });
+    if (orfResp.ok) {
+      const data = await orfResp.json();
+      const installed = Array.isArray(data?.installed)
+        ? data.installed
+            .filter((m: any) => m?.installed && m?.provider === 'ollama')
+            .map((m: any) => ensureText(m.id).replace(/^ollama:/i, ''))
+            .filter(Boolean)
+        : [];
+      if (installed.length > 0) return installed;
+    }
+  } catch {
+    // Continue to next discovery source
   }
 
+  // 2. Try correction-api /api/models
+  if (correctionApiUrl && correctionApiToken) {
+    try {
+      const corrResp = await fetch(buildCorrectionApiUrl(correctionApiUrl, '/api/models'), {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${correctionApiToken}` },
+        signal: AbortSignal.timeout(3500),
+      });
+      if (corrResp.ok) {
+        const data = await corrResp.json();
+        const models = Array.isArray(data?.models)
+          ? data.models.map((m: any) => ensureText(m?.name || m)).filter(Boolean)
+          : [];
+        if (models.length > 0) return models;
+      }
+    } catch {
+      // Continue to direct Ollama tags
+    }
+  }
+
+  // 3. Try direct Ollama /api/tags
   try {
-    const response = await fetch(buildCorrectionApiUrl(correctionApiUrl, '/api/correct'), {
+    const tagsResp = await fetch(`${ollamaBaseUrl.replace(/\/+$/, '')}/api/tags`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(3500),
+    });
+    if (tagsResp.ok) {
+      const data = await tagsResp.json();
+      const models = Array.isArray(data?.models)
+        ? data.models.map((m: any) => ensureText(m?.name || m)).filter(Boolean)
+        : [];
+      if (models.length > 0) return models;
+    }
+  } catch {
+    // Ignore
+  }
+
+  return [];
+}
+
+async function evaluateViaOrf(
+  orfApiUrl: string,
+  resolvedModel: string,
+  prompt: string,
+): Promise<Response | null> {
+  try {
+    const orfModelId = resolvedModel.startsWith('ollama:') ? resolvedModel : `ollama:${resolvedModel}`;
+    const response = await fetch(`${orfApiUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${correctionApiToken}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
-        texto,
-        rubrica,
-        model,
-        promptOverride,
+        model: orfModelId,
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres un asistente de corrección académica. Devuelve SOLO JSON válido sin bloques markdown ni comentarios.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.1,
+        stream: false,
       }),
     });
 
-    const responseText = await response.text();
-    let parsed: unknown = responseText;
+    if (!response.ok) return null;
+    const data = await response.json();
+    const rawContent = ensureText(data?.content || data?.choices?.[0]?.message?.content);
+    if (!rawContent) return null;
 
-    try {
-      parsed = JSON.parse(responseText);
-    } catch {
-      // Keep raw text fallback.
-    }
-
-    if (!response.ok) {
-      const upstream = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
-      return json(
-        {
-          error: ensureText(upstream.error) || 'Correction backend failed',
-          code: ensureText(upstream.code) || undefined,
-          upstreamStatus: response.status,
-          upstreamBody: parsed,
-        },
-        response.status === 400 || response.status === 422 ? response.status : 502,
-      );
-    }
-
-    if (parsed && typeof parsed === 'object') {
-      const payload = parsed as Record<string, unknown>;
-      return json({ provider: 'ollama', ...payload }, 200);
-    }
+    const evaluation = normalizeEvaluation(rawContent);
+    const telemetry = data?.telemetry || {};
 
     return json(
       {
         ok: true,
-        provider: 'ollama',
-        evaluation: normalizeEvaluation(parsed),
+        provider: 'orf',
+        model: resolvedModel,
+        created_at: new Date().toISOString(),
+        evaluation,
+        timing_ms: {
+          total: typeof telemetry.durationMs === 'number' ? telemetry.durationMs : null,
+          load: null,
+          prompt_eval: null,
+          eval: null,
+        },
+        token_usage: {
+          prompt_eval_count: typeof telemetry.tokensPrompt === 'number' ? telemetry.tokensPrompt : null,
+          eval_count: typeof telemetry.tokensCompletion === 'number' ? telemetry.tokensCompletion : null,
+          total_tokens: typeof telemetry.tokensTotal === 'number' ? telemetry.tokensTotal : null,
+        },
       },
       200,
     );
-  } catch (error: any) {
-    return json(
-      {
-        error: 'Failed to reach correction backend',
-        detail: error?.message || 'Unknown error',
-      },
-      502,
-    );
+  } catch {
+    return null;
   }
+}
+
+async function handleOllama(
+  { texto, rubrica, model, promptOverride }: CorrectionRequest,
+  requestedProvider = 'ollama',
+): Promise<Response> {
+  const correctionApiUrl = import.meta.env.CORRECTION_API_URL;
+  const correctionApiToken = import.meta.env.CORRECTION_API_TOKEN;
+  const orfApiUrl = ensureText(import.meta.env.ORF_API_URL) || DEFAULT_ORF_API_URL;
+  const ollamaBaseUrl = ensureText(import.meta.env.OLLAMA_BASE_URL) || DEFAULT_OLLAMA_BASE_URL;
+
+  const availableModels = await discoverInstalledOllamaModels(
+    orfApiUrl,
+    correctionApiUrl,
+    correctionApiToken,
+    ollamaBaseUrl,
+  );
+
+  const resolvedModel = pickBestAvailableOllamaModel({
+    requestedModel: model,
+    defaultModel: ensureText(import.meta.env.OLLAMA_MODEL) || DEFAULT_OLLAMA_PRIORITY_MODELS[0],
+    availableModels,
+  });
+
+  const prompt = ensureText(promptOverride) || createDeepSeekPrompt({
+    studentText: ensureText(texto),
+    rubricText: rubrica,
+  });
+
+  // If explicitly using provider: 'orf', try ORF first
+  if (requestedProvider === 'orf') {
+    const orfResponse = await evaluateViaOrf(orfApiUrl, resolvedModel, prompt);
+    if (orfResponse) return orfResponse;
+  }
+
+  // Primary local evaluation via correction-api (/opt/ollama-api) with resolved priority model
+  if (correctionApiUrl && correctionApiToken) {
+    try {
+      const response = await fetch(buildCorrectionApiUrl(correctionApiUrl, '/api/correct'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${correctionApiToken}`,
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          texto,
+          rubrica,
+          model: resolvedModel,
+          promptOverride,
+        }),
+      });
+
+      const responseText = await response.text();
+      let parsed: unknown = responseText;
+
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        // Keep raw text fallback.
+      }
+
+      if (response.ok) {
+        if (parsed && typeof parsed === 'object') {
+          const payload = parsed as Record<string, unknown>;
+          return json(
+            {
+              provider: 'ollama',
+              model: ensureText(payload.model) || resolvedModel,
+              ...payload,
+            },
+            200,
+          );
+        }
+
+        return json(
+          {
+            ok: true,
+            provider: 'ollama',
+            model: resolvedModel,
+            evaluation: normalizeEvaluation(parsed),
+          },
+          200,
+        );
+      }
+    } catch {
+      // Fall through to ORF / direct Ollama fallback
+    }
+  }
+
+  // Fallback 1: ORF service (/v1/chat/completions)
+  const orfFallbackResponse = await evaluateViaOrf(orfApiUrl, resolvedModel, prompt);
+  if (orfFallbackResponse) return orfFallbackResponse;
+
+  // Fallback 2: Direct Ollama (/api/generate)
+  try {
+    const directResp = await fetch(`${ollamaBaseUrl.replace(/\/+$/, '')}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({
+        model: resolvedModel,
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.1,
+          num_predict: 1200,
+        },
+      }),
+    });
+
+    if (directResp.ok) {
+      const raw = await directResp.json();
+      return json(
+        {
+          ok: true,
+          provider: 'ollama',
+          model: ensureText(raw?.model) || resolvedModel,
+          created_at: raw?.created_at || new Date().toISOString(),
+          evaluation: normalizeEvaluation(raw?.response || ''),
+        },
+        200,
+      );
+    }
+  } catch {
+    // Ignore and return final error below
+  }
+
+  return json(
+    {
+      error: 'Failed to reach correction backend (ollama-api and orf-api unavailable)',
+      model: resolvedModel,
+    },
+    502,
+  );
 }
 
 async function handleDeepSeek({ texto, rubrica, model, promptOverride }: CorrectionRequest): Promise<Response> {

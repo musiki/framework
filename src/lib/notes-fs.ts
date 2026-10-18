@@ -4,6 +4,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import {
   resolveCourseSource,
+  resolveCourseFolderName,
   getEditableLocalRepoFile,
   writeEditableLocalRepoFile,
   deleteEditableLocalRepoFile,
@@ -112,17 +113,18 @@ function resolveCourseScanDir(courseId: string): string | null {
   if (!source) return null;
 
   const coursesDir = String(source.coursesDir || 'cursos').trim() || 'cursos';
+  const folderName = resolveCourseFolderName(source, courseId);
   const candidates: string[] = [];
 
   if (source.localPath) {
     const resolved = path.resolve(process.cwd(), source.localPath);
     if (fs.existsSync(resolved)) {
-      candidates.push(path.join(resolved, coursesDir, courseId));
+      candidates.push(path.join(resolved, coursesDir, folderName));
     }
   }
   candidates.push(
-    path.join(process.cwd(), '.content-sources', source.id, coursesDir, courseId),
-    path.join(process.cwd(), 'src', 'content', 'cursos', courseId),
+    path.join(process.cwd(), '.content-sources', source.id, coursesDir, folderName),
+    path.join(process.cwd(), 'src', 'content', 'cursos', folderName),
   );
 
   return candidates.find(p => fs.existsSync(p) && fs.statSync(p).isDirectory()) ?? null;
@@ -135,6 +137,8 @@ export function listCourseNotes(courseId: string): NoteListItem[] {
   const source = resolveCourseSource(courseId);
   if (!source) return [];
 
+  const folderName = resolveCourseFolderName(source, courseId);
+  const defaultStatus = String(source.tenant || '').trim().toLowerCase() === 'hem' ? 'published' : 'draft';
   const notes: NoteListItem[] = [];
 
   const scanDir = (dir: string, relDir: string) => {
@@ -147,7 +151,7 @@ export function listCourseNotes(courseId: string): NoteListItem[] {
       if (!entry.isFile() || !entry.name.endsWith('.md') || entry.name === '_index.md') continue;
 
       const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
-      const repoPath = `cursos/${courseId}/${relPath}`;
+      const repoPath = `cursos/${folderName}/${relPath}`;
       const file = getEditableLocalRepoFile(source, repoPath);
       if (!file) continue;
 
@@ -158,7 +162,7 @@ export function listCourseNotes(courseId: string): NoteListItem[] {
         title: String(data.title || entry.name.slice(0, -3)),
         type: String(data.type || 'lesson'),
         chapter,
-        status: String(data.status || 'draft'),
+        status: String(data.status || defaultStatus),
         order: Number(data.order) || 0,
         theme: data.theme ? String(data.theme) : undefined,
         filePath: repoPath,

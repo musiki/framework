@@ -432,7 +432,9 @@ const sidebarLessons = canManageLiveInteractions
 
 // Group lessons by chapter
 const chapters = sidebarLessons.reduce((acc, lesson) => {
-  const chapter = lesson.data.chapter || 'general';
+  const legacyRelPath = getCourseEntryLegacyPath(lesson, canonicalCourseIdToUse || '');
+  const legacyDir = legacyRelPath.includes('/') ? legacyRelPath.split('/').slice(0, -1).join('/') : '';
+  const chapter = lesson.data.chapter || legacyDir || 'general';
   if (!acc[chapter]) acc[chapter] = [];
   acc[chapter].push(lesson);
   return acc;
@@ -9083,6 +9085,14 @@ function renderLessonsTreeHTML(
           feedback.hidden = false;
           cards.innerHTML = '';
 
+          const resolvedProvider = providerName || providerLabel;
+          const resolvedModel = modelName || modelLabel;
+          meta.textContent = [
+            `Proveedor: ${resolvedProvider}`,
+            resolvedModel ? `Modelo: ${resolvedModel}` : '',
+            `Aprobacion: ${passScore}/10`,
+          ].filter(Boolean).join(' · ');
+
           const score = parseEvalScore(evaluation?.calificacion?.nota);
           const scoreLabel = score !== null ? `${score}/10` : 'sin nota';
           const passed = score !== null ? score >= passScore : false;
@@ -9093,8 +9103,8 @@ function renderLessonsTreeHTML(
 
           explanation.textContent = [
             ensureEvalText(evaluation?.calificacion?.justificacion),
-            providerName ? `Proveedor: ${providerName}` : '',
-            modelName ? `Modelo: ${modelName}` : '',
+            resolvedProvider ? `Proveedor: ${resolvedProvider}` : '',
+            resolvedModel ? `Modelo: ${resolvedModel}` : '',
           ].filter(Boolean).join(' · ');
 
           renderEvaluationCard('Resumen', evaluation?.resumen);

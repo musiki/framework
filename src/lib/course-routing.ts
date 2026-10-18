@@ -93,8 +93,14 @@ export const isCourseLessonEntryForCourse = (
 ) => {
   if (!canonicalCourseId || isCourseIndexEntry(entry)) return false;
 
-  const filePath = getEntryFilePath(entry);
-  if (filePath) return filePath.startsWith(`src/content/cursos/${canonicalCourseId}/`);
+  const entryCourseId = getCourseEntryCourseId(entry);
+  if (
+    entryCourseId &&
+    (entryCourseId === canonicalCourseId ||
+      toCoursePathSlug(entryCourseId) === toCoursePathSlug(canonicalCourseId))
+  ) {
+    return true;
+  }
 
   return entry.id.startsWith(`${canonicalCourseId}/`);
 };
@@ -104,9 +110,15 @@ export const getCourseEntryLegacyPath = (
   canonicalCourseId: string,
 ) => {
   const filePath = getEntryFilePath(entry);
-  const filePathPrefix = `src/content/cursos/${canonicalCourseId}/`;
-  if (filePath.startsWith(filePathPrefix)) {
-    return stripMarkdownExtension(filePath.slice(filePathPrefix.length));
+  const filePathMatch = filePath.match(/(?:^|\/)src\/content\/cursos\/([^/]+)\/(.+)$/);
+  if (
+    filePathMatch?.[1] &&
+    filePathMatch?.[2] &&
+    (!canonicalCourseId ||
+      filePathMatch[1] === canonicalCourseId ||
+      toCoursePathSlug(filePathMatch[1]) === toCoursePathSlug(canonicalCourseId))
+  ) {
+    return stripMarkdownExtension(filePathMatch[2]);
   }
 
   return canonicalCourseId

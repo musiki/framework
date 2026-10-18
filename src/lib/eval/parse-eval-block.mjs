@@ -1,4 +1,5 @@
 import yaml from 'js-yaml';
+import { sanitizeRequestedModel } from '../ai/model-priority.mjs';
 
 const ALLOWED_MODES = new Set(['self', 'graded', 'peer', 'teacherreview', 'classtime']);
 const MODE_ALIASES = new Map([
@@ -441,7 +442,7 @@ const normalizePatchAi = (raw, common) => {
     ),
     checks,
     provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
-    model: asText(raw.model),
+    model: sanitizeRequestedModel(asText(raw.model)),
     passScore: asPositiveNumber(raw.passScore, 6),
     minChars: asPositiveInteger(raw.minChars, 0),
     placeholder: asText(
@@ -460,7 +461,7 @@ const normalizeShortAi = (raw, common) => ({
   prompt: asText(raw.prompt || raw.question || raw.title || ''),
   rubric: asText(raw.rubric || raw.criteria || raw.rubrica),
   provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
-  model: asText(raw.model),
+  model: sanitizeRequestedModel(asText(raw.model)),
   passScore: asPositiveNumber(raw.passScore, 6),
   minChars: asPositiveInteger(raw.minChars, 0),
   placeholder: asText(
@@ -488,7 +489,7 @@ const normalizeReferenceAi = (raw, common) => ({
   ),
   rubric: asText(raw.rubric || raw.criteria || raw.rubrica),
   provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
-  model: asText(raw.model),
+  model: sanitizeRequestedModel(asText(raw.model)),
   passScore: asPositiveNumber(raw.passScore, 6),
   minChars: asPositiveInteger(raw.minChars, 0),
   placeholder: asText(
@@ -506,7 +507,7 @@ const C4_ALIASES = new Map([
   ['minic', 'mini-c'], ['mini-c', 'mini-c'], ['mini_c', 'mini-c'],
   ['littlec', 'little-c'], ['little-c', 'little-c'], ['little_c', 'little-c'],
   ['proc', 'pro-c'], ['pro-c', 'pro-c'], ['pro_c', 'pro-c'],
-  ['bigc', 'big-c'], ['big-c', 'big-c'], ['big_c', 'big-c'],
+  ['bigc', 'big-c'], ['big-c', 'big-c'], ['big_c', 'big_c'],
 ]);
 const normalizeC4 = (value, fallback = 'little-c') => {
   const v = asText(value).toLowerCase().replace(/\s+/g, '-');
@@ -534,7 +535,7 @@ const normalizeColoquio = (raw, common) => ({
   maxMinutes: asPositiveNumber(raw.maxMinutes ?? raw.max_minutes, 12),
   rubric: asText(raw.rubric || raw.criteria || raw.rubrica),
   provider: asText(raw.provider, 'ollama').toLowerCase() || 'ollama',
-  model: asText(raw.model),
+  model: sanitizeRequestedModel(asText(raw.model)),
   submitLabel: asText(raw.submitLabel || raw.cta || raw.buttonLabel || 'Enviar coloquio'),
   paradigm: 'self-determination',
 });
