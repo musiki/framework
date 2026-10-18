@@ -276,4 +276,11 @@ export const fr: DeepPartial<Omit<Dict, 'mm'>> = {
     forumHome: 'Accueil du forum',
     forumFooter: 'Forum du cours',
   },
+  about: {
+    title: 'À propos',
+    description: 'qu’est-ce que musiki',
+    heading: 'introduction',
+    p1: 'musiki est un dépôt de connaissances musicales et un CMS performatif pour les musiciennes et musiciens.',
+    p2: 'Initialement basé sur MediaWiki, une nouvelle version publique est construite en 2026.',
+  },
 };

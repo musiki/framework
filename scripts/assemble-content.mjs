@@ -258,11 +258,18 @@ const main = () => {
       throw new Error(`Source "${source.id}" missing vault root "${contentRoot}"`);
     }
 
-    const sourceCoursesRoot = path.join(sourceContentRoot, assembly.coursesDir);
-    const sourcePublicRoot = path.join(sourceContentRoot, assembly.publicDir);
+    const sourceCoursesDir = source.coursesDir || assembly.coursesDir;
+    const sourcePublicDir = source.publicDir || assembly.publicDir;
+    const sourceCoursesRoot = path.join(sourceContentRoot, sourceCoursesDir);
+    const sourcePublicRoot = path.join(sourceContentRoot, sourcePublicDir);
 
-    copyTree(source.id, sourceCoursesRoot, path.join(stagingDir, assembly.coursesDir), 'courses');
-    copyTree(source.id, sourcePublicRoot, path.join(stagingDir, assembly.publicDir), 'public', { project: source.id });
+    const courseFrontmatter = source.tenant ? { tenant: source.tenant } : null;
+    const publicFrontmatter = source.tenant
+      ? { project: source.id, tenant: source.tenant }
+      : { project: source.id };
+
+    copyTree(source.id, sourceCoursesRoot, path.join(stagingDir, assembly.coursesDir), 'courses', courseFrontmatter);
+    copyTree(source.id, sourcePublicRoot, path.join(stagingDir, assembly.publicDir), 'public', publicFrontmatter);
 
     if (!assembly.promoteFromCourses || !fs.existsSync(sourceCoursesRoot)) continue;
 
@@ -316,7 +323,7 @@ const main = () => {
       const copied = registerCopy(filePath, destinationAbs, {
         sourceLabel: `${source.id}:${sourceRelative}`,
         mode: 'promoted',
-      });
+      }, courseFrontmatter);
 
       if (copied) {
         promotedFiles.push({

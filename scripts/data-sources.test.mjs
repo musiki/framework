@@ -130,4 +130,35 @@ test("musiki manifest carries soog-instruments as an optional data source; hem m
   assert.equal(musiki.enabled, true);
   assert.equal(musiki.localPath, undefined, "no machine-specific path in the public manifest");
   assert.ok(!read("sources.hem.json").sources.some((s) => s.id === "soog-instruments" || /soog/i.test(s.repo || "")));
+
+  const hemInUnified = read("sources.manifest.json").sources.find((s) => s.id === "internetmusic");
+  assert.ok(hemInUnified, "unified manifest includes internetmusic");
+  assert.equal(hemInUnified.repo, "HEM-Multimedia-Master/internetmusic");
+  assert.equal(hemInUnified.coursesDir, "courses");
+  assert.equal(hemInUnified.localPath, "../internetmusic");
+  assert.equal(hemInUnified.tenant, "hem");
 });
+
+test("assemble-content: supports per-source coursesDir and injects tenant frontmatter", () => {
+  const dir = tempDir("assemble-tenant-");
+  fs.mkdirSync(path.join(dir, "src", "internetmusic", "courses", "agentic music"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "src", "internetmusic", "courses", "agentic music", "_index.md"),
+    "---\ntitle: Agentic Music\n---\n# Welcome\n",
+  );
+  fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({
+    sources: [
+      { id: "internetmusic", enabled: true, coursesDir: "courses", tenant: "hem" },
+    ],
+  }));
+  const r = spawnSync(process.execPath, [
+    assembleScript, "--manifest", "manifest.json", "--sources-dir", "src",
+    "--staging", "staging", "--report", "report.json", "--target", "content",
+  ], { cwd: dir, env: cleanEnv(), encoding: "utf8" });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const stagedFile = path.join(dir, "staging", "cursos", "agentic music", "_index.md");
+  assert.ok(fs.existsSync(stagedFile));
+  const content = fs.readFileSync(stagedFile, "utf8");
+  assert.match(content, /^tenant:\s*hem$/m);
+});
+

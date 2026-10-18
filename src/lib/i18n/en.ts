@@ -488,6 +488,13 @@ export const en = {
     forumHome: 'Forum home',
     forumFooter: 'Course forum',
   },
+  about: {
+    title: 'About',
+    description: 'what musiki is',
+    heading: 'introduction',
+    p1: 'musiki is a musical knowledge repository and performative CMS for musicians.',
+    p2: 'Originally based on mediawiki, a new public version is being built during 2026.',
+  },
   mm: mmEn,
 } as const;
 

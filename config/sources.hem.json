@@ -7,7 +7,9 @@
       "repo": "HEM-Multimedia-Master/internetmusic",
       "branch": "main",
       "contentRoot": ".",
-      "localPath": "../../hem/internetmusic"
+      "coursesDir": "courses",
+      "localPath": "../internetmusic",
+      "tenant": "hem"
     }
   ],
   "assembly": {

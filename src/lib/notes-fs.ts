@@ -111,16 +111,17 @@ function resolveCourseScanDir(courseId: string): string | null {
   const source = resolveCourseSource(courseId);
   if (!source) return null;
 
+  const coursesDir = String(source.coursesDir || 'cursos').trim() || 'cursos';
   const candidates: string[] = [];
 
   if (source.localPath) {
     const resolved = path.resolve(process.cwd(), source.localPath);
     if (fs.existsSync(resolved)) {
-      candidates.push(path.join(resolved, 'cursos', courseId));
+      candidates.push(path.join(resolved, coursesDir, courseId));
     }
   }
   candidates.push(
-    path.join(process.cwd(), '.content-sources', source.id, 'cursos', courseId),
+    path.join(process.cwd(), '.content-sources', source.id, coursesDir, courseId),
     path.join(process.cwd(), 'src', 'content', 'cursos', courseId),
   );
 

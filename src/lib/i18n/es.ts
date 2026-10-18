@@ -489,6 +489,13 @@ export const es: Dict = {
     forumHome: 'Inicio del foro',
     forumFooter: 'Foro del Curso',
   },
+  about: {
+    title: 'Acerca',
+    description: 'que es musiki',
+    heading: 'introducción',
+    p1: 'musiki es un repositorio de información musical y CMS performático para músicos.',
+    p2: 'Originalmente basado en mediawiki, durante 2026 se construye una nueva versión pública.',
+  },
   // mm (MishMash Concept Machine) has no Spanish UI; English keeps the Dict type complete.
   mm: mmEn,
 };

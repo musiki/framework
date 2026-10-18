@@ -12,6 +12,8 @@ import { getContentCanonicalSlug } from '../lib/content-slug';
 import { ensureDbUserFromSession } from '../lib/forum-server';
 import { isElevatedGlobalRole } from '../lib/roles';
 import { query } from '../lib/db/pool';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
 
 export const prerender = false;
 
@@ -41,12 +43,15 @@ const hasPublicStatus = (item) => {
 };
 
 export async function GET({ locals }) {
+  const tenant = locals?.tenant ?? TENANTS[DEFAULT_TENANT_ID];
   const session = locals?.session;
   const hasSession = Boolean(session?.user);
-  const [content, cursos] = await Promise.all([
+  const [rawContent, rawCursos] = await Promise.all([
     safeGetCollection('content'),
     getCollection('cursos'),
   ]);
+  const content = rawContent.filter((item) => matchesTenant(item, tenant.id));
+  const cursos = rawCursos.filter((item) => matchesTenant(item, tenant.id));
 
   const enrolledCourseIds = new Set();
   let canSearchAllCourses = false;

@@ -5,6 +5,7 @@ import { isElevatedGlobalRole } from '../lib/roles';
 import { buildCourseHref } from '../lib/course-routing';
 import { getSession } from 'auth-astro/server';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
 import { t } from '../lib/i18n';
 import { showsSoogDashboard } from '../lib/instruments/courses';
 
@@ -66,10 +67,10 @@ const locale = tenant.locale;
 const showUntref = tenant.id === 'musiki';
 const docsBaseUrl = String(brand.docsUrl).replace(/\/$/, '');
 
-// Get all courses from the content collection
+// Get all courses from the content collection for the current tenant
 const allCourseFiles = await getCollection('cursos').catch(() => []);
 const coursesData = allCourseFiles
-  .filter(entry => entry.id.endsWith('_index'))
+  .filter(entry => entry.id.endsWith('_index') && matchesTenant(entry, tenant.id))
   .map(entry => {
     const cid = entry.id.replace('/_index', '');
     return {
@@ -531,7 +532,7 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
       )}
     </div>
     <div class="ribbon-courses-menu-footer">
-      <a href="/cursos">{t(locale, 'ribbon.viewAllCourses')}</a>
+      <a href={tenant.id === 'hem' ? '/courses' : '/cursos'}>{t(locale, 'ribbon.viewAllCourses')}</a>
     </div>
   </div>
 )}

@@ -9,7 +9,10 @@ import {
   isCourseLessonEntryForCourse,
 } from '../lib/course-routing';
 
-export const prerender = true;
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
+
+export const prerender = false;
 
 function cleanMarkdown(md: string): string {
   if (!md) return '';
@@ -28,18 +31,20 @@ function cleanMarkdown(md: string): string {
     .trim();
 }
 
-export async function GET() {
-  const [allPublicPaths, rawCursos] = await Promise.all([
+export async function GET({ locals }: { locals?: any }) {
+  const tenant = locals?.tenant ?? TENANTS[DEFAULT_TENANT_ID];
+  const [allPublicPaths, allRawCursos] = await Promise.all([
     getPublicContentStaticPaths(),
     getCollection('cursos'),
   ]);
+  const rawCursos = allRawCursos.filter((item) => matchesTenant(item, tenant.id));
   
   const items = await Promise.all(allPublicPaths.map(async (routeMatch) => {
     if (routeMatch.props.kind !== 'content') return null;
     
     const route = routeMatch.props as PublicContentRouteProps;
     const item = await getEntry(route.collection, route.entryId);
-    if (!item) return null;
+    if (!item || !matchesTenant(item, tenant.id)) return null;
 
     const filename = item.id.split('/').pop()?.replace(/\.[^/.]+$/, '');
     const title = item.data.title || filename || 'Untitled';

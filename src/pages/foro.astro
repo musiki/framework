@@ -13,6 +13,7 @@ import { canonicalizeCourseId, getCourseAliases } from '../lib/course-alias';
 import { getCourseFrontmatterId } from '../lib/course-metadata';
 import { t } from '../lib/i18n';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
 
 type CourseMeta = {
   courseId: string;
@@ -50,7 +51,8 @@ function pickNewestTimestamp(current: string | null, candidate: string | null): 
   return candidateTs > currentTs ? candidate : current;
 }
 
-const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
+const tenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
+const locale = tenant.locale;
 // Strings the inline reader script writes (read through forumText()).
 const forumClientStrings = JSON.stringify({
   newThreadPlaceholder: t(locale, 'forum.newThreadPlaceholder'),
@@ -80,7 +82,7 @@ if (!session?.user?.email) {
 
 const allCourseEntries = await getCollection('cursos');
 const courses = allCourseEntries
-  .filter((entry) => entry.id.endsWith('/_index') || entry.id.endsWith('_index'))
+  .filter((entry) => (entry.id.endsWith('/_index') || entry.id.endsWith('_index')) && matchesTenant(entry, tenant.id))
   .map((entry) => ({
     courseId: entry.id.replace('/_index', ''),
     title: String(entry.data?.title || entry.id.replace('/_index', '')),

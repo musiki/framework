@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro';
 import { getCollection } from 'astro:content';
 import { getCourseFrontmatterId, getCourseLegacyCode } from '../../../lib/course-metadata';
+import { TENANTS, DEFAULT_TENANT_ID } from '../../../lib/tenant/tenants';
+import { matchesTenant } from '../../../lib/tenant/tenant-content';
 
 const json = (payload: unknown, status = 200) =>
   new Response(JSON.stringify(payload), {
@@ -35,6 +37,7 @@ const toAliasSlug = (value: unknown) =>
     .replace(/^-+|-+$/g, '');
 
 export const GET: APIRoute = async ({ locals }) => {
+  const tenant = (locals as any)?.tenant ?? TENANTS[DEFAULT_TENANT_ID];
   const session = (locals as any).session;
   const email = String(session?.user?.email || '').trim();
   if (!email) return json({ courseIds: [] });
@@ -67,7 +70,7 @@ export const GET: APIRoute = async ({ locals }) => {
 
     const rawCourseIds = dedupeCourseIds(enrollments as Array<{ courseId?: string | null }>);
 
-    const courses = await getCollection('cursos');
+    const courses = (await getCollection('cursos')).filter((course) => matchesTenant(course, tenant.id));
     const canonicalByAlias = new Map<string, string>();
     for (const course of courses) {
       if (!course.id.endsWith('/_index') && !course.id.endsWith('_index')) continue;
@@ -95,6 +98,7 @@ export const GET: APIRoute = async ({ locals }) => {
       if (titleAlias) canonicalByAlias.set(titleAlias, canonicalId);
     }
 
+    const tenantCourseIdSet = new Set(Array.from(canonicalByAlias.values()));
     const canonicalCourseIds = Array.from(
       new Set(
         rawCourseIds
@@ -103,9 +107,9 @@ export const GET: APIRoute = async ({ locals }) => {
             if (!normalized) return '';
             return canonicalByAlias.get(normalizeKey(normalized))
               || canonicalByAlias.get(toAliasSlug(normalized))
-              || normalized;
+              || '';
           })
-          .filter(Boolean),
+          .filter((cid) => cid && tenantCourseIdSet.has(cid)),
       ),
     );
 

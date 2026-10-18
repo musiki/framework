@@ -52,9 +52,11 @@ import { ensureDbUserFromSession } from '../lib/forum-server';
 import { query } from '../lib/db/pool';
 import { t } from '../lib/i18n';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
 import '../styles/theme.css';
 
-const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
+const tenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
+const locale = tenant.locale;
 
 // --- AUTHENTICATION ---
 const session = Astro.locals.session as any;
@@ -311,10 +313,11 @@ const studentAssignmentById = new Map<string, any>(
 const courseFiles = import.meta.glob('/src/content/cursos/**/_index.{md,mdx}', { eager: true });
 
 const courseEntries = Object.entries(courseFiles).map(([filepath, module]: any) => {
-  const fm = module.frontmatter;
+  const fm = module.frontmatter || {};
   
-  // Exclude files explicitly marked as a non-course type
+  // Exclude files explicitly marked as a non-course type or belonging to another tenant
   if (fm.type && fm.type !== 'course') return null;
+  if (!matchesTenant(fm, tenant.id)) return null;
 
   // Extract courseId from path (e.g., /src/content/cursos/my-course/_index.md -> my-course)
   const parts = filepath.split('/');

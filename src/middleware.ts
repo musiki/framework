@@ -15,6 +15,7 @@ const shouldSyncEvalCatalogForPath = (pathname: string): boolean => {
     pathname === "/" ||
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/cursos") ||
+    pathname.startsWith("/courses") ||
     pathname.startsWith("/live") ||
     pathname.startsWith("/foro")
   );

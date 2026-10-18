@@ -7,7 +7,8 @@
       "repo": "musiki/i1",
       "branch": "main",
       "contentRoot": ".",
-      "localPath": "../i1"
+      "localPath": "../i1",
+      "tenant": "musiki"
     },
     {
       "id": "i2",
@@ -15,7 +16,8 @@
       "repo": "musiki/i2",
       "branch": "main",
       "contentRoot": ".",
-      "localPath": "../i2"
+      "localPath": "../i2",
+      "tenant": "musiki"
     },
     {
       "id": "cym",
@@ -23,7 +25,8 @@
       "repo": "musiki/cym",
       "branch": "main",
       "contentRoot": ".",
-      "localPath": "../cym"
+      "localPath": "../cym",
+      "tenant": "musiki"
     },
     {
       "id": "s123",
@@ -31,7 +34,18 @@
       "repo": "musiki/s123",
       "branch": "main",
       "contentRoot": ".",
-      "localPath": "../s123"
+      "localPath": "../s123",
+      "tenant": "musiki"
+    },
+    {
+      "id": "internetmusic",
+      "enabled": true,
+      "repo": "HEM-Multimedia-Master/internetmusic",
+      "branch": "main",
+      "contentRoot": ".",
+      "coursesDir": "courses",
+      "localPath": "../internetmusic",
+      "tenant": "hem"
     },
     {
       "id": "soog-instruments",

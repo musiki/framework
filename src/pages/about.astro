@@ -1,14 +1,18 @@
 ---
 import AboutHeroImage from '../assets/mermaid-diagram-2026-04-03T15-08-22.svg';
 import Layout from '../layouts/WikiLayout.astro';
+import { t } from '../lib/i18n';
+import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+
+const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
 ---
 
 <Layout
-	title="Acerca"
-	description="que es musiki"
+	title={t(locale, 'about.title')}
+	description={t(locale, 'about.description')}
 	heroImage={AboutHeroImage}
 >
-<h2>introducción</h2>
-musiki es un repositorio de información musical y CMS performático para músicos.
-Originalmente basado en mediawiki, durante 2026 se construye una nueva versión pública.
+<h2>{t(locale, 'about.heading')}</h2>
+{t(locale, 'about.p1')}
+{t(locale, 'about.p2')}
 </Layout>

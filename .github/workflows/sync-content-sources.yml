@@ -16,13 +16,10 @@ on:
 permissions:
   contents: read
 
-# One group per instance: a hem content dispatch must never cancel an
-# in-flight musiki deploy (and vice versa). Pushes deploy both and stay in the
-# musiki group, as before. The hem-dispatch test below is an exact match
-# (GitHub `==` ignores case) and must stay identical to HEM_DISPATCH in the
-# "Select instances to deploy" step (scripts/vps/workflow-scope.test.mjs).
+# Single concurrency group: all content dispatches (musiki and hem) and pushes
+# deploy the unified musiki-framework instance.
 concurrency:
-  group: ${{ (github.event_name == 'repository_dispatch' && (github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'git@github.com:HEM-Multimedia-Master/internetmusic.git')) && 'content-sync-hem' || 'content-sync' }}
+  group: content-sync
   cancel-in-progress: true
 
 env:
@@ -83,32 +80,7 @@ jobs:
         with:
           node-version: 24
 
-      # repository_dispatch from HEM-Multimedia-Master/internetmusic -> hem only;
-      # any other dispatch -> musiki only; push / workflow_dispatch -> both.
-      # HEM_DISPATCH is the same expression as the concurrency group, so a run
-      # deploys musiki only when it sits in the musiki (content-sync) group.
-      - name: Select instances to deploy
-        id: scope
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          HEM_DISPATCH: ${{ github.event_name == 'repository_dispatch' && (github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic' || github.event.client_payload.source_repo == 'https://github.com/HEM-Multimedia-Master/internetmusic.git' || github.event.client_payload.source_repo == 'git@github.com:HEM-Multimedia-Master/internetmusic.git') }}
-        run: |
-          musiki=true
-          hem=true
-          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
-            if [[ "$HEM_DISPATCH" == "true" ]]; then
-              musiki=false
-            else
-              hem=false
-            fi
-          fi
-          echo "musiki=$musiki" >> "$GITHUB_OUTPUT"
-          echo "hem=$hem" >> "$GITHUB_OUTPUT"
-          echo "[scope] event=$EVENT_NAME target=${CONTENT_SOURCE_TARGET_REPO:-none} musiki=$musiki hem=$hem"
-
       - name: Sync checked-out framework into runtime dir
-        if: ${{ steps.scope.outputs.musiki == 'true' }}
         run: |
           mkdir -p "$VPS_FRAMEWORK_DIR"
 
@@ -126,85 +98,13 @@ jobs:
             "$GITHUB_WORKSPACE/" "$VPS_FRAMEWORK_DIR/"
 
       - name: Zero Downtime Deploy on VPS
-        if: ${{ steps.scope.outputs.musiki == 'true' }}
         run: |
           cd "$VPS_FRAMEWORK_DIR"
           bash scripts/vps/deploy-framework-local.sh
 
       - name: Reload Content Bus Sidecar
-        if: ${{ steps.scope.outputs.musiki == 'true' }}
         run: |
           cd "$VPS_FRAMEWORK_DIR"
           export PATH="$PATH:$(npm config get prefix)/bin"
           pm2 reload ecosystem.config.cjs --only musiki-content-bus --update-env || pm2 start ecosystem.config.cjs --only musiki-content-bus
-          pm2 save
-
-      # --- hem instance (/opt/hem/engine) -------------------------------------
-      # Runs after the musiki steps so a hem failure can never undo a musiki
-      # deploy. Skipped (with a notice) until /opt/hem/engine/.env exists.
-      - name: Check hem instance is provisioned
-        id: hem
-        if: ${{ steps.scope.outputs.hem == 'true' }}
-        continue-on-error: false
-        shell: bash
-        run: |
-          if [[ -f /opt/hem/engine/.env ]]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=hem deploy skipped::/opt/hem/engine/.env is missing; provision the hem instance to enable hem deploys"
-          fi
-
-      # A push (content-sync group) and a hem dispatch (content-sync-hem) can
-      # overlap, and the hem content bus can redeploy at any time. The rsync
-      # takes the same lock deploy-framework-local.sh holds for the whole hem
-      # build (/tmp/hem-engine-deploy.lock), so it never rewrites the tree
-      # mid-build. The lock is released before the deploy step, which takes it
-      # again itself: no nesting, so no self-deadlock.
-      - name: Sync checked-out framework into hem runtime dir
-        if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
-        continue-on-error: false
-        shell: bash
-        run: |
-          mkdir -p /opt/hem/engine
-
-          lock=()
-          if command -v flock >/dev/null 2>&1; then
-            lock=(flock -w 900 /tmp/hem-engine-deploy.lock)
-          else
-            echo "flock not available; syncing hem without deploy lock" >&2
-          fi
-
-          "${lock[@]}" rsync -a --delete \
-            --exclude '.env' \
-            --exclude '.git' \
-            --exclude '.astro' \
-            --exclude '.content-sources' \
-            --exclude 'node_modules' \
-            --exclude '.tmp' \
-            --exclude 'src/content' \
-            --exclude 'dist' \
-            --exclude 'dist_tmp' \
-            --exclude 'dist_old' \
-            "$GITHUB_WORKSPACE/" /opt/hem/engine/
-
-      - name: Zero Downtime Deploy hem on VPS
-        if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
-        continue-on-error: false
-        run: |
-          # The job env carries musiki's CONTENT_SOURCE_READ_TOKEN, which
-          # pull-sources prefers over the instance .env and which cannot read
-          # the hem source repo. When the hem .env defines its own token, drop
-          # the inherited one so the deploy uses it (value is never printed).
-          if grep -q '^CONTENT_SOURCE_READ_TOKEN=' /opt/hem/engine/.env; then unset CONTENT_SOURCE_READ_TOKEN; fi
-          cd /opt/hem/engine && MUSIKI_INSTANCE=hem VPS_FRAMEWORK_DIR=/opt/hem/engine VPS_DEPLOY_LOCK_FILE=/tmp/hem-engine-deploy.lock LILYPOND_ASSET_DIR=/opt/hem/data/lily VPS_RELOAD_COMMAND="pm2 reload ecosystem.config.cjs --only hem-engine --update-env || pm2 start ecosystem.config.cjs --only hem-engine --update-env" bash scripts/vps/deploy-framework-local.sh
-
-      - name: Reload hem Content Bus Sidecar
-        if: ${{ steps.scope.outputs.hem == 'true' && steps.hem.outputs.ready == 'true' }}
-        continue-on-error: false
-        run: |
-          cd /opt/hem/engine
-          export PATH="$PATH:$(npm config get prefix)/bin"
-          export MUSIKI_INSTANCE=hem
-          pm2 reload ecosystem.config.cjs --only hem-engine-content-bus --update-env || pm2 start ecosystem.config.cjs --only hem-engine-content-bus
           pm2 save

@@ -6,10 +6,12 @@ import { buildCourseHref } from '../lib/course-routing';
 import { isElevatedGlobalRole } from '../lib/roles';
 import { t } from '../lib/i18n';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
 
-const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
+const tenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
+const locale = tenant.locale;
 
-// Get all courses (files named _index.md in cursos collection)
+// Get all courses (files named _index.md in cursos collection) for the current tenant
 const allCourseFiles = await getCollection('cursos');
 const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -48,7 +50,7 @@ const normalizeCourseYear = (yearValue: unknown, legacyLevel: unknown): string =
 const normalizeCourseCardId = (value: unknown) => String(value ?? '');
 
 const courses = allCourseFiles
-  .filter(entry => entry.id.endsWith('_index'))
+  .filter(entry => entry.id.endsWith('_index') && matchesTenant(entry, tenant.id))
   .map(entry => ({
     id: entry.id.replace('/_index', ''),
     href: buildCourseHref(entry.id.replace('/_index', ''), (entry.data || {}) as Record<string, unknown>),

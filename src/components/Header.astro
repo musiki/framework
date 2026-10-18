@@ -8,6 +8,7 @@ import { execSync } from 'node:child_process';
 import { SignOut } from 'auth-astro/components';
 import { getSession } from 'auth-astro/server';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
 import { t } from '../lib/i18n';
 
 const tenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
@@ -118,7 +119,7 @@ if (user?.email) {
 			);
 
 			if (enrolledCourseIds.length > 0) {
-				const courseEntries = await getCollection('cursos');
+				const courseEntries = (await getCollection('cursos')).filter((entry) => matchesTenant(entry, tenant.id));
 				const courseMetaById = new Map<string, { title: string; code: string; pathSegment: string }>();
 				const canonicalByAlias = new Map<string, string>();
 
@@ -195,9 +196,10 @@ const resolvedActiveCourseId = normalizeCourseId(
 );
 const resolvedActiveCourseLabel = resolvedActiveCourse?.title || '';
 const courseMenuLabel = resolvedActiveCourseLabel || t(locale, 'header.courses');
+const coursesCatalogHref = tenant.id === 'hem' ? '/courses' : '/cursos';
 const activeCourseHref = resolvedActiveCourse
 	? `/${encodeCoursePath(resolvedActiveCourse.pathSegment || resolvedActiveCourse.courseId)}`
-	: '/cursos';
+	: coursesCatalogHref;
 const showHeaderClassControls = Boolean(user && (resolvedActiveCourseId || hasPerformativeRoomLink));
 const normalizedTeacherCreateHref = typeof teacherCreateHref === 'string' ? teacherCreateHref.trim() : '';
 const normalizedTeacherEditHref = typeof teacherEditHref === 'string' ? teacherEditHref.trim() : '';
@@ -271,7 +273,7 @@ const withActiveCourse = (href: string) => {
 							</div>
 						</div>
 					) : (
-						<HeaderLink href="/cursos">{t(locale, 'header.courses')}</HeaderLink>
+						<HeaderLink href={coursesCatalogHref}>{t(locale, 'header.courses')}</HeaderLink>
 					)
 				)
 			}

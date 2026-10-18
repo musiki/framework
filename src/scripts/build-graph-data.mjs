@@ -82,7 +82,7 @@ function makeExcerpt(content, maxChars = 300) {
   return text;
 }
 
-export function buildGraphData({ publicOnly = false } = {}) {
+export function buildGraphData({ publicOnly = false, tenant = null } = {}) {
   const ROOT = path.resolve('src/content');
   const files = [];
   
@@ -96,6 +96,7 @@ export function buildGraphData({ publicOnly = false } = {}) {
     }
   })(ROOT);
   
+  const normalizedTenant = tenant ? String(tenant).trim().toLowerCase() : '';
   const fileRecords = files.map((abs) => {
     const rel = abs.slice(ROOT.length + 1);
     const posix = rel.split(path.sep).join('/');
@@ -105,8 +106,13 @@ export function buildGraphData({ publicOnly = false } = {}) {
     const base = slug.split('/').pop() || slug;
     const title = fm.data.title || base;
     const publicStatus = isPublicStatus(fm.data);
-    return { abs, posix, raw, fm, slug, base, title, isPublic: publicStatus };
-  }).filter((record) => record.slug.toLowerCase() !== 'home');
+    const recordTenant = String(fm.data.tenant || 'musiki').trim().toLowerCase() || 'musiki';
+    return { abs, posix, raw, fm, slug, base, title, isPublic: publicStatus, tenant: recordTenant };
+  }).filter((record) => {
+    if (record.slug.toLowerCase() === 'home') return false;
+    if (normalizedTenant && record.tenant !== normalizedTenant) return false;
+    return true;
+  });
 
   const visibleRecords = publicOnly
     ? fileRecords.filter((record) => record.isPublic)

@@ -10,7 +10,10 @@ type SourceManifestSource = {
   repo?: string;
   branch?: string;
   contentRoot?: string;
+  coursesDir?: string;
+  publicDir?: string;
   localPath?: string;
+  tenant?: string;
   /** `false` for data sources (not courses), e.g. soog-instruments. */
   assemble?: boolean;
 };
@@ -46,11 +49,27 @@ export function resolveCourseSource(courseId: string): SourceManifestSource | nu
 
   const manifest = readManifest();
   const sources = Array.isArray(manifest.sources) ? manifest.sources : [];
-  return (
-    sources.find(
-      (source) => source?.assemble !== false && normalizeText(source?.id) === normalizedCourseId,
-    ) || null
+  const exact = sources.find(
+    (source) => source?.assemble !== false && normalizeText(source?.id) === normalizedCourseId,
   );
+  if (exact) return exact;
+
+  // Also check if courseId is a subfolder inside a source's coursesDir (e.g. "agentic music" inside "internetmusic")
+  for (const source of sources) {
+    if (!source?.id || source.assemble === false) continue;
+    const coursesDir = normalizeText(source.coursesDir) || 'cursos';
+    const candidates = [
+      path.join(process.cwd(), '.content-sources', source.id, coursesDir, normalizedCourseId),
+    ];
+    if (source.localPath) {
+      candidates.unshift(path.join(path.resolve(process.cwd(), source.localPath), coursesDir, normalizedCourseId));
+    }
+    if (candidates.some((p) => fs.existsSync(p) && fs.statSync(p).isDirectory())) {
+      return source;
+    }
+  }
+
+  return null;
 }
 
 export function sourcePathFromFrameworkFilePath(filePath: unknown): string {
@@ -204,14 +223,19 @@ function buildLocalEditableCandidatePaths(source: SourceManifestSource | null, r
   const normalizedRepoPath = sanitizeRepoMarkdownPath(repoPath);
   if (!normalizedRepoPath || !source?.id) return [];
 
+  const coursesDir = normalizeText(source.coursesDir) || 'cursos';
+  const sourceRelPath = coursesDir !== 'cursos' && normalizedRepoPath.startsWith('cursos/')
+    ? `${coursesDir}/${normalizedRepoPath.slice('cursos/'.length)}`
+    : normalizedRepoPath;
+
   const candidates = [
-    path.join(process.cwd(), '.content-sources', source.id, normalizedRepoPath),
+    path.join(process.cwd(), '.content-sources', source.id, sourceRelPath),
     path.join(process.cwd(), 'src/content', normalizedRepoPath),
   ];
 
   const sourceLocalRoot = resolveSourceLocalRoot(source);
   if (sourceLocalRoot) {
-    candidates.unshift(path.join(sourceLocalRoot, normalizedRepoPath));
+    candidates.unshift(path.join(sourceLocalRoot, sourceRelPath));
   }
 
   return Array.from(new Set(candidates));

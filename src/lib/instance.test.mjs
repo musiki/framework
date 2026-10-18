@@ -31,9 +31,10 @@ test('hem manifest has the internetmusic source and assembly block', () => {
   assert.equal(enabled.length, 1);
   assert.deepEqual(enabled[0], {
     id: 'internetmusic', enabled: true, repo: 'HEM-Multimedia-Master/internetmusic',
-    branch: 'main', contentRoot: '.', localPath: '../../hem/internetmusic',
+    branch: 'main', contentRoot: '.', coursesDir: 'courses', localPath: '../internetmusic', tenant: 'hem',
   });
   assert.equal(m.assembly.coursesDir, 'cursos');
   assert.equal(m.assembly.requiredPublicStatus, 'approved');
   assert.equal(m.assembly.excludeTypesFromPublic.length, 4);
 });
+

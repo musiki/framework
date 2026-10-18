@@ -36,7 +36,7 @@ export const RESERVED_SLUGS: readonly string[] = Object.freeze([
   'feed', 'rss', 'atom', 'static', 'assets', 'public', 'studio', 'www',
   // musiki pages of the engine (top-level src/pages entries) — kept out of
   // the concept namespace so an mm URL never looks like one of them
-  'dashboard', 'slides', 'cursos', 'foro', 'live', 'editor', 'privacy', 'terms', 'centauro', 'content-media',
+  'dashboard', 'slides', 'cursos', 'courses', 'foro', 'live', 'editor', 'privacy', 'terms', 'centauro', 'content-media',
   'debug', 'demo', 'notas', 'notas-editor', 'room', 'sse', 'test-table', 'public-search', 'search-index',
   // top-level entries of public/ (static files served before any page)
   'favicon', 'fonts', 'inc', 'lib', 'logos', 'scripts', 'vendor', 'wasm', 'graph-data', 'logo-musiki', 'hem-logo',

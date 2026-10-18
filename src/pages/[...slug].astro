@@ -48,6 +48,7 @@ import {
   getDefaultContentLanguage,
 } from '../lib/content-language';
 import { TENANTS, DEFAULT_TENANT_ID } from '../lib/tenant/tenants';
+import { matchesTenant } from '../lib/tenant/tenant-content';
 import { getCoursePageHistory } from '../lib/page-history';
 import { buildPageProperties } from '../lib/page-properties';
 
@@ -111,11 +112,13 @@ const slug = rawSlug
   })
   .join('/');
 
-// Handle legacy /cursos/ prefix by redirecting to top level
-if (slug.startsWith('cursos/')) {
-  const newPath = slug.replace(/^cursos\//, '/');
+// Handle legacy /cursos/ or /courses/ prefix by redirecting to top level
+if (slug.startsWith('cursos/') || slug.startsWith('courses/')) {
+  const newPath = slug.replace(/^(cursos|courses)\//, '/');
   return Astro.redirect(newPath + Astro.url.search);
 }
+
+const currentTenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
 
 // Parse the slug to get course and optional path
 const parts = slug.split('/');
@@ -123,9 +126,12 @@ const requestedCoursePathSegment = parts[0];
 const isCourseForumPage = (parts.length === 2 && parts[1] === 'foro') || (parts.length === 1 && Astro.url.searchParams.has('board'));
 const potentialCanonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
 
-// Check if this is actually a course
-const initialCourseIndexCandidate = potentialCanonicalCourseId
+// Check if this is actually a course belonging to the current tenant
+const rawInitialCourseIndexCandidate = potentialCanonicalCourseId
   ? await getEntry('cursos', `${potentialCanonicalCourseId}/_index`)
+  : null;
+const initialCourseIndexCandidate = rawInitialCourseIndexCandidate && matchesTenant(rawInitialCourseIndexCandidate, currentTenant.id)
+  ? rawInitialCourseIndexCandidate
   : null;
 
 const canonicalCourseId = initialCourseIndexCandidate ? potentialCanonicalCourseId : null;
@@ -171,7 +177,10 @@ if (routeMatch) {
     publicRouteCollection = route.collection;
     publicRouteEntryId = route.entryId;
     // @ts-ignore
-    publicEntry = await getEntry(route.collection, route.entryId);
+    const candidatePublicEntry = await getEntry(route.collection, route.entryId);
+    publicEntry = candidatePublicEntry && matchesTenant(candidatePublicEntry, currentTenant.id)
+      ? candidatePublicEntry
+      : null;
     if (publicEntry) {
        const rendered = await render(publicEntry);
        PublicContent = rendered.Content;
@@ -206,8 +215,11 @@ const isPublicReaderMode = isPublicWikiPage && !session;
 const requestedCourseId = canonicalCourseId || (session && publicEntry ? (publicEntry.data as any).project : null);
 const finalCanonicalCourseId = await canonicalizeCourseId(requestedCourseId);
 
-const courseIndexCandidate = finalCanonicalCourseId
+const rawCourseIndexCandidate = finalCanonicalCourseId
   ? await getEntry('cursos', `${finalCanonicalCourseId}/_index`)
+  : null;
+const courseIndexCandidate = rawCourseIndexCandidate && matchesTenant(rawCourseIndexCandidate, currentTenant.id)
+  ? rawCourseIndexCandidate
   : null;
 
 // Get the final course index
@@ -312,6 +324,7 @@ const hasCourseEnrollment = Boolean(sessionEnrollmentRole);
 
 // Fetch global concepts from the 'content' collection
 const globalConcepts = (await getCollection('content')).filter((entry) => {
+  if (!matchesTenant(entry, currentTenant.id)) return false;
   const type = String(entry.data.type || '').trim().toLowerCase();
   const status = String(entry.data.status || '').trim().toLowerCase();
 
@@ -821,7 +834,7 @@ const publicGraphNodeId = publicRouteEntryId
 const publicGraphRelations = (() => {
   if (!isPublicWikiPage) return { outlinks: [], inlinks: [], hasAny: false };
 
-  const graph = buildGraphData({ publicOnly: true });
+  const graph = buildGraphData({ publicOnly: true, tenant: currentTenant.id });
   const nodeById = new Map(graph.nodes.map((node: any) => [String(node.id), node]));
   const currentNode =
     nodeById.get(publicGraphNodeId) ||
