@@ -7,12 +7,14 @@ import { countWords } from '../../lib/amigx-criticx/logic';
 interface Props {
   courseId?: string;
   session?: { user?: { name?: string; email?: string; image?: string } } | null;
+  isTeacher?: boolean;
   initialView?: 'form' | 'devoluciones' | 'dashboard';
 }
 
 const {
   courseId = 's123',
   session = null,
+  isTeacher: isTeacherProp = false,
   initialView = 'form',
 } = Astro.props;
 
@@ -24,7 +26,7 @@ if (session?.user?.email) {
     const dbUser = await ensureDbUserFromSession(session as any);
     if (dbUser) {
       const access = await getForumCourseAccess(dbUser, courseId);
-      const isTeacher = Boolean(access.isTeacher || isElevatedGlobalRole(dbUser.role));
+      const isTeacher = Boolean(isTeacherProp || access.isTeacher || isElevatedGlobalRole(dbUser.role));
       if (access.isEnrolled || isTeacher) {
         initialState = await getAmigxCriticxPortalState(courseId, {
           id: dbUser.id,
@@ -43,7 +45,7 @@ if (session?.user?.email) {
   }
 }
 
-const isTeacherViewer = Boolean(initialState?.viewer?.isTeacher);
+const isTeacherViewer = Boolean(isTeacherProp || initialState?.currentUser?.isTeacher);
 const effectiveInitialView: 'form' | 'devoluciones' | 'dashboard' =
   initialView === 'dashboard' && !isTeacherViewer ? 'form' : initialView;
 
@@ -532,7 +534,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
     }
 
     function renderDashboard(nextState: AmigxCriticxPortalState) {
-      if (!nextState.viewer?.isTeacher) return;
+      if (!nextState.currentUser?.isTeacher && root.dataset.acIsTeacher !== 'true') return;
       const students = nextState.allActiveStudents ?? [];
       const reviews = nextState.visibleReviews ?? [];
       const submittedCount = reviews.filter((r) => r.status === 'submitted').length;
@@ -859,39 +861,36 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
   // Allow sidebar links to /amigxcriticx, /amigxcriticx/devoluciones, and /amigxcriticx/dashboard
   // to switch view cleanly even when Dockview has open note panels.
   const win = window as any;
-  if (!win.__acNavInterceptorBound) {
-    win.__acNavInterceptorBound = true;
-    document.addEventListener(
-      'click',
-      (e: MouseEvent) => {
-        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
-        const link = (e.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
-        if (!link) return;
-        const href = link.getAttribute('href') || '';
-        const isAcLink = /^\/(s123\/)?amigxcriticx(\/(devoluciones|dashboard))?\/?$/.test(href);
-        if (!isAcLink) return;
-
-        // Always close any open Dockview panels so the portal is not hidden behind a note pod
-        try {
-          win.__cnwWorkspace?.closeAll?.();
-        } catch {
-          // ignore
-        }
-
-        const root = document.querySelector<HTMLElement>('[data-ac-portal]');
-        if (root) {
-          e.preventDefault();
-          const targetView: PortalView = href.endsWith('/devoluciones')
-            ? 'devoluciones'
-            : href.endsWith('/dashboard')
-              ? 'dashboard'
-              : 'form';
-          setPortalView(root, targetView, true);
-        }
-      },
-      true,
-    );
+  if (typeof win.__acNavInterceptorHandler === 'function') {
+    document.removeEventListener('click', win.__acNavInterceptorHandler, true);
   }
+  win.__acNavInterceptorHandler = (e: MouseEvent) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    const link = (e.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
+    if (!link) return;
+    const href = link.getAttribute('href') || '';
+    const isAcLink = /^\/(s123\/)?amigxcriticx(\/(devoluciones|dashboard))?\/?$/.test(href);
+    if (!isAcLink) return;
+
+    // Always close any open Dockview panels so the portal is not hidden behind a note pod
+    try {
+      win.__cnwWorkspace?.closeAll?.();
+    } catch {
+      // ignore
+    }
+
+    const root = document.querySelector<HTMLElement>('[data-ac-portal]');
+    if (root) {
+      e.preventDefault();
+      const targetView: PortalView = href.endsWith('/devoluciones')
+        ? 'devoluciones'
+        : href.endsWith('/dashboard')
+          ? 'dashboard'
+          : 'form';
+      setPortalView(root, targetView, true);
+    }
+  };
+  document.addEventListener('click', win.__acNavInterceptorHandler, true);
 </script>
 
 <style>

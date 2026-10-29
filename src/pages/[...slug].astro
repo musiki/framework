@@ -406,11 +406,11 @@ const isAmigxCriticxDevolucionesPage =
 const isAmigxCriticxDashboardPage =
   isAmigxCriticxPage &&
   (normalizedRequestedLessonPage.endsWith('-dashboard') || Astro.url.searchParams.get('view') === 'dashboard');
-if (isAmigxCriticxDashboardPage && !canManageLiveInteractions) {
-  return Astro.redirect('/amigxcriticx');
-}
 if (isAmigxCriticxPage && !session) {
   return Astro.redirect(`/login?redirect=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`);
+}
+if (isAmigxCriticxDashboardPage && !canManageLiveInteractions) {
+  return Astro.redirect('/amigxcriticx');
 }
 if (isStudentEnrolled && !isRequestingWelcomePage && !isAmigxCriticxPage) {
   const welcomeEntry = allLessons.find((entry) => entry.id === `${canonicalCourseIdToUse}/_welcome`);
@@ -5022,6 +5022,7 @@ function renderLessonsTreeHTML(
                         href="/amigxcriticx"
                         class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage && !isAmigxCriticxDashboardPage }]}
                         data-astro-prefetch="false"
+                        data-astro-reload
                       >
                         <span class="lesson-icon">■</span>
                         <span class="lesson-link-text">Formulario</span>
@@ -5032,6 +5033,7 @@ function renderLessonsTreeHTML(
                         href="/amigxcriticx/devoluciones"
                         class:list={['lesson-link', { active: isAmigxCriticxDevolucionesPage }]}
                         data-astro-prefetch="false"
+                        data-astro-reload
                       >
                         <span class="lesson-icon">■</span>
                         <span class="lesson-link-text">Devoluciones</span>
@@ -5043,6 +5045,7 @@ function renderLessonsTreeHTML(
                           href="/amigxcriticx/dashboard"
                           class:list={['lesson-link', { active: isAmigxCriticxDashboardPage }]}
                           data-astro-prefetch="false"
+                          data-astro-reload
                         >
                           <span class="lesson-icon">■</span>
                           <span class="lesson-link-text">AM Dashboard</span>
@@ -5374,6 +5377,7 @@ function renderLessonsTreeHTML(
                           href="/amigxcriticx"
                           class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage && !isAmigxCriticxDashboardPage }]}
                           data-astro-prefetch="false"
+                          data-astro-reload
                         >
                           <span class="lesson-icon">■</span>
                           <span class="lesson-link-text">Formulario</span>
@@ -5384,6 +5388,7 @@ function renderLessonsTreeHTML(
                           href="/amigxcriticx/devoluciones"
                           class:list={['lesson-link', { active: isAmigxCriticxDevolucionesPage }]}
                           data-astro-prefetch="false"
+                          data-astro-reload
                         >
                           <span class="lesson-icon">■</span>
                           <span class="lesson-link-text">Devoluciones</span>
@@ -5395,6 +5400,7 @@ function renderLessonsTreeHTML(
                             href="/amigxcriticx/dashboard"
                             class:list={['lesson-link', { active: isAmigxCriticxDashboardPage }]}
                             data-astro-prefetch="false"
+                            data-astro-reload
                           >
                             <span class="lesson-icon">■</span>
                             <span class="lesson-link-text">AM Dashboard</span>
@@ -5765,6 +5771,7 @@ function renderLessonsTreeHTML(
           <AmigxCriticxPortal
             courseId={canonicalCourseId || courseSlug || 's123'}
             session={session}
+            isTeacher={canManageLiveInteractions}
             initialView={isAmigxCriticxDashboardPage ? 'dashboard' : isAmigxCriticxDevolucionesPage ? 'devoluciones' : 'form'}
           />
         ) : (

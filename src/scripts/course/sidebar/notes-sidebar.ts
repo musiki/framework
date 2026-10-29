@@ -1061,7 +1061,7 @@ export function renderNotesSidebar(
       const formLi = document.createElement('li');
       formLi.className = 'lesson-item';
       formLi.innerHTML = `
-        <a href="/amigxcriticx" class="lesson-link${isFormActive ? ' active' : ''}" data-astro-prefetch="false">
+        <a href="/amigxcriticx" class="lesson-link${isFormActive ? ' active' : ''}" data-astro-prefetch="false" data-astro-reload>
           <span class="lesson-icon">■</span>
           <span class="lesson-link-text">Formulario</span>
         </a>
@@ -1070,7 +1070,7 @@ export function renderNotesSidebar(
       const devLi = document.createElement('li');
       devLi.className = 'lesson-item';
       devLi.innerHTML = `
-        <a href="/amigxcriticx/devoluciones" class="lesson-link${isDevolucionesActive ? ' active' : ''}" data-astro-prefetch="false">
+        <a href="/amigxcriticx/devoluciones" class="lesson-link${isDevolucionesActive ? ' active' : ''}" data-astro-prefetch="false" data-astro-reload>
           <span class="lesson-icon">■</span>
           <span class="lesson-link-text">Devoluciones</span>
         </a>
@@ -1079,7 +1079,7 @@ export function renderNotesSidebar(
       const dashLi = document.createElement('li');
       dashLi.className = 'lesson-item';
       dashLi.innerHTML = `
-        <a href="/amigxcriticx/dashboard" class="lesson-link${isDashboardActive ? ' active' : ''}" data-astro-prefetch="false">
+        <a href="/amigxcriticx/dashboard" class="lesson-link${isDashboardActive ? ' active' : ''}" data-astro-prefetch="false" data-astro-reload>
           <span class="lesson-icon">■</span>
           <span class="lesson-link-text">AM Dashboard</span>
         </a>
