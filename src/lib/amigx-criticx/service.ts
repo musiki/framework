@@ -5,6 +5,7 @@ import { ensureAmigxCriticxSchema } from './schema';
 import {
   canViewReview,
   computeUrnCandidates,
+  isExcludedStudentGroup,
   validatePairSelection,
   type AmigxCriticxPair,
   type AmigxCriticxReviewRecord,
@@ -102,33 +103,64 @@ export async function getActiveCourseStudents(courseId = 's123'): Promise<Studen
   const aliases = await getCourseAliases(courseId);
   const courseIds = aliases.length > 0 ? aliases : [courseId];
 
-  const { data: rows, error } = await query<DbEnrollmentStudentRow>(
-    `SELECT DISTINCT ON (u."id")
-        u."id",
-        u."name",
-        u."email",
-        u."role",
-        e."roleInCourse"
-       FROM "Enrollment" e
-       JOIN "User" u ON u."id" = e."userId"
-      WHERE e."courseId" = ANY($1)
-      ORDER BY u."id", e."roleInCourse" ASC`,
-    [courseIds],
-  );
+  const [enrollmentRes, profileRes] = await Promise.all([
+    query<DbEnrollmentStudentRow>(
+      `SELECT DISTINCT ON (u."id")
+          u."id",
+          u."name",
+          u."email",
+          u."role",
+          e."roleInCourse"
+         FROM "Enrollment" e
+         JOIN "User" u ON u."id" = e."userId"
+        WHERE e."courseId" = ANY($1)
+        ORDER BY u."id", e."roleInCourse" ASC`,
+      [courseIds],
+    ),
+    query<{
+      userId: string | null;
+      studentId: string | null;
+      grupo: string | null;
+    }>(
+      `SELECT
+          s."userId"::text AS "userId",
+          NULLIF(TRIM(s."payload"->>'studentId'), '') AS "studentId",
+          COALESCE(NULLIF(TRIM(s."payload"->>'grupo'), ''), NULLIF(TRIM(s."payload"->>'group'), '')) AS "grupo"
+         FROM "Submission" s
+        WHERE s."assignmentId" LIKE '__meta__:course-student-profile:%'
+          AND (
+            LOWER(COALESCE(s."payload"->>'courseId', s."payload"->>'course', s."payload"->>'courseSlug', '')) = ANY($1)
+            OR s."assignmentId" ILIKE '__meta__:course-student-profile:' || $2 || ':%'
+          )
+        ORDER BY s."submittedAt" DESC`,
+      [courseIds.map((c) => c.toLowerCase()), courseId],
+    ),
+  ]);
 
-  if (error) {
-    throw error;
+  if (enrollmentRes.error) {
+    throw enrollmentRes.error;
+  }
+
+  const latestGroupByStudentId = new Map<string, string>();
+  for (const row of profileRes.data ?? []) {
+    const targetId = String(row.studentId || row.userId || '').trim();
+    if (!targetId || latestGroupByStudentId.has(targetId)) continue;
+    latestGroupByStudentId.set(targetId, String(row.grupo || '').trim());
   }
 
   const students: StudentCandidate[] = [];
-  for (const row of rows ?? []) {
+  for (const row of enrollmentRes.data ?? []) {
     const roleInCourse = String(row.roleInCourse || 'student').trim().toLowerCase();
     if (roleInCourse === 'teacher') continue;
     if (isElevatedGlobalRole(row.role)) continue;
+    const studentId = String(row.id);
+    const grupo = latestGroupByStudentId.get(studentId) || '';
+    if (isExcludedStudentGroup(grupo)) continue;
     students.push({
-      id: String(row.id),
-      name: formatDisplayName(row.name, row.email, String(row.id)),
+      id: studentId,
+      name: formatDisplayName(row.name, row.email, studentId),
       email: row.email ? String(row.email).trim() : null,
+      grupo: grupo || null,
     });
   }
 

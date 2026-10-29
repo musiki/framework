@@ -1053,17 +1053,30 @@ export function renderNotesSidebar(
         details.appendChild(tree);
       }
     } else if (isAmigxCriticx) {
-      const acLi = document.createElement('li');
-      acLi.className = 'lesson-item';
-      const isAcActive = window.location.pathname.includes('amigxcriticx');
-      acLi.innerHTML = `
-        <a href="/amigxcriticx" class="lesson-link${isAcActive ? ' active' : ''}" data-astro-prefetch="false">
+      const pathNow = window.location.pathname;
+      const isDevolucionesActive = pathNow.includes('amigxcriticx/devoluciones');
+      const isFormActive = pathNow.includes('amigxcriticx') && !isDevolucionesActive;
+
+      const formLi = document.createElement('li');
+      formLi.className = 'lesson-item';
+      formLi.innerHTML = `
+        <a href="/amigxcriticx" class="lesson-link${isFormActive ? ' active' : ''}" data-astro-prefetch="false">
           <span class="lesson-icon">■</span>
-          <span class="lesson-link-text">Portal de Amigx Críticx</span>
-          <span class="lesson-link-trailing"><span class="lesson-type">📝</span></span>
+          <span class="lesson-link-text">Formulario</span>
         </a>
       `;
-      ul.appendChild(acLi);
+
+      const devLi = document.createElement('li');
+      devLi.className = 'lesson-item';
+      devLi.innerHTML = `
+        <a href="/amigxcriticx/devoluciones" class="lesson-link${isDevolucionesActive ? ' active' : ''}" data-astro-prefetch="false">
+          <span class="lesson-icon">■</span>
+          <span class="lesson-link-text">Devoluciones</span>
+        </a>
+      `;
+
+      ul.appendChild(formLi);
+      ul.appendChild(devLi);
       details.appendChild(ul);
     } else {
       details.appendChild(ul);

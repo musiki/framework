@@ -122,8 +122,20 @@ if (slug.startsWith('cursos/') || slug.startsWith('courses/')) {
 const currentTenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
 
 // Parse the slug to get course and optional path
-const isTopLevelAmigxCriticx = ['amigxcriticx', 'amigo-critico', 'amigx-criticx'].includes(normalizeContentSlug(slug));
-const parts = isTopLevelAmigxCriticx ? ['s123', 'amigxcriticx'] : slug.split('/');
+const normalizedSlugForAc = normalizeContentSlug(slug);
+const isTopLevelAmigxCriticx = [
+  'amigxcriticx',
+  'amigo-critico',
+  'amigx-criticx',
+  'amigxcriticx/devoluciones',
+  'amigo-critico/devoluciones',
+  'amigx-criticx/devoluciones',
+].includes(normalizedSlugForAc);
+const parts = isTopLevelAmigxCriticx
+  ? normalizedSlugForAc.endsWith('/devoluciones')
+    ? ['s123', 'amigxcriticx', 'devoluciones']
+    : ['s123', 'amigxcriticx']
+  : slug.split('/');
 const requestedCoursePathSegment = parts[0];
 const isCourseForumPage = (parts.length === 2 && parts[1] === 'foro') || (parts.length === 1 && Astro.url.searchParams.has('board'));
 const potentialCanonicalCourseId = await canonicalizeCourseId(requestedCoursePathSegment);
@@ -371,7 +383,18 @@ const isAmigxCriticxPage =
   canonicalCourseIdToUse === 's123' &&
   parts.length > 1 &&
   !isCourseForumPage &&
-  ['amigxcriticx', 'amigo-critico', 'amigx-criticx', '85-amigx-criticx'].includes(normalizedRequestedLessonPage);
+  [
+    'amigxcriticx',
+    'amigo-critico',
+    'amigx-criticx',
+    '85-amigx-criticx',
+    'amigxcriticx/devoluciones',
+    'amigo-critico/devoluciones',
+    'amigx-criticx/devoluciones',
+  ].includes(normalizedRequestedLessonPage);
+const isAmigxCriticxDevolucionesPage =
+  isAmigxCriticxPage &&
+  (normalizedRequestedLessonPage.endsWith('/devoluciones') || Astro.url.searchParams.get('view') === 'devoluciones');
 if (isAmigxCriticxPage && !session) {
   return Astro.redirect(`/login?redirect=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`);
 }
@@ -724,7 +747,7 @@ if (parts.length === 1) {
   resolvedLessonRoutePath = 'recursos';
 } else if (isAmigxCriticxPage) {
   currentEntry = courseIndex;
-  resolvedLessonRoutePath = 'amigxcriticx';
+  resolvedLessonRoutePath = isAmigxCriticxDevolucionesPage ? 'amigxcriticx/devoluciones' : 'amigxcriticx';
 } else {
   const lessonPath = requestedLessonPath;
 
@@ -4979,14 +5002,21 @@ function renderLessonsTreeHTML(
                     <li class="lesson-item">
                       <a
                         href="/amigxcriticx"
-                        class:list={['lesson-link', { active: isAmigxCriticxPage }]}
+                        class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage }]}
                         data-astro-prefetch="false"
                       >
                         <span class="lesson-icon">■</span>
-                        <span class="lesson-link-text">Portal de Amigx Críticx</span>
-                        <span class="lesson-link-trailing">
-                          <span class="lesson-type">📝</span>
-                        </span>
+                        <span class="lesson-link-text">Formulario</span>
+                      </a>
+                    </li>
+                    <li class="lesson-item">
+                      <a
+                        href="/amigxcriticx/devoluciones"
+                        class:list={['lesson-link', { active: isAmigxCriticxDevolucionesPage }]}
+                        data-astro-prefetch="false"
+                      >
+                        <span class="lesson-icon">■</span>
+                        <span class="lesson-link-text">Devoluciones</span>
                       </a>
                     </li>
                   </ul>
@@ -5312,14 +5342,21 @@ function renderLessonsTreeHTML(
                       <li class="lesson-item">
                         <a
                           href="/amigxcriticx"
-                          class:list={['lesson-link', { active: isAmigxCriticxPage }]}
+                          class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage }]}
                           data-astro-prefetch="false"
                         >
                           <span class="lesson-icon">■</span>
-                          <span class="lesson-link-text">Portal de Amigx Críticx</span>
-                          <span class="lesson-link-trailing">
-                            <span class="lesson-type">📝</span>
-                          </span>
+                          <span class="lesson-link-text">Formulario</span>
+                        </a>
+                      </li>
+                      <li class="lesson-item">
+                        <a
+                          href="/amigxcriticx/devoluciones"
+                          class:list={['lesson-link', { active: isAmigxCriticxDevolucionesPage }]}
+                          data-astro-prefetch="false"
+                        >
+                          <span class="lesson-icon">■</span>
+                          <span class="lesson-link-text">Devoluciones</span>
                         </a>
                       </li>
                     </ul>
@@ -5686,6 +5723,7 @@ function renderLessonsTreeHTML(
           <AmigxCriticxPortal
             courseId={canonicalCourseId || courseSlug || 's123'}
             session={session}
+            initialView={isAmigxCriticxDevolucionesPage ? 'devoluciones' : 'form'}
           />
         ) : (
           dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />

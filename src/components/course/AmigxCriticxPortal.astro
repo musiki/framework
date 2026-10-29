@@ -7,9 +7,14 @@ import { countWords } from '../../lib/amigx-criticx/logic';
 interface Props {
   courseId?: string;
   session?: { user?: { name?: string; email?: string; image?: string } } | null;
+  initialView?: 'form' | 'devoluciones';
 }
 
-const { courseId = 's123', session = null } = Astro.props;
+const {
+  courseId = 's123',
+  session = null,
+  initialView = 'form',
+} = Astro.props;
 
 let initialState: AmigxCriticxPortalState | null = null;
 let loadError = '';
@@ -28,103 +33,87 @@ if (session?.user?.email) {
           isTeacher,
         });
       } else {
-        loadError = 'Debés estar inscriptx en Seminarios de Composición (s123) para acceder al portal de Amigx Críticx.';
+        loadError = 'Debés estar inscriptx en Seminarios (s123) para usar Amigx Críticx.';
       }
     } else {
-      loadError = 'No se encontró tu usuario en la base de datos de Musiki.';
+      loadError = 'No se encontró tu usuario en Musiki.';
     }
   } catch (err: unknown) {
-    console.error('[AmigxCriticxPortal] SSR load failed, will retry on client:', err);
+    console.error('[AmigxCriticxPortal] SSR load failed:', err);
   }
 }
 
 const initialStateJson = JSON.stringify(initialState).replace(/</g, '\\u003c');
 const myOutbound = initialState?.myOutboundReview ?? null;
-const myInbound = initialState?.myInboundReview ?? null;
 const isSubmitted = myOutbound?.status === 'submitted';
 const initialWords1 = countWords(myOutbound?.descripcion ?? '');
 const initialWords2 = countWords(myOutbound?.funcionaNoFunciona ?? '');
 const initialWords3 = countWords(myOutbound?.hariaDistinto ?? '');
-const initialTotalWords = initialWords1 + initialWords2 + initialWords3;
-const initialResponseWords = countWords(myInbound?.recipientResponse ?? '');
+const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
+  (r) => r.status === 'submitted',
+);
 ---
 
 <section
-  class="ac-portal"
+  class="ac-simple"
   data-ac-portal
   data-course-id={courseId}
+  data-ac-view={initialView}
 >
-  <header class="ac-header">
-    <div class="ac-header-top">
-      <div>
-        <p class="ac-kicker">SEMINARIOS DE COMPOSICIÓN I y II · RÚBRICA §25.4 / §27 / §31 DIM. 16</p>
-        <h1 class="ac-title">Portal de Amigx Críticx</h1>
-      </div>
-      <div class="ac-urn-pills" data-ac-stats>
-        <span class="ac-pill" title="Alumnxs activxs en el curso">
-          <strong data-ac-stat-total>{initialState?.urnStats.totalStudents ?? '—'}</strong> activxs
-        </span>
-        <span class="ac-pill" title="Pares ya asignados en la urna">
-          <strong data-ac-stat-assigned>{initialState?.urnStats.assignedCount ?? '—'}</strong> en urna
-        </span>
-        <span class="ac-pill ac-pill--accent" title="Informes entregados">
-          <strong data-ac-stat-submitted>{initialState?.urnStats.submittedCount ?? '—'}</strong> entregados
-        </span>
-      </div>
-    </div>
-
-    <p class="ac-subtitle">
-      Un amigx críticx (<em>critical friend</em>, Costa &amp; Kallick, 1993; MacBeath, 1999) sostiene dos cosas a la vez:
-      <strong>apoyo incondicional a la persona y exigencia sin descuento sobre el material</strong>.
-      Corrección uno a uno entre pares, con tono crítico realista.
-    </p>
-
-    <details class="ac-protocol-details">
-      <summary class="ac-protocol-summary">
-        <span>▸ Pautas reglamentarias de la Rúbrica (§27.2 – §27.4)</span>
-      </summary>
-      <div class="ac-protocol-body">
-        <ul class="ac-protocol-list">
-          <li><strong>Descripción antes que juicio (§27.3.2):</strong> Se verifica que entendiste el proyecto en sus propios términos, no en los tuyos. Un juicio emitido antes de haber descrito el proyecto se descarta.</li>
-          <li><strong>Tono crítico realista y localizado (§27.3.3):</strong> Se nombran los aciertos con su procedimiento (no con adjetivos) y se dice qué no funciona localizándolo en un compás, una sección, una definición o una fuente.</li>
-          <li><strong>En los términos del otro (§27.3.4):</strong> No propongas tu propia poética como solución. La pregunta es qué operación alternativa haría mejor al proyecto del par en sus propios términos y qué ganaría con ella, cerrando con una pregunta abierta.</li>
-          <li><strong>Regla de urna y no reciprocidad:</strong> La elección es por orden de llegada (<em>first come, first take</em>). Cada alumnx elegido sale de la lista disponible y <strong>no se permiten amigos críticos cruzados (recíprocos)</strong>.</li>
-        </ul>
-      </div>
-    </details>
+  <header class="ac-top">
+    <h1 class="ac-heading">Amigx Críticx</h1>
+    <nav class="ac-tabs" aria-label="Secciones de Amigx Críticx">
+      <a
+        href="/amigxcriticx"
+        class:list={['ac-tab', { active: initialView === 'form' }]}
+        data-ac-nav="form"
+        data-astro-prefetch="false"
+      >
+        Formulario
+      </a>
+      <a
+        href="/amigxcriticx/devoluciones"
+        class:list={['ac-tab', { active: initialView === 'devoluciones' }]}
+        data-ac-nav="devoluciones"
+        data-astro-prefetch="false"
+      >
+        Devoluciones (<span data-ac-devoluciones-count>{submittedVisibleReviews.length}</span>)
+      </a>
+    </nav>
   </header>
 
   {loadError ? (
-    <div class="ac-alert ac-alert--error" role="alert">{loadError}</div>
+    <p class="ac-msg ac-msg--error" role="alert">{loadError}</p>
   ) : (
     <>
-      <div class="ac-alert" data-ac-feedback hidden role="status" aria-live="polite"></div>
+      <p class="ac-msg" data-ac-feedback hidden role="status" aria-live="polite"></p>
 
-      <!-- PASO 1: SELECTOR DE URNA -->
-      <section class="ac-card ac-urn-card" aria-labelledby="ac-urn-heading">
-        <div class="ac-card-head">
-          <div>
-            <span class="ac-step-badge">Paso 1 · Urna de pares</span>
-            <h2 id="ac-urn-heading">Elegir compañerx a evaluar</h2>
-          </div>
-          <span class="ac-rule-tag" title="First come, first take · Prohibido cruce recíproco">
-            Urna sin reemplazo · No recíproco
-          </span>
+      <!-- PÁGINA 1: FORMULARIO -->
+      <div class="ac-page" data-ac-page="form" hidden={initialView !== 'form'}>
+        <div class="ac-mo-box">
+          <p>
+            <strong>Cómo usar la Matriz Operativa (§11.4 / §24):</strong> cada concepto central del proyecto se verifica en cinco columnas:
+            <code>Concepto | Definición operativa | Fuente/genealogía | Operación en la obra | Evidencia</code>.
+            Para hacer la devolución, leé la matriz de tu compañerx <strong>de derecha a izquierda</strong> (desde la evidencia concreta en partitura, audio o ensayo hacia la operación y el concepto): comprobá si el concepto produce decisiones compositivas localizables o si queda como ornamento retórico. Evaluá el trabajo en sus propios términos, sin imponer tu propia poética (§27.3).
+          </p>
         </div>
 
-        <div class="ac-urn-controls">
-          <label class="ac-urn-label" for="ac-recipient-select">
-            <span class="ac-urn-prefix">Seré el amigx críticx de</span>
+        <form class="ac-form" data-ac-review-form novalidate>
+          <div class="ac-urn-row">
+            <label for="ac-recipient-select" class="ac-urn-label">
+              Seré el amigx críticx de:
+            </label>
             <select
               id="ac-recipient-select"
               class="ac-select"
               data-ac-recipient-select
               disabled={Boolean(isSubmitted)}
+              required
             >
-              <option value="">— Seleccionar alumnx activx de la urna —</option>
+              <option value="">Elegir compañerx…</option>
               {myOutbound && (
                 <option value={myOutbound.recipientUserId} selected>
-                  {myOutbound.recipientName} (tu elección actual)
+                  {myOutbound.recipientName}
                 </option>
               )}
               {(initialState?.urnCandidates ?? [])
@@ -135,312 +124,135 @@ const initialResponseWords = countWords(myInbound?.recipientResponse ?? '');
                   </option>
                 ))}
             </select>
-          </label>
-
-          <div class="ac-urn-actions">
-            <button
-              type="button"
-              class="ac-btn ac-btn--secondary"
-              data-ac-release-btn
-              hidden={!myOutbound || isSubmitted}
-              title="Liberar elección y devolver a la urna (solo antes de entregar)"
-            >
-              Liberar turno
-            </button>
-          </div>
-        </div>
-
-        <p class="ac-urn-hint" data-ac-urn-hint>
-          {myOutbound
-            ? `Asignación registrada en la urna: sos el amigx críticx de ${myOutbound.recipientName}.`
-            : 'Al elegir un nombre del menú desplegable, se reserva automáticamente en la urna y deja de aparecer para el resto.'}
-        </p>
-      </section>
-
-      <!-- PASO 2: FORMULARIO DE DEVOLUCIÓN (3 CAMPOS + CONTADOR DE PALABRAS + TOGGLE PÚBLICO) -->
-      <form class="ac-card ac-form-card" data-ac-review-form novalidate>
-        <div class="ac-card-head">
-          <div>
-            <span class="ac-step-badge">Paso 2 · Ficha de devolución (§25.4 / §27.4)</span>
-            <h2>Informe de Amigx Críticx</h2>
-          </div>
-          <div class="ac-total-words" data-ac-total-words>
-            Total: <strong>{initialTotalWords}</strong> {initialTotalWords === 1 ? 'palabra' : 'palabras'}
-          </div>
-        </div>
-
-        <!-- Campo 1 -->
-        <div class="ac-field">
-          <div class="ac-field-header">
-            <label for="ac-field-descripcion" class="ac-field-label">
-              1. Descripción (antes de juzgar)
-            </label>
-            <span class="ac-word-counter" data-ac-word-count="descripcion">
-              {initialWords1} {initialWords1 === 1 ? 'palabra' : 'palabras'}
+            <span class="ac-urn-status" data-ac-urn-hint>
+              {myOutbound ? `Asignado: ${myOutbound.recipientName}` : ''}
             </span>
           </div>
-          <p class="ac-field-help">
-            ¿Qué escuché y qué leí, antes de opinar? Describí el proyecto en tres oraciones en tus propias palabras, verificando que se comprendió en sus propios términos (§27.2 mov. 1).
-          </p>
-          <textarea
-            id="ac-field-descripcion"
-            name="descripcion"
-            class="ac-textarea"
-            data-ac-textarea="descripcion"
-            rows="4"
-            placeholder="Describí el objeto, el material escuchado y el planteo del proyecto antes de emitir cualquier juicio..."
-            required
-          >{myOutbound?.descripcion ?? ''}</textarea>
-        </div>
 
-        <!-- Campo 2 -->
-        <div class="ac-field">
-          <div class="ac-field-header">
-            <label for="ac-field-funciona" class="ac-field-label">
-              2. Qué funciona y qué no funciona (localizado)
-            </label>
-            <span class="ac-word-counter" data-ac-word-count="funcionaNoFunciona">
-              {initialWords2} {initialWords2 === 1 ? 'palabra' : 'palabras'}
-            </span>
+          <div class="ac-field">
+            <div class="ac-field-head">
+              <label for="ac-field-descripcion">1. Descripción (antes de juzgar)</label>
+              <span class="ac-words" data-ac-word-count="descripcion">
+                {initialWords1} {initialWords1 === 1 ? 'palabra' : 'palabras'}
+              </span>
+            </div>
+            <textarea
+              id="ac-field-descripcion"
+              name="descripcion"
+              class="ac-textarea"
+              data-ac-textarea="descripcion"
+              rows="4"
+              placeholder="¿Qué escuché y qué leí, antes de opinar? El proyecto en tus palabras, en sus propios términos."
+              disabled={Boolean(isSubmitted)}
+              required
+            >{myOutbound?.descripcion ?? ''}</textarea>
           </div>
-          <p class="ac-field-help">
-            Qué está resuelto y por qué procedimiento concreto (sin adjetivos) + dónde exactamente el proyecto no hace lo que dice hacer, localizado en compás, sección, definición o fuente (§27.2 mov. 2 y 3).
-          </p>
-          <textarea
-            id="ac-field-funciona"
-            name="funcionaNoFunciona"
-            class="ac-textarea"
-            data-ac-textarea="funcionaNoFunciona"
-            rows="5"
-            placeholder="Aciertos con su procedimiento concreto y problemas localizados (compás, sección, cláusula, fuente)..."
-            required
-          >{myOutbound?.funcionaNoFunciona ?? ''}</textarea>
-        </div>
 
-        <!-- Campo 3 -->
-        <div class="ac-field">
-          <div class="ac-field-header">
-            <label for="ac-field-distinto" class="ac-field-label">
-              3. Qué haría distinto y pregunta abierta
-            </label>
-            <span class="ac-word-counter" data-ac-word-count="hariaDistinto">
-              {initialWords3} {initialWords3 === 1 ? 'palabra' : 'palabras'}
-            </span>
+          <div class="ac-field">
+            <div class="ac-field-head">
+              <label for="ac-field-funciona">2. Qué funciona y qué no funciona (localizado)</label>
+              <span class="ac-words" data-ac-word-count="funcionaNoFunciona">
+                {initialWords2} {initialWords2 === 1 ? 'palabra' : 'palabras'}
+              </span>
+            </div>
+            <textarea
+              id="ac-field-funciona"
+              name="funcionaNoFunciona"
+              class="ac-textarea"
+              data-ac-textarea="funcionaNoFunciona"
+              rows="4"
+              placeholder="Qué está resuelto y con qué procedimiento + dónde no hace lo que dice hacer (compás, sección, definición o fuente)."
+              disabled={Boolean(isSubmitted)}
+              required
+            >{myOutbound?.funcionaNoFunciona ?? ''}</textarea>
           </div>
-          <p class="ac-field-help">
-            Qué operación o decisión alternativa proponés en los términos del proyecto y qué ganaría con ella + una sola pregunta abierta que el proyecto todavía no puede responder (§27.2 mov. 4).
-          </p>
-          <textarea
-            id="ac-field-distinto"
-            name="hariaDistinto"
-            class="ac-textarea"
-            data-ac-textarea="hariaDistinto"
-            rows="4"
-            placeholder="Operación alternativa, ganancia para el proyecto y pregunta abierta de cierre..."
-            required
-          >{myOutbound?.hariaDistinto ?? ''}</textarea>
-        </div>
 
-        <!-- Pie de formulario: Visibilidad + Botones ENTREGAR / ENTREGADO / RE-ENVIAR ENTREGA -->
-        <div class="ac-form-footer">
-          <div class="ac-visibility-box">
-            <label class="ac-switch-label" for="ac-public-switch">
+          <div class="ac-field">
+            <div class="ac-field-head">
+              <label for="ac-field-distinto">3. Qué haría distinto y pregunta abierta</label>
+              <span class="ac-words" data-ac-word-count="hariaDistinto">
+                {initialWords3} {initialWords3 === 1 ? 'palabra' : 'palabras'}
+              </span>
+            </div>
+            <textarea
+              id="ac-field-distinto"
+              name="hariaDistinto"
+              class="ac-textarea"
+              data-ac-textarea="hariaDistinto"
+              rows="4"
+              placeholder="Una operación alternativa y qué ganaría el proyecto con ella + una pregunta abierta."
+              disabled={Boolean(isSubmitted)}
+              required
+            >{myOutbound?.hariaDistinto ?? ''}</textarea>
+          </div>
+
+          <div class="ac-actions">
+            <label class="ac-public-label" for="ac-public-switch">
               <input
                 id="ac-public-switch"
                 type="checkbox"
                 name="isPublic"
-                class="ac-switch-input"
                 data-ac-public-switch
                 checked={Boolean(myOutbound?.isPublic)}
                 {...({ switch: '' } as Record<string, string>)}
               />
-              <span class="ac-switch-title">HACER PÚBLICO</span>
+              <span>HACER PÚBLICO</span>
             </label>
-            <p class="ac-visibility-note">
-              Visibilidad garantizada a <strong>docentes</strong>, <strong>alumnx autor/a</strong> y <strong>alumnx destinatarix</strong>. Si activás <em>HACER PÚBLICO</em>, el resto de lxs alumnxs del seminario también puede ver la devolución.
-            </p>
-          </div>
 
-          <div class="ac-submit-actions">
-            <button
-              type="submit"
-              class:list={['ac-btn', isSubmitted ? 'ac-btn--submitted' : 'ac-btn--primary']}
-              data-ac-submit-btn
-              disabled={Boolean(isSubmitted)}
-            >
-              {isSubmitted ? '✓ ENTREGADO' : 'ENTREGAR'}
-            </button>
+            <div class="ac-buttons">
+              <button
+                type="submit"
+                class:list={['ac-btn', isSubmitted ? 'ac-btn--done' : 'ac-btn--submit']}
+                data-ac-submit-btn
+                disabled={Boolean(isSubmitted)}
+              >
+                {isSubmitted ? 'ENTREGADO' : 'ENTREGAR'}
+              </button>
 
-            <button
-              type="button"
-              class="ac-btn ac-btn--resubmit"
-              data-ac-resubmit-btn
-              hidden={!isSubmitted}
-            >
-              RE-ENVIAR ENTREGA
-            </button>
-          </div>
-        </div>
-      </form>
-
-      <!-- PASO 3: DEVOLUCIÓN RECIBIDA DE MI AMIGX CRÍTICX + RESPUESTA ESCRITA (§27.3.6) -->
-      <section
-        class="ac-card ac-inbound-card"
-        data-ac-inbound-section
-        hidden={!myInbound || myInbound.status !== 'submitted'}
-        aria-labelledby="ac-inbound-heading"
-      >
-        <div class="ac-card-head">
-          <div>
-            <span class="ac-step-badge">Devolución recibida · §27.3.6</span>
-            <h2 id="ac-inbound-heading" data-ac-inbound-title>
-              {myInbound ? `Informe de tu amigx críticx: ${myInbound.authorName}` : 'Informe recibido de tu amigx críticx'}
-            </h2>
-          </div>
-          <span class="ac-pill" data-ac-inbound-visibility>
-            {myInbound?.isPublic ? 'Público para el curso' : 'Privado (par + docentes)'}
-          </span>
-        </div>
-
-        <div class="ac-inbound-fields" data-ac-inbound-fields>
-          <div class="ac-read-block">
-            <h3>1. Descripción</h3>
-            <p data-ac-inbound-desc>{myInbound?.descripcion ?? ''}</p>
-          </div>
-          <div class="ac-read-block">
-            <h3>2. Qué funciona y qué no funciona</h3>
-            <p data-ac-inbound-func>{myInbound?.funcionaNoFunciona ?? ''}</p>
-          </div>
-          <div class="ac-read-block">
-            <h3>3. Qué haría distinto y pregunta abierta</h3>
-            <p data-ac-inbound-dist>{myInbound?.hariaDistinto ?? ''}</p>
-          </div>
-        </div>
-
-        <form class="ac-response-form" data-ac-response-form novalidate>
-          <input type="hidden" name="reviewId" data-ac-inbound-id value={myInbound?.id ?? ''} />
-          <div class="ac-field">
-            <div class="ac-field-header">
-              <label for="ac-recipient-response" class="ac-field-label">
-                Respuesta escrita del par evaluado (§27.3.6 / §27.4)
-              </label>
-              <span class="ac-word-counter" data-ac-word-count="recipientResponse">
-                {initialResponseWords} {initialResponseWords === 1 ? 'palabra' : 'palabras'}
-              </span>
+              <button
+                type="button"
+                class="ac-btn ac-btn--edit"
+                data-ac-resubmit-btn
+                hidden={!isSubmitted}
+              >
+                RE-ENVIAR ENTREGA
+              </button>
             </div>
-            <p class="ac-field-help">
-              Máximo orientativo una carilla, dentro de la semana: qué incorporás, qué rechazás y con qué argumento. Rechazar con argumento vale lo mismo que incorporar.
-            </p>
-            <textarea
-              id="ac-recipient-response"
-              name="recipientResponse"
-              class="ac-textarea"
-              data-ac-textarea="recipientResponse"
-              rows="4"
-              placeholder="Escribí tu respuesta argumentada a la devolución recibida..."
-            >{myInbound?.recipientResponse ?? ''}</textarea>
-          </div>
-          <div class="ac-submit-actions">
-            <button
-              type="submit"
-              class:list={['ac-btn', myInbound?.recipientRespondedAt ? 'ac-btn--submitted' : 'ac-btn--primary']}
-              data-ac-response-submit-btn
-              disabled={Boolean(myInbound?.recipientRespondedAt)}
-            >
-              {myInbound?.recipientRespondedAt ? '✓ RESPUESTA ENTREGADA' : 'ENTREGAR RESPUESTA'}
-            </button>
-            <button
-              type="button"
-              class="ac-btn ac-btn--resubmit"
-              data-ac-response-resubmit-btn
-              hidden={!myInbound?.recipientRespondedAt}
-            >
-              RE-ENVIAR RESPUESTA
-            </button>
           </div>
         </form>
-      </section>
+      </div>
 
-      <!-- PASO 4: ARCHIVO DE DEVOLUCIONES VISIBLES (DOCENTES / PROPIAS / PÚBLICAS) -->
-      <section class="ac-card ac-feed-card" aria-labelledby="ac-feed-heading">
-        <div class="ac-card-head">
-          <div>
-            <span class="ac-step-badge">Registro del seminario</span>
-            <h2 id="ac-feed-heading">
-              {initialState?.currentUser.isTeacher
-                ? 'Todas las devoluciones y estado de la urna (Vista Docente)'
-                : 'Devoluciones visibles (tuyas y públicas del curso)'}
-            </h2>
-          </div>
-        </div>
-
-        <div class="ac-feed-list" data-ac-feed-list>
-          {(initialState?.visibleReviews ?? []).length === 0 ? (
-            <p class="ac-empty-msg">Todavía no hay devoluciones visibles registradas.</p>
+      <!-- PÁGINA 2: DEVOLUCIONES -->
+      <div class="ac-page" data-ac-page="devoluciones" hidden={initialView !== 'devoluciones'}>
+        <div class="ac-feed" data-ac-feed-list>
+          {submittedVisibleReviews.length === 0 ? (
+            <p class="ac-empty">Todavía no hay devoluciones entregadas.</p>
           ) : (
-            (initialState?.visibleReviews ?? []).map((rev) => {
-              const w1 = countWords(rev.descripcion);
-              const w2 = countWords(rev.funcionaNoFunciona);
-              const w3 = countWords(rev.hariaDistinto);
-              const totalW = w1 + w2 + w3;
-              return (
-                <article class="ac-review-item" data-review-id={rev.id}>
-                  <header class="ac-review-item-head">
-                    <div class="ac-review-pair">
-                      <strong>{rev.authorName}</strong>
-                      <span class="ac-pair-arrow" aria-hidden="true">→</span>
-                      <span>amigx críticx de</span>
-                      <strong>{rev.recipientName}</strong>
-                    </div>
-                    <div class="ac-review-badges">
-                      <span class:list={['ac-badge', rev.status === 'submitted' ? 'ac-badge--ok' : 'ac-badge--pending']}>
-                        {rev.status === 'submitted' ? 'Entregado' : 'En urna (pendiente)'}
-                      </span>
-                      <span class:list={['ac-badge', rev.isPublic ? 'ac-badge--public' : 'ac-badge--private']}>
-                        {rev.isPublic ? 'Público' : 'Privado'}
-                      </span>
-                      <span class="ac-badge">{totalW} pal.</span>
-                      {initialState?.currentUser.isTeacher && (
-                        <button
-                          type="button"
-                          class="ac-teacher-reset-btn"
-                          data-ac-teacher-release={rev.authorUserId}
-                          title="Liberar esta asignación de la urna (Docente)"
-                        >
-                          Liberar urna
-                        </button>
-                      )}
-                    </div>
-                  </header>
-
-                  {rev.status === 'submitted' && (
-                    <div class="ac-review-item-body">
-                      <div class="ac-read-block">
-                        <h4>1. Descripción ({w1} pal.)</h4>
-                        <p>{rev.descripcion}</p>
-                      </div>
-                      <div class="ac-read-block">
-                        <h4>2. Qué funciona y qué no funciona ({w2} pal.)</h4>
-                        <p>{rev.funcionaNoFunciona}</p>
-                      </div>
-                      <div class="ac-read-block">
-                        <h4>3. Qué haría distinto y pregunta abierta ({w3} pal.)</h4>
-                        <p>{rev.hariaDistinto}</p>
-                      </div>
-                      {rev.recipientResponse && (
-                        <div class="ac-read-block ac-read-block--response">
-                          <h4>Respuesta de {rev.recipientName} ({countWords(rev.recipientResponse)} pal.)</h4>
-                          <p>{rev.recipientResponse}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </article>
-              );
-            })
+            submittedVisibleReviews.map((review) => (
+              <article class="ac-review">
+                <header class="ac-review-head">
+                  <strong>{review.authorName} → {review.recipientName}</strong>
+                  <span class="ac-review-meta">
+                    {review.isPublic ? 'Público' : 'Docentes / Par'}
+                  </span>
+                </header>
+                <div class="ac-review-section">
+                  <h4>1. Descripción</h4>
+                  <p>{review.descripcion}</p>
+                </div>
+                <div class="ac-review-section">
+                  <h4>2. Qué funciona y qué no funciona</h4>
+                  <p>{review.funcionaNoFunciona}</p>
+                </div>
+                <div class="ac-review-section">
+                  <h4>3. Qué haría distinto y pregunta abierta</h4>
+                  <p>{review.hariaDistinto}</p>
+                </div>
+              </article>
+            ))
           )}
         </div>
-      </section>
+      </div>
     </>
   )}
 
@@ -448,369 +260,285 @@ const initialResponseWords = countWords(myInbound?.recipientResponse ?? '');
 </section>
 
 <script>
-  // Progressive enhancement for <input type="checkbox" switch>
-  const enhanceSwitchInputs = () => {
-    const hasNativeSwitch = typeof HTMLInputElement !== 'undefined' && 'switch' in HTMLInputElement.prototype;
-    document.querySelectorAll<HTMLInputElement>('input[type="checkbox"][switch]').forEach((input) => {
-      if (!hasNativeSwitch) {
-        input.setAttribute('role', 'switch');
-        input.dataset.fallbackSwitch = 'true';
-      }
-    });
-  };
+  import { countWords } from '../../lib/amigx-criticx/logic';
+  import type { AmigxCriticxPortalState, AmigxCriticxReviewRecord } from '../../lib/amigx-criticx/service';
 
-  const countWordsClient = (text: string): number => {
-    const trimmed = String(text || '').trim();
-    if (!trimmed) return 0;
-    return trimmed.split(/\s+/).filter(Boolean).length;
-  };
-
-  const formatWordLabel = (count: number): string =>
-    `${count} ${count === 1 ? 'palabra' : 'palabras'}`;
-
-  const esc = (value: unknown): string =>
-    String(value ?? '')
+  function escHtml(value: unknown): string {
+    return String(value ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
 
-  function initAmigxCriticxPortal() {
-    enhanceSwitchInputs();
+  function formatWordLabel(count: number): string {
+    return `${count} ${count === 1 ? 'palabra' : 'palabras'}`;
+  }
 
-    const root = document.querySelector<HTMLElement>('[data-ac-portal]');
-    if (!root || root.dataset.acBound === 'true') return;
+  function setPortalView(root: HTMLElement, view: 'form' | 'devoluciones', pushUrl = false) {
+    root.dataset.acView = view;
+    root.querySelectorAll<HTMLElement>('[data-ac-page]').forEach((page) => {
+      page.hidden = page.dataset.acPage !== view;
+    });
+    root.querySelectorAll<HTMLAnchorElement>('[data-ac-nav]').forEach((tab) => {
+      tab.classList.toggle('active', tab.dataset.acNav === view);
+    });
+    document.querySelectorAll<HTMLAnchorElement>('.chapter--amigxcriticx a.lesson-link').forEach((link) => {
+      const isDevolucionesLink = link.getAttribute('href')?.endsWith('/devoluciones');
+      const active = view === 'devoluciones' ? Boolean(isDevolucionesLink) : !isDevolucionesLink;
+      link.classList.toggle('active', active);
+    });
+    if (pushUrl) {
+      const prefix = window.location.pathname.startsWith('/s123/') ? '/s123/amigxcriticx' : '/amigxcriticx';
+      const targetUrl = view === 'devoluciones' ? `${prefix}/devoluciones` : prefix;
+      if (window.location.pathname !== targetUrl) {
+        window.history.pushState({}, '', targetUrl);
+      }
+    }
+  }
+
+  function bindPortal(root: HTMLElement) {
+    if (root.dataset.acBound === 'true') return;
     root.dataset.acBound = 'true';
 
-    const stateScript = root.querySelector<HTMLScriptElement>('[data-ac-initial-state]');
-    let currentState: any = null;
+    const stateEl = root.querySelector<HTMLScriptElement>('[data-ac-initial-state]');
+    let state: AmigxCriticxPortalState | null = null;
     try {
-      currentState = stateScript?.textContent ? JSON.parse(stateScript.textContent) : null;
+      state = stateEl?.textContent ? JSON.parse(stateEl.textContent) : null;
     } catch {
-      currentState = null;
+      state = null;
     }
 
     const feedbackEl = root.querySelector<HTMLElement>('[data-ac-feedback]');
     const selectEl = root.querySelector<HTMLSelectElement>('[data-ac-recipient-select]');
-    const releaseBtn = root.querySelector<HTMLButtonElement>('[data-ac-release-btn]');
     const urnHintEl = root.querySelector<HTMLElement>('[data-ac-urn-hint]');
-    const reviewForm = root.querySelector<HTMLFormElement>('[data-ac-review-form]');
+    const formEl = root.querySelector<HTMLFormElement>('[data-ac-review-form]');
+    const publicSwitch = root.querySelector<HTMLInputElement>('[data-ac-public-switch]');
     const submitBtn = root.querySelector<HTMLButtonElement>('[data-ac-submit-btn]');
     const resubmitBtn = root.querySelector<HTMLButtonElement>('[data-ac-resubmit-btn]');
-    const publicSwitch = root.querySelector<HTMLInputElement>('[data-ac-public-switch]');
-    const totalWordsEl = root.querySelector<HTMLElement>('[data-ac-total-words]');
     const feedListEl = root.querySelector<HTMLElement>('[data-ac-feed-list]');
+    const countEl = root.querySelector<HTMLElement>('[data-ac-devoluciones-count]');
 
-    const descInput = root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="descripcion"]');
-    const funcInput = root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="funcionaNoFunciona"]');
-    const distInput = root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="hariaDistinto"]');
+    const textareas = {
+      descripcion: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="descripcion"]'),
+      funcionaNoFunciona: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="funcionaNoFunciona"]'),
+      hariaDistinto: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="hariaDistinto"]'),
+    };
+    const wordCounters = {
+      descripcion: root.querySelector<HTMLElement>('[data-ac-word-count="descripcion"]'),
+      funcionaNoFunciona: root.querySelector<HTMLElement>('[data-ac-word-count="funcionaNoFunciona"]'),
+      hariaDistinto: root.querySelector<HTMLElement>('[data-ac-word-count="hariaDistinto"]'),
+    };
 
-    const inboundSection = root.querySelector<HTMLElement>('[data-ac-inbound-section]');
-    const inboundTitle = root.querySelector<HTMLElement>('[data-ac-inbound-title]');
-    const inboundVisibility = root.querySelector<HTMLElement>('[data-ac-inbound-visibility]');
-    const inboundDesc = root.querySelector<HTMLElement>('[data-ac-inbound-desc]');
-    const inboundFunc = root.querySelector<HTMLElement>('[data-ac-inbound-func]');
-    const inboundDist = root.querySelector<HTMLElement>('[data-ac-inbound-dist]');
-    const inboundIdInput = root.querySelector<HTMLInputElement>('[data-ac-inbound-id]');
-    const responseForm = root.querySelector<HTMLFormElement>('[data-ac-response-form]');
-    const responseInput = root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="recipientResponse"]');
-    const responseSubmitBtn = root.querySelector<HTMLButtonElement>('[data-ac-response-submit-btn]');
-    const responseResubmitBtn = root.querySelector<HTMLButtonElement>('[data-ac-response-resubmit-btn]');
+    let editingUnlocked = false;
 
-    const showFeedback = (msg: string, kind: 'ok' | 'error' = 'ok') => {
+    function showFeedback(msg: string, isError = false) {
       if (!feedbackEl) return;
-      feedbackEl.textContent = msg;
-      feedbackEl.hidden = false;
-      feedbackEl.className = `ac-alert ${kind === 'error' ? 'ac-alert--error' : 'ac-alert--ok'}`;
-    };
-
-    const updateWordCounters = () => {
-      const w1 = countWordsClient(descInput?.value || '');
-      const w2 = countWordsClient(funcInput?.value || '');
-      const w3 = countWordsClient(distInput?.value || '');
-      const total = w1 + w2 + w3;
-
-      const c1 = root.querySelector<HTMLElement>('[data-ac-word-count="descripcion"]');
-      const c2 = root.querySelector<HTMLElement>('[data-ac-word-count="funcionaNoFunciona"]');
-      const c3 = root.querySelector<HTMLElement>('[data-ac-word-count="hariaDistinto"]');
-      if (c1) c1.textContent = formatWordLabel(w1);
-      if (c2) c2.textContent = formatWordLabel(w2);
-      if (c3) c3.textContent = formatWordLabel(w3);
-      if (totalWordsEl) {
-        totalWordsEl.innerHTML = `Total: <strong>${total}</strong> ${total === 1 ? 'palabra' : 'palabras'}`;
-      }
-
-      if (responseInput) {
-        const wr = countWordsClient(responseInput.value || '');
-        const cr = root.querySelector<HTMLElement>('[data-ac-word-count="recipientResponse"]');
-        if (cr) cr.textContent = formatWordLabel(wr);
-      }
-    };
-
-    root.querySelectorAll<HTMLTextAreaElement>('[data-ac-textarea]').forEach((ta) => {
-      ta.addEventListener('input', updateWordCounters);
-    });
-
-    const renderFeed = (state: any) => {
-      if (!feedListEl) return;
-      const reviews = Array.isArray(state?.visibleReviews) ? state.visibleReviews : [];
-      const isTeacher = Boolean(state?.currentUser?.isTeacher);
-
-      if (reviews.length === 0) {
-        feedListEl.innerHTML = '<p class="ac-empty-msg">Todavía no hay devoluciones visibles registradas.</p>';
+      if (!msg) {
+        feedbackEl.hidden = true;
+        feedbackEl.textContent = '';
         return;
       }
+      feedbackEl.hidden = false;
+      feedbackEl.textContent = msg;
+      feedbackEl.classList.toggle('ac-msg--error', isError);
+    }
 
-      feedListEl.innerHTML = reviews
-        .map((rev: any) => {
-          const w1 = countWordsClient(rev.descripcion);
-          const w2 = countWordsClient(rev.funcionaNoFunciona);
-          const w3 = countWordsClient(rev.hariaDistinto);
-          const totalW = w1 + w2 + w3;
-          const isSub = rev.status === 'submitted';
+    function updateWordCounts() {
+      (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+        const count = countWords(textareas[key]?.value ?? '');
+        if (wordCounters[key]) {
+          wordCounters[key]!.textContent = formatWordLabel(count);
+        }
+      });
+    }
 
-          return `
-            <article class="ac-review-item" data-review-id="${esc(rev.id)}">
-              <header class="ac-review-item-head">
-                <div class="ac-review-pair">
-                  <strong>${esc(rev.authorName)}</strong>
-                  <span class="ac-pair-arrow" aria-hidden="true">→</span>
-                  <span>amigx críticx de</span>
-                  <strong>${esc(rev.recipientName)}</strong>
-                </div>
-                <div class="ac-review-badges">
-                  <span class="ac-badge ${isSub ? 'ac-badge--ok' : 'ac-badge--pending'}">
-                    ${isSub ? 'Entregado' : 'En urna (pendiente)'}
-                  </span>
-                  <span class="ac-badge ${rev.isPublic ? 'ac-badge--public' : 'ac-badge--private'}">
-                    ${rev.isPublic ? 'Público' : 'Privado'}
-                  </span>
-                  <span class="ac-badge">${totalW} pal.</span>
-                  ${
-                    isTeacher
-                      ? `<button type="button" class="ac-teacher-reset-btn" data-ac-teacher-release="${esc(rev.authorUserId)}" title="Liberar esta asignación de la urna (Docente)">Liberar urna</button>`
-                      : ''
-                  }
-                </div>
-              </header>
-              ${
-                isSub
-                  ? `
-                <div class="ac-review-item-body">
-                  <div class="ac-read-block">
-                    <h4>1. Descripción (${w1} pal.)</h4>
-                    <p>${esc(rev.descripcion)}</p>
-                  </div>
-                  <div class="ac-read-block">
-                    <h4>2. Qué funciona y qué no funciona (${w2} pal.)</h4>
-                    <p>${esc(rev.funcionaNoFunciona)}</p>
-                  </div>
-                  <div class="ac-read-block">
-                    <h4>3. Qué haría distinto y pregunta abierta (${w3} pal.)</h4>
-                    <p>${esc(rev.hariaDistinto)}</p>
-                  </div>
-                  ${
-                    rev.recipientResponse
-                      ? `
-                    <div class="ac-read-block ac-read-block--response">
-                      <h4>Respuesta de ${esc(rev.recipientName)} (${countWordsClient(rev.recipientResponse)} pal.)</h4>
-                      <p>${esc(rev.recipientResponse)}</p>
-                    </div>
-                  `
-                      : ''
-                  }
-                </div>
-              `
-                  : ''
-              }
-            </article>
-          `;
-        })
+    function renderDevoluciones(reviews: AmigxCriticxReviewRecord[]) {
+      const submitted = reviews.filter((r) => r.status === 'submitted');
+      if (countEl) countEl.textContent = String(submitted.length);
+      if (!feedListEl) return;
+      if (submitted.length === 0) {
+        feedListEl.innerHTML = '<p class="ac-empty">Todavía no hay devoluciones entregadas.</p>';
+        return;
+      }
+      feedListEl.innerHTML = submitted
+        .map(
+          (r) => `
+          <article class="ac-review">
+            <header class="ac-review-head">
+              <strong>${escHtml(r.authorName)} → ${escHtml(r.recipientName)}</strong>
+              <span class="ac-review-meta">${r.isPublic ? 'Público' : 'Docentes / Par'}</span>
+            </header>
+            <div class="ac-review-section">
+              <h4>1. Descripción</h4>
+              <p>${escHtml(r.descripcion)}</p>
+            </div>
+            <div class="ac-review-section">
+              <h4>2. Qué funciona y qué no funciona</h4>
+              <p>${escHtml(r.funcionaNoFunciona)}</p>
+            </div>
+            <div class="ac-review-section">
+              <h4>3. Qué haría distinto y pregunta abierta</h4>
+              <p>${escHtml(r.hariaDistinto)}</p>
+            </div>
+          </article>
+        `,
+        )
         .join('');
-    };
+    }
 
-    const applyState = (state: any, preserveDrafts = false) => {
-      if (!state) return;
-      currentState = state;
+    function applyState(nextState: AmigxCriticxPortalState, syncFields = false) {
+      state = nextState;
+      const myOutbound = nextState.myOutboundReview;
+      const isSubmittedNow = myOutbound?.status === 'submitted';
+      const locked = Boolean(isSubmittedNow && !editingUnlocked);
 
-      // Update stats
-      const statTotal = root.querySelector('[data-ac-stat-total]');
-      const statAssigned = root.querySelector('[data-ac-stat-assigned]');
-      const statSubmitted = root.querySelector('[data-ac-stat-submitted]');
-      if (statTotal) statTotal.textContent = String(state.urnStats?.totalStudents ?? '—');
-      if (statAssigned) statAssigned.textContent = String(state.urnStats?.assignedCount ?? '—');
-      if (statSubmitted) statSubmitted.textContent = String(state.urnStats?.submittedCount ?? '—');
-
-      const outbound = state.myOutboundReview || null;
-      const isSub = outbound?.status === 'submitted';
-
-      // Rebuild dropdown options
       if (selectEl) {
-        const candidates = Array.isArray(state.urnCandidates) ? state.urnCandidates : [];
-        const optionsHtml: string[] = [
-          '<option value="">— Seleccionar alumnx activx de la urna —</option>',
-        ];
-        if (outbound) {
-          optionsHtml.push(
-            `<option value="${esc(outbound.recipientUserId)}" selected>${esc(outbound.recipientName)} (tu elección actual)</option>`,
+        const currentVal = myOutbound?.recipientUserId || selectEl.value || '';
+        const options: string[] = ['<option value="">Elegir compañerx…</option>'];
+        if (myOutbound) {
+          options.push(
+            `<option value="${escHtml(myOutbound.recipientUserId)}" selected>${escHtml(myOutbound.recipientName)}</option>`,
           );
         }
-        for (const cand of candidates) {
-          if (outbound && cand.id === outbound.recipientUserId) continue;
-          optionsHtml.push(`<option value="${esc(cand.id)}">${esc(cand.name)}</option>`);
+        for (const student of nextState.urnCandidates) {
+          if (student.id === myOutbound?.recipientUserId) continue;
+          const sel = !myOutbound && student.id === currentVal ? ' selected' : '';
+          options.push(`<option value="${escHtml(student.id)}"${sel}>${escHtml(student.name)}</option>`);
         }
-        selectEl.innerHTML = optionsHtml.join('');
-        selectEl.value = outbound?.recipientUserId || '';
-        selectEl.disabled = Boolean(isSub);
-      }
-
-      if (releaseBtn) {
-        releaseBtn.hidden = !outbound || Boolean(isSub);
+        selectEl.innerHTML = options.join('');
+        selectEl.disabled = Boolean(isSubmittedNow);
       }
 
       if (urnHintEl) {
-        urnHintEl.textContent = outbound
-          ? `Asignación registrada en la urna: sos el amigx críticx de ${outbound.recipientName}.`
-          : 'Al elegir un nombre del menú desplegable, se reserva automáticamente en la urna y deja de aparecer para el resto.';
+        urnHintEl.textContent = myOutbound ? `Asignado: ${myOutbound.recipientName}` : '';
       }
 
-      if (!preserveDrafts && outbound) {
-        if (descInput) descInput.value = outbound.descripcion || '';
-        if (funcInput) funcInput.value = outbound.funcionaNoFunciona || '';
-        if (distInput) distInput.value = outbound.hariaDistinto || '';
-        if (publicSwitch) publicSwitch.checked = Boolean(outbound.isPublic);
+      if (syncFields && myOutbound) {
+        if (textareas.descripcion) textareas.descripcion.value = myOutbound.descripcion || '';
+        if (textareas.funcionaNoFunciona) textareas.funcionaNoFunciona.value = myOutbound.funcionaNoFunciona || '';
+        if (textareas.hariaDistinto) textareas.hariaDistinto.value = myOutbound.hariaDistinto || '';
+        if (publicSwitch) publicSwitch.checked = Boolean(myOutbound.isPublic);
       }
+
+      (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+        if (textareas[key]) textareas[key]!.disabled = locked;
+      });
 
       if (submitBtn) {
-        submitBtn.disabled = Boolean(isSub);
-        submitBtn.textContent = isSub ? '✓ ENTREGADO' : 'ENTREGAR';
-        submitBtn.className = `ac-btn ${isSub ? 'ac-btn--submitted' : 'ac-btn--primary'}`;
+        submitBtn.disabled = locked;
+        submitBtn.textContent = locked ? 'ENTREGADO' : 'ENTREGAR';
+        submitBtn.classList.toggle('ac-btn--done', locked);
+        submitBtn.classList.toggle('ac-btn--submit', !locked);
       }
+
       if (resubmitBtn) {
-        resubmitBtn.hidden = !isSub;
+        resubmitBtn.hidden = !locked;
       }
 
-      // Inbound review section
-      const inbound = state.myInboundReview || null;
-      if (inboundSection) {
-        const showInbound = Boolean(inbound && inbound.status === 'submitted');
-        inboundSection.hidden = !showInbound;
-        if (showInbound && inbound) {
-          if (inboundTitle) inboundTitle.textContent = `Informe de tu amigx críticx: ${inbound.authorName}`;
-          if (inboundVisibility) {
-            inboundVisibility.textContent = inbound.isPublic ? 'Público para el curso' : 'Privado (par + docentes)';
-          }
-          if (inboundDesc) inboundDesc.textContent = inbound.descripcion || '';
-          if (inboundFunc) inboundFunc.textContent = inbound.funcionaNoFunciona || '';
-          if (inboundDist) inboundDist.textContent = inbound.hariaDistinto || '';
-          if (inboundIdInput) inboundIdInput.value = inbound.id || '';
-          if (!preserveDrafts && responseInput) {
-            responseInput.value = inbound.recipientResponse || '';
-          }
-          const hasResponded = Boolean(inbound.recipientRespondedAt);
-          if (responseSubmitBtn) {
-            responseSubmitBtn.disabled = hasResponded;
-            responseSubmitBtn.textContent = hasResponded ? '✓ RESPUESTA ENTREGADA' : 'ENTREGAR RESPUESTA';
-            responseSubmitBtn.className = `ac-btn ${hasResponded ? 'ac-btn--submitted' : 'ac-btn--primary'}`;
-          }
-          if (responseResubmitBtn) {
-            responseResubmitBtn.hidden = !hasResponded;
-          }
-        }
-      }
-
-      updateWordCounters();
-      renderFeed(state);
-    };
-
-    // Fetch fresh state if SSR state was null
-    if (!currentState) {
-      fetch('/api/amigx-criticx')
-        .then((r) => r.json())
-        .then((data) => {
-          if (data?.state) applyState(data.state);
-        })
-        .catch(() => {});
+      updateWordCounts();
+      renderDevoluciones(nextState.visibleReviews);
     }
 
-    // Handle urn recipient selection (first-come, first-served)
+    // Live word counters
+    (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+      textareas[key]?.addEventListener('input', updateWordCounts);
+    });
+
+    // Tab links inside portal
+    root.querySelectorAll<HTMLAnchorElement>('[data-ac-nav]').forEach((tab) => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        const view = tab.dataset.acNav === 'devoluciones' ? 'devoluciones' : 'form';
+        setPortalView(root, view, true);
+      });
+    });
+
+    // Select recipient from urn dropdown
     selectEl?.addEventListener('change', async () => {
       const recipientUserId = selectEl.value.trim();
       if (!recipientUserId) return;
+      showFeedback('');
+      try {
+        const res = await fetch('/api/amigx-criticx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'select_recipient', recipientUserId }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.state) {
+          showFeedback(data?.error || 'No se pudo asignar el compañerx.', true);
+          if (state) applyState(state, false);
+          return;
+        }
+        applyState(data.state, false);
+      } catch {
+        showFeedback('Error de red al guardar la elección.', true);
+      }
+    });
 
-      selectEl.disabled = true;
+    // Toggle HACER PÚBLICO
+    publicSwitch?.addEventListener('change', async () => {
+      if (!state?.myOutboundReview) return;
       try {
         const res = await fetch('/api/amigx-criticx', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: 'select_recipient',
-            recipientUserId,
+            action: 'toggle_public',
+            isPublic: Boolean(publicSwitch.checked),
           }),
         });
         const data = await res.json();
-        if (!res.ok || data.error) {
-          showFeedback(data.error || 'No se pudo reservar el par en la urna.', 'error');
-          // Refresh state to get updated urn list
-          const fresh = await fetch('/api/amigx-criticx').then((r) => r.json()).catch(() => null);
-          if (fresh?.state) applyState(fresh.state, true);
-          return;
+        if (res.ok && data?.state) {
+          applyState(data.state, false);
         }
-        applyState(data.state, true);
-        showFeedback('Par reservado en la urna. Ya podés completar y entregar tu informe.');
       } catch {
-        showFeedback('Error de red al reservar en la urna.', 'error');
-      } finally {
-        if (!currentState?.myOutboundReview || currentState.myOutboundReview.status !== 'submitted') {
-          selectEl.disabled = false;
-        }
+        // ignore
       }
     });
 
-    // Release unsubmitted claim
-    releaseBtn?.addEventListener('click', async () => {
-      releaseBtn.disabled = true;
-      try {
-        const res = await fetch('/api/amigx-criticx', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'release_recipient' }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          showFeedback(data.error || 'No se pudo liberar la asignación.', 'error');
-          return;
-        }
-        applyState(data.state, true);
-        showFeedback('Liberaste la asignación. El nombre volvió a estar disponible en la urna.');
-      } catch {
-        showFeedback('Error de red al liberar turno.', 'error');
-      } finally {
-        releaseBtn.disabled = false;
+    // Unlock editing on RE-ENVIAR ENTREGA
+    resubmitBtn?.addEventListener('click', () => {
+      editingUnlocked = true;
+      (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+        if (textareas[key]) textareas[key]!.disabled = false;
+      });
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'ENTREGAR';
+        submitBtn.classList.remove('ac-btn--done');
+        submitBtn.classList.add('ac-btn--submit');
       }
+      resubmitBtn.hidden = true;
+      textareas.descripcion?.focus();
     });
 
-    // Submit or Re-submit helper
-    const sendReviewSubmission = async (isResubmit = false) => {
-      const recipientUserId = (selectEl?.value || currentState?.myOutboundReview?.recipientUserId || '').trim();
+    // Submit form
+    formEl?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showFeedback('');
+
+      const recipientUserId = (selectEl?.value || state?.myOutboundReview?.recipientUserId || '').trim();
       if (!recipientUserId) {
-        showFeedback('Primero elegí a quién vas a evaluar en el selector de la urna (Paso 1).', 'error');
+        showFeedback('Elegí primero unx compañerx en el menú desplegable.', true);
         selectEl?.focus();
         return;
       }
 
-      const descripcion = (descInput?.value || '').trim();
-      const funcionaNoFunciona = (funcInput?.value || '').trim();
-      const hariaDistinto = (distInput?.value || '').trim();
-      const isPublic = Boolean(publicSwitch?.checked);
+      const descripcion = textareas.descripcion?.value ?? '';
+      const funcionaNoFunciona = textareas.funcionaNoFunciona?.value ?? '';
+      const hariaDistinto = textareas.hariaDistinto?.value ?? '';
 
-      if (!descripcion || !funcionaNoFunciona || !hariaDistinto) {
-        showFeedback('Completá los tres campos del informe antes de entregar.', 'error');
+      if (!descripcion.trim() || !funcionaNoFunciona.trim() || !hariaDistinto.trim()) {
+        showFeedback('Completá los tres campos antes de entregar.', true);
         return;
       }
 
-      if (submitBtn) submitBtn.disabled = true;
-      if (resubmitBtn) resubmitBtn.disabled = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Guardando…';
+      }
 
       try {
         const res = await fetch('/api/amigx-criticx', {
@@ -822,621 +550,337 @@ const initialResponseWords = countWords(myInbound?.recipientResponse ?? '');
             descripcion,
             funcionaNoFunciona,
             hariaDistinto,
-            isPublic,
+            isPublic: Boolean(publicSwitch?.checked),
           }),
         });
         const data = await res.json();
-        if (!res.ok || data.error) {
-          showFeedback(data.error || 'Error al guardar la entrega.', 'error');
-          if (submitBtn && currentState?.myOutboundReview?.status !== 'submitted') {
+        if (!res.ok || !data?.state) {
+          if (submitBtn) {
             submitBtn.disabled = false;
+            submitBtn.textContent = 'ENTREGAR';
           }
+          showFeedback(data?.error || 'No se pudo guardar la entrega.', true);
           return;
         }
-        applyState(data.state, false);
-        showFeedback(
-          isResubmit
-            ? 'Entrega actualizada y re-enviada correctamente.'
-            : 'Informe entregado. Quedó grabado para docentes, tu par y vos.',
-        );
+        editingUnlocked = false;
+        applyState(data.state, true);
+        showFeedback('Entrega guardada.');
       } catch {
-        showFeedback('Error de red al enviar el informe.', 'error');
-      } finally {
-        if (resubmitBtn) resubmitBtn.disabled = false;
-      }
-    };
-
-    reviewForm?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      void sendReviewSubmission(false);
-    });
-
-    resubmitBtn?.addEventListener('click', () => {
-      void sendReviewSubmission(true);
-    });
-
-    // Toggle HACER PÚBLICO live when already assigned/submitted
-    publicSwitch?.addEventListener('change', async () => {
-      if (!currentState?.myOutboundReview) return;
-      try {
-        const res = await fetch('/api/amigx-criticx', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'toggle_public',
-            isPublic: Boolean(publicSwitch.checked),
-          }),
-        });
-        const data = await res.json();
-        if (res.ok && data.state) {
-          applyState(data.state, true);
-          showFeedback(
-            publicSwitch.checked
-              ? 'Visibilidad actualizada: ahora tu devolución es pública para el curso.'
-              : 'Visibilidad actualizada: solo visible para docentes, tu par y vos.',
-          );
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'ENTREGAR';
         }
-      } catch {
-        // Ignore transient toggle error; will save on next submit
+        showFeedback('Error de red al guardar la entrega.', true);
       }
     });
 
-    // Recipient written response submission
-    const sendRecipientResponse = async (isResubmit = false) => {
-      const reviewId = (inboundIdInput?.value || currentState?.myInboundReview?.id || '').trim();
-      const recipientResponse = (responseInput?.value || '').trim();
-      if (!reviewId || !recipientResponse) {
-        showFeedback('Escribí tu respuesta antes de entregar.', 'error');
-        return;
-      }
-      if (responseSubmitBtn) responseSubmitBtn.disabled = true;
-      if (responseResubmitBtn) responseResubmitBtn.disabled = true;
-      try {
-        const res = await fetch('/api/amigx-criticx', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'submit_response',
-            reviewId,
-            recipientResponse,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          showFeedback(data.error || 'Error al guardar la respuesta.', 'error');
-          return;
-        }
-        applyState(data.state, false);
-        showFeedback(
-          isResubmit
-            ? 'Respuesta escrita re-enviada correctamente.'
-            : 'Respuesta escrita entregada correctamente (§27.3.6).',
-        );
-      } catch {
-        showFeedback('Error de red al guardar la respuesta.', 'error');
-      } finally {
-        if (responseResubmitBtn) responseResubmitBtn.disabled = false;
-      }
-    };
-
-    responseForm?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      void sendRecipientResponse(false);
-    });
-
-    responseResubmitBtn?.addEventListener('click', () => {
-      void sendRecipientResponse(true);
-    });
-
-    // Teacher release button delegation
-    feedListEl?.addEventListener('click', async (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-ac-teacher-release]');
-      if (!btn) return;
-      const targetAuthorUserId = btn.dataset.acTeacherRelease;
-      if (!targetAuthorUserId) return;
-      if (!confirm('¿Liberar esta asignación de la urna?')) return;
-
-      btn.disabled = true;
-      try {
-        const res = await fetch('/api/amigx-criticx', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'release_recipient',
-            targetAuthorUserId,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok && data.state) {
-          applyState(data.state, true);
-          showFeedback('Asignación liberada por docente.');
-        } else {
-          showFeedback(data.error || 'No se pudo liberar la asignación.', 'error');
-        }
-      } catch {
-        showFeedback('Error de red.', 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
+    if (!state) {
+      fetch('/api/amigx-criticx')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.state) applyState(data.state, true);
+        })
+        .catch(() => {});
+    }
   }
 
-  document.addEventListener('DOMContentLoaded', initAmigxCriticxPortal);
-  document.addEventListener('astro:page-load', initAmigxCriticxPortal);
+  function bootAll() {
+    document.querySelectorAll<HTMLElement>('[data-ac-portal]').forEach(bindPortal);
+  }
+
+  bootAll();
+  document.addEventListener('astro:page-load', bootAll);
+
+  // Allow sidebar links to /amigxcriticx and /amigxcriticx/devoluciones to switch view cleanly
+  // even when Dockview has open note panels.
+  const win = window as any;
+  if (!win.__acNavInterceptorBound) {
+    win.__acNavInterceptorBound = true;
+    document.addEventListener(
+      'click',
+      (e: MouseEvent) => {
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+        const link = (e.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
+        if (!link) return;
+        const href = link.getAttribute('href') || '';
+        const isAcLink = /^\/(s123\/)?amigxcriticx(\/devoluciones)?\/?$/.test(href);
+        if (!isAcLink) return;
+
+        // Always close any open Dockview panels so the portal is not hidden behind a note pod
+        try {
+          win.__cnwWorkspace?.closeAll?.();
+        } catch {
+          // ignore
+        }
+
+        const root = document.querySelector<HTMLElement>('[data-ac-portal]');
+        if (root) {
+          e.preventDefault();
+          const targetView = href.endsWith('/devoluciones') ? 'devoluciones' : 'form';
+          setPortalView(root, targetView, true);
+        }
+      },
+      true,
+    );
+  }
 </script>
 
 <style>
-  .ac-portal {
-    display: grid;
-    gap: 1.1rem;
-    max-width: min(980px, 100%);
+  .ac-simple {
+    max-width: 760px;
     margin: 0 auto;
-    padding: 0.5rem 0 2.5rem;
-    color: var(--c-fg);
+    padding: 1.25rem 1rem 3rem;
+    color: var(--c-fg, #e5e5e0);
   }
 
-  .ac-header {
-    display: grid;
-    gap: 0.65rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--c-border);
-  }
-
-  .ac-header-top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .ac-kicker {
-    margin: 0 0 0.2rem;
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: color-mix(in srgb, var(--c-fg) 62%, transparent);
-    font-weight: 600;
-  }
-
-  .ac-title {
-    margin: 0;
-    font-size: clamp(1.45rem, 2.2vw, 1.9rem);
-    line-height: 1.15;
-  }
-
-  .ac-subtitle {
-    margin: 0;
-    font-size: 0.94rem;
-    line-height: 1.5;
-    color: color-mix(in srgb, var(--c-fg) 84%, transparent);
-  }
-
-  .ac-urn-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
-  .ac-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    border: 1px solid var(--c-border);
-    background: color-mix(in srgb, var(--c-fg) 4%, transparent);
-  }
-
-  .ac-pill--accent {
-    border-color: color-mix(in srgb, var(--accent, #2563eb) 45%, var(--c-border));
-    background: color-mix(in srgb, var(--accent, #2563eb) 10%, transparent);
-  }
-
-  .ac-protocol-details {
-    border: 1px solid var(--c-border);
-    border-radius: 8px;
-    padding: 0.5rem 0.75rem;
-    background: color-mix(in srgb, var(--c-fg) 3%, transparent);
-    font-size: 0.86rem;
-  }
-
-  .ac-protocol-summary {
-    cursor: pointer;
-    font-weight: 600;
-    list-style: none;
-  }
-
-  .ac-protocol-summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .ac-protocol-body {
-    margin-top: 0.55rem;
-    padding-top: 0.55rem;
-    border-top: 1px solid color-mix(in srgb, var(--c-border) 60%, transparent);
-  }
-
-  .ac-protocol-list {
-    margin: 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.35rem;
-    line-height: 1.45;
-  }
-
-  .ac-alert {
-    padding: 0.65rem 0.9rem;
-    border-radius: 8px;
-    font-size: 0.88rem;
-    font-weight: 500;
-    border: 1px solid var(--c-border);
-  }
-
-  .ac-alert--ok {
-    border-color: color-mix(in srgb, #16a34a 55%, var(--c-border));
-    background: color-mix(in srgb, #16a34a 12%, transparent);
-  }
-
-  .ac-alert--error {
-    border-color: color-mix(in srgb, #dc2626 55%, var(--c-border));
-    background: color-mix(in srgb, #dc2626 12%, transparent);
-  }
-
-  .ac-card {
-    display: grid;
-    gap: 0.9rem;
-    padding: 1.1rem;
-    border: 1px solid var(--c-border);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--c-bg, #fff) 96%, var(--c-fg) 4%);
-  }
-
-  .ac-card-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding-bottom: 0.55rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--c-border) 65%, transparent);
-  }
-
-  .ac-card-head h2 {
-    margin: 0.1rem 0 0;
-    font-size: 1.12rem;
-  }
-
-  .ac-step-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: color-mix(in srgb, var(--c-fg) 60%, transparent);
-    font-weight: 600;
-  }
-
-  .ac-rule-tag {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.55rem;
-    border-radius: 6px;
-    border: 1px solid var(--c-border);
-    color: color-mix(in srgb, var(--c-fg) 75%, transparent);
-  }
-
-  .ac-urn-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .ac-urn-label {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.6rem;
-    flex: 1 1 320px;
-  }
-
-  .ac-urn-prefix {
-    font-weight: 600;
-    font-size: 0.98rem;
-  }
-
-  .ac-select {
-    flex: 1 1 240px;
-    max-inline-size: 48ch;
-    padding: 0.5rem 0.7rem;
-    border-radius: 7px;
-    border: 1px solid var(--c-border);
-    background: var(--c-bg);
-    color: var(--c-fg);
-    font: inherit;
-    font-size: 0.94rem;
-  }
-
-  .ac-urn-hint {
-    margin: 0;
-    font-size: 0.82rem;
-    color: color-mix(in srgb, var(--c-fg) 68%, transparent);
-  }
-
-  .ac-total-words {
-    font-size: 0.84rem;
-    padding: 0.24rem 0.6rem;
-    border-radius: 6px;
-    border: 1px solid var(--c-border);
-  }
-
-  .ac-field {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .ac-field-header {
+  .ac-top {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--c-border, rgba(128, 128, 128, 0.25));
+    padding-bottom: 0.6rem;
+    margin-bottom: 1rem;
   }
 
-  .ac-field-label {
+  .ac-heading {
+    font-size: 1.25rem;
+    font-weight: 650;
+    margin: 0;
+  }
+
+  .ac-tabs {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .ac-tab {
+    color: var(--c-fg-dim, #9a9a95);
+    text-decoration: none;
+    padding: 0.2rem 0.45rem;
+    border-radius: 3px;
+  }
+
+  .ac-tab:hover {
+    color: var(--c-fg, #fff);
+  }
+
+  .ac-tab.active {
+    color: var(--c-fg, #fff);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .ac-mo-box {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    padding: 0.75rem 0.9rem;
+    margin-bottom: 1.1rem;
+    border-left: 2px solid var(--c-border, rgba(128, 128, 128, 0.4));
+    background: var(--c-bg-mute, rgba(128, 128, 128, 0.06));
+  }
+
+  .ac-mo-box p {
+    margin: 0;
+  }
+
+  .ac-mo-box code {
+    font-size: 0.82rem;
+  }
+
+  .ac-msg {
+    font-size: 0.88rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0 0.9rem;
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.3));
+    border-radius: 3px;
+  }
+
+  .ac-msg--error {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.45);
+  }
+
+  .ac-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .ac-urn-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--c-border, rgba(128, 128, 128, 0.2));
+  }
+
+  .ac-urn-label {
     font-weight: 600;
     font-size: 0.95rem;
   }
 
-  .ac-word-counter {
-    font-size: 0.78rem;
-    font-variant-numeric: tabular-nums;
-    padding: 0.12rem 0.48rem;
-    border-radius: 999px;
-    border: 1px solid var(--c-border);
-    color: color-mix(in srgb, var(--c-fg) 75%, transparent);
-  }
-
-  .ac-field-help {
-    margin: 0;
-    font-size: 0.82rem;
-    line-height: 1.4;
-    color: color-mix(in srgb, var(--c-fg) 66%, transparent);
-  }
-
-  /* Auto-fitting textarea following modern-web-guidance (form-fields-automatically-fit-contents) */
-  .ac-textarea {
-    field-sizing: content;
-    height: auto;
-    width: 100%;
-    min-block-size: 5lh;
-    max-block-size: 18lh;
-    padding: 0.65rem 0.75rem;
-    border-radius: 8px;
-    border: 1px solid var(--c-border);
-    background: var(--c-bg);
-    color: var(--c-fg);
+  .ac-select {
     font: inherit;
     font-size: 0.92rem;
-    line-height: 1.5;
-    resize: vertical;
-    box-sizing: border-box;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.35));
+    border-radius: 3px;
+    background: var(--c-bg, transparent);
+    color: inherit;
+    min-width: 240px;
   }
 
-  .ac-textarea:focus-visible,
-  .ac-select:focus-visible {
-    outline: 2px solid var(--accent, #2563eb);
-    outline-offset: 2px;
-  }
-
-  .ac-form-footer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-top: 0.65rem;
-    border-top: 1px solid color-mix(in srgb, var(--c-border) 65%, transparent);
-  }
-
-  .ac-visibility-box {
-    display: grid;
-    gap: 0.25rem;
-    max-width: 540px;
-  }
-
-  .ac-switch-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    font-weight: 700;
-    font-size: 0.88rem;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  /* Accessible native switch + progressive enhancement (modern-web-guidance: switch) */
-  input[type="checkbox"][switch].ac-switch-input {
-    accent-color: var(--accent, #1769e0);
-    margin: 0;
-    cursor: pointer;
-    width: 1.15rem;
-    height: 1.15rem;
-  }
-
-  input[type="checkbox"][switch].ac-switch-input:focus-visible {
-    outline: 3px solid var(--accent, #ff8c00);
-    outline-offset: 4px;
-  }
-
-  .ac-visibility-note {
-    margin: 0;
-    font-size: 0.78rem;
-    line-height: 1.38;
-    color: color-mix(in srgb, var(--c-fg) 68%, transparent);
-  }
-
-  .ac-submit-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.55rem;
-  }
-
-  .ac-btn {
-    padding: 0.55rem 1.05rem;
-    border-radius: 7px;
-    border: 1px solid var(--c-border);
-    font: inherit;
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    transition: opacity 0.15s ease, transform 0.1s ease;
-  }
-
-  .ac-btn:disabled {
-    cursor: default;
-  }
-
-  .ac-btn--primary {
-    background: var(--c-fg);
-    color: var(--c-bg);
-    border-color: var(--c-fg);
-  }
-
-  .ac-btn--submitted {
-    background: color-mix(in srgb, #16a34a 18%, var(--c-bg));
-    color: var(--c-fg);
-    border-color: color-mix(in srgb, #16a34a 55%, var(--c-border));
-  }
-
-  .ac-btn--resubmit {
-    background: transparent;
-    color: var(--c-fg);
-    border-color: var(--c-fg);
-  }
-
-  .ac-btn--secondary {
-    background: transparent;
-    color: var(--c-fg);
-  }
-
-  .ac-inbound-fields,
-  .ac-review-item-body {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .ac-read-block {
-    padding: 0.65rem 0.8rem;
-    border-radius: 7px;
-    border: 1px solid color-mix(in srgb, var(--c-border) 70%, transparent);
-    background: color-mix(in srgb, var(--c-fg) 2.5%, transparent);
-  }
-
-  .ac-read-block h3,
-  .ac-read-block h4 {
-    margin: 0 0 0.3rem;
+  .ac-urn-status {
     font-size: 0.82rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: color-mix(in srgb, var(--c-fg) 70%, transparent);
+    color: var(--c-fg-dim, #9a9a95);
   }
 
-  .ac-read-block p {
-    margin: 0;
-    white-space: pre-wrap;
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-
-  .ac-read-block--response {
-    border-left: 3px solid var(--accent, #2563eb);
-  }
-
-  .ac-response-form {
-    display: grid;
-    gap: 0.75rem;
-    padding-top: 0.65rem;
-    border-top: 1px solid color-mix(in srgb, var(--c-border) 65%, transparent);
-  }
-
-  .ac-feed-list {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .ac-review-item {
-    display: grid;
-    gap: 0.65rem;
-    padding: 0.85rem;
-    border-radius: 8px;
-    border: 1px solid var(--c-border);
-  }
-
-  .ac-review-item-head {
+  .ac-field {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .ac-field-head {
+    display: flex;
     justify-content: space-between;
+    align-items: baseline;
     gap: 0.5rem;
   }
 
-  .ac-review-pair {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem;
+  .ac-field-head label {
+    font-weight: 600;
     font-size: 0.92rem;
   }
 
-  .ac-pair-arrow {
-    opacity: 0.6;
+  .ac-words {
+    font-size: 0.78rem;
+    color: var(--c-fg-dim, #9a9a95);
+    font-variant-numeric: tabular-nums;
   }
 
-  .ac-review-badges {
+  .ac-textarea {
+    font: inherit;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    width: 100%;
+    box-sizing: border-box;
+    field-sizing: content;
+    min-block-size: 5.5rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.35));
+    border-radius: 3px;
+    background: var(--c-bg, transparent);
+    color: inherit;
+    resize: vertical;
+  }
+
+  .ac-textarea:disabled {
+    opacity: 0.72;
+  }
+
+  .ac-actions {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding-top: 0.4rem;
   }
 
-  .ac-badge {
-    font-size: 0.72rem;
-    padding: 0.14rem 0.48rem;
-    border-radius: 999px;
-    border: 1px solid var(--c-border);
-  }
-
-  .ac-badge--ok {
-    border-color: color-mix(in srgb, #16a34a 50%, var(--c-border));
-    background: color-mix(in srgb, #16a34a 12%, transparent);
-  }
-
-  .ac-badge--pending {
-    border-color: color-mix(in srgb, #d97706 50%, var(--c-border));
-    background: color-mix(in srgb, #d97706 12%, transparent);
-  }
-
-  .ac-badge--public {
-    border-color: color-mix(in srgb, #2563eb 50%, var(--c-border));
-    background: color-mix(in srgb, #2563eb 12%, transparent);
-  }
-
-  .ac-teacher-reset-btn {
-    font-size: 0.72rem;
-    padding: 0.14rem 0.5rem;
-    border-radius: 6px;
-    border: 1px solid color-mix(in srgb, #dc2626 50%, var(--c-border));
-    background: transparent;
-    color: var(--c-fg);
+  .ac-public-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+    font-weight: 600;
     cursor: pointer;
   }
 
-  .ac-empty-msg {
+  .ac-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .ac-btn {
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    padding: 0.45rem 0.9rem;
+    border-radius: 3px;
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.4));
+    cursor: pointer;
+    background: transparent;
+    color: inherit;
+  }
+
+  .ac-btn--submit {
+    background: var(--c-fg, #e5e5e0);
+    color: var(--c-bg, #141413);
+    border-color: var(--c-fg, #e5e5e0);
+  }
+
+  .ac-btn--done {
+    opacity: 0.65;
+    cursor: default;
+  }
+
+  .ac-btn--edit:hover {
+    background: var(--c-bg-mute, rgba(128, 128, 128, 0.12));
+  }
+
+  .ac-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .ac-empty {
+    font-size: 0.9rem;
+    color: var(--c-fg-dim, #9a9a95);
+  }
+
+  .ac-review {
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.25));
+    border-radius: 3px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .ac-review-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--c-border, rgba(128, 128, 128, 0.18));
+    padding-bottom: 0.4rem;
+    font-size: 0.92rem;
+  }
+
+  .ac-review-meta {
+    font-size: 0.78rem;
+    color: var(--c-fg-dim, #9a9a95);
+  }
+
+  .ac-review-section h4 {
+    font-size: 0.82rem;
+    margin: 0 0 0.2rem;
+    color: var(--c-fg-dim, #9a9a95);
+  }
+
+  .ac-review-section p {
     margin: 0;
-    font-size: 0.88rem;
-    color: color-mix(in srgb, var(--c-fg) 60%, transparent);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
   }
 </style>

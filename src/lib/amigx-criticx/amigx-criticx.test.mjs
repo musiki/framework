@@ -5,6 +5,7 @@ import {
   canViewReview,
   computeUrnCandidates,
   countWords,
+  isExcludedStudentGroup,
   validatePairSelection,
 } from './logic.ts';
 
@@ -77,6 +78,19 @@ describe('Amigx Críticx — logic & urn rules', () => {
       carlaCandidates.map((s) => s.id),
       ['u-ana', 'u-diego'],
     );
+
+    // Students in group X are always excluded from the urn
+    assert.equal(isExcludedStudentGroup('X'), true);
+    assert.equal(isExcludedStudentGroup(' x '), true);
+    assert.equal(isExcludedStudentGroup('A'), false);
+    assert.equal(isExcludedStudentGroup(''), false);
+
+    const studentsWithGroupX = [
+      ...students,
+      { id: 'u-baja', name: 'Zeta Baja', email: 'zeta@test.ar', grupo: 'X' },
+    ];
+    const candidatesFiltered = computeUrnCandidates(studentsWithGroupX, pairs, 'u-carla');
+    assert.equal(candidatesFiltered.some((s) => s.id === 'u-baja'), false);
   });
 
   test('canViewReview enforces visibility for teachers, author, recipient, and public toggle', () => {

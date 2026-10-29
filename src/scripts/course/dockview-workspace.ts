@@ -18,6 +18,7 @@ export interface CourseNotesWorkspace {
   openNote(slug: string, mode: NoteMode, split?: boolean): void;
   openMedia(url: string, title: string, position?: 'bottom' | 'right'): void;
   openHelp(path?: string, title?: string, split?: boolean): void;
+  closeAll(): void;
   destroy(): void;
 }
 
@@ -1013,7 +1014,9 @@ export function initDockviewWorkspace(
 
   // Capture open slugs before teardown so we can restore them if same course (Astro view transition swaps the DOM element)
   const previousCourseId = _activeContainer?.dataset.cnwCourseId ?? '';
-  const slugsToRestore = (_activeWorkspace && previousCourseId === courseId)
+  const entryType = container.querySelector<HTMLElement>('[data-class-content]')?.dataset.entryType ?? '';
+  const isDedicatedPortalView = entryType === 'amigx-criticx' || entryType === 'recursos-editor';
+  const slugsToRestore = (!isDedicatedPortalView && _activeWorkspace && previousCourseId === courseId)
     ? [...panelStates.values()].map(s => s.slug)
     : [];
 
@@ -1580,6 +1583,17 @@ export function initDockviewWorkspace(
     openNote,
     openMedia,
     openHelp,
+    closeAll: () => {
+      for (const panel of [...dockview.panels]) {
+        try {
+          panel.api.close();
+        } catch {
+          // ignore
+        }
+      }
+      panelStates.clear();
+      setDockviewActive(false);
+    },
     destroy: () => {
       ro.disconnect();
       // Run cleanups for any open panel editors

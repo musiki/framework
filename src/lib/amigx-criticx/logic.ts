@@ -2,6 +2,14 @@ export interface StudentCandidate {
   id: string;
   name: string;
   email: string | null;
+  grupo?: string | null;
+}
+
+/**
+ * Returns true if the student belongs to group "X" (inactive/dropped in course profile).
+ */
+export function isExcludedStudentGroup(grupo: unknown): boolean {
+  return String(grupo ?? '').trim().toUpperCase() === 'X';
 }
 
 export interface AmigxCriticxPair {
@@ -137,6 +145,7 @@ export function computeUrnCandidates(
     .filter((student) => {
       const id = String(student.id || '').trim();
       if (!id || id === me) return false;
+      if (isExcludedStudentGroup(student.grupo)) return false;
       if (takenByOthers.has(id)) return false;
       if (choseMe.has(id)) return false;
       return true;
