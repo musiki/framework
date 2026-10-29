@@ -7,7 +7,7 @@ import { countWords } from '../../lib/amigx-criticx/logic';
 interface Props {
   courseId?: string;
   session?: { user?: { name?: string; email?: string; image?: string } } | null;
-  initialView?: 'form' | 'devoluciones';
+  initialView?: 'form' | 'devoluciones' | 'dashboard';
 }
 
 const {
@@ -43,29 +43,36 @@ if (session?.user?.email) {
   }
 }
 
+const isTeacherViewer = Boolean(initialState?.viewer?.isTeacher);
+const effectiveInitialView: 'form' | 'devoluciones' | 'dashboard' =
+  initialView === 'dashboard' && !isTeacherViewer ? 'form' : initialView;
+
 const initialStateJson = JSON.stringify(initialState).replace(/</g, '\\u003c');
 const myOutbound = initialState?.myOutboundReview ?? null;
 const isSubmitted = myOutbound?.status === 'submitted';
 const initialWords1 = countWords(myOutbound?.descripcion ?? '');
 const initialWords2 = countWords(myOutbound?.funcionaNoFunciona ?? '');
 const initialWords3 = countWords(myOutbound?.hariaDistinto ?? '');
-const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
-  (r) => r.status === 'submitted',
-);
+const allVisibleReviews = initialState?.visibleReviews ?? [];
+const submittedVisibleReviews = allVisibleReviews.filter((r) => r.status === 'submitted');
+const activeStudents = initialState?.allActiveStudents ?? [];
+const outboundByAuthorId = new Map(allVisibleReviews.map((r) => [r.authorUserId, r]));
+const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUserId, r]));
 ---
 
 <section
   class="ac-simple"
   data-ac-portal
   data-course-id={courseId}
-  data-ac-view={initialView}
+  data-ac-view={effectiveInitialView}
+  data-ac-is-teacher={isTeacherViewer ? 'true' : 'false'}
 >
   <header class="ac-top">
     <h1 class="ac-heading">Amigx Críticx</h1>
     <nav class="ac-tabs" aria-label="Secciones de Amigx Críticx">
       <a
         href="/amigxcriticx"
-        class:list={['ac-tab', { active: initialView === 'form' }]}
+        class:list={['ac-tab', { active: effectiveInitialView === 'form' }]}
         data-ac-nav="form"
         data-astro-prefetch="false"
       >
@@ -73,12 +80,22 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
       </a>
       <a
         href="/amigxcriticx/devoluciones"
-        class:list={['ac-tab', { active: initialView === 'devoluciones' }]}
+        class:list={['ac-tab', { active: effectiveInitialView === 'devoluciones' }]}
         data-ac-nav="devoluciones"
         data-astro-prefetch="false"
       >
         Devoluciones (<span data-ac-devoluciones-count>{submittedVisibleReviews.length}</span>)
       </a>
+      {isTeacherViewer && (
+        <a
+          href="/amigxcriticx/dashboard"
+          class:list={['ac-tab', { active: effectiveInitialView === 'dashboard' }]}
+          data-ac-nav="dashboard"
+          data-astro-prefetch="false"
+        >
+          AM Dashboard
+        </a>
+      )}
     </nav>
   </header>
 
@@ -89,7 +106,7 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
       <p class="ac-msg" data-ac-feedback hidden role="status" aria-live="polite"></p>
 
       <!-- PÁGINA 1: FORMULARIO -->
-      <div class="ac-page" data-ac-page="form" hidden={initialView !== 'form'}>
+      <div class="ac-page" data-ac-page="form" hidden={effectiveInitialView !== 'form'}>
         <div class="ac-mo-box">
           <p>
             <strong>Cómo usar la Matriz Operativa (§11.4 / §24):</strong> cada concepto central del proyecto se verifica en cinco columnas:
@@ -223,7 +240,7 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
       </div>
 
       <!-- PÁGINA 2: DEVOLUCIONES -->
-      <div class="ac-page" data-ac-page="devoluciones" hidden={initialView !== 'devoluciones'}>
+      <div class="ac-page" data-ac-page="devoluciones" hidden={effectiveInitialView !== 'devoluciones'}>
         <div class="ac-feed" data-ac-feed-list>
           {submittedVisibleReviews.length === 0 ? (
             <p class="ac-empty">Todavía no hay devoluciones entregadas.</p>
@@ -253,6 +270,114 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
           )}
         </div>
       </div>
+
+      <!-- PÁGINA 3: AM DASHBOARD (EXCLUSIVO DOCENTES) -->
+      {isTeacherViewer && (
+        <div class="ac-page" data-ac-page="dashboard" hidden={effectiveInitialView !== 'dashboard'}>
+          <div class="ac-dash" data-ac-dashboard-root>
+            <div class="ac-dash-stats" data-ac-dash-stats>
+              <span>Alumnxs activxs: <strong>{activeStudents.length}</strong></span>
+              <span>Selecciones en urna: <strong>{allVisibleReviews.length}</strong></span>
+              <span>Informes entregados: <strong>{submittedVisibleReviews.length}</strong></span>
+            </div>
+
+            <h2 class="ac-subhead">Quién es amigx críticx de quién</h2>
+            <div class="ac-table-wrap">
+              <table class="ac-table">
+                <thead>
+                  <tr>
+                    <th>Alumnx</th>
+                    <th>Es amigx críticx de →</th>
+                    <th>Recibe devolución de ←</th>
+                    <th>Estado</th>
+                    <th>Visibilidad</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody data-ac-dash-tbody>
+                  {activeStudents.map((student) => {
+                    const out = outboundByAuthorId.get(student.id);
+                    const inc = inboundByRecipientId.get(student.id);
+                    const totalWords = out
+                      ? countWords(out.descripcion) +
+                        countWords(out.funcionaNoFunciona) +
+                        countWords(out.hariaDistinto)
+                      : 0;
+                    return (
+                      <tr>
+                        <td><strong>{student.name}</strong></td>
+                        <td>{out ? out.recipientName : '—'}</td>
+                        <td>{inc ? inc.authorName : '—'}</td>
+                        <td>
+                          {out
+                            ? out.status === 'submitted'
+                              ? `Entregado (${totalWords} pal.)`
+                              : 'En borrador / reservado'
+                            : 'Sin elegir'}
+                        </td>
+                        <td>
+                          {out ? (out.isPublic ? 'Público' : 'Docentes / Par') : '—'}
+                        </td>
+                        <td>
+                          {out ? (
+                            <button
+                              type="button"
+                              class="ac-btn-mini"
+                              data-ac-release-author={student.id}
+                              data-ac-release-name={student.name}
+                            >
+                              Liberar
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <h2 class="ac-subhead">Detalle de selecciones y devoluciones</h2>
+            <div class="ac-feed" data-ac-dash-reviews>
+              {allVisibleReviews.length === 0 ? (
+                <p class="ac-empty">Todavía no hay selecciones ni devoluciones registradas.</p>
+              ) : (
+                allVisibleReviews.map((review) => (
+                  <article class="ac-review">
+                    <header class="ac-review-head">
+                      <strong>{review.authorName} → {review.recipientName}</strong>
+                      <span class="ac-review-meta">
+                        {review.status === 'submitted' ? 'ENTREGADO' : 'RESERVADO (BORRADOR)'} ·{' '}
+                        {review.isPublic ? 'Público' : 'Docentes / Par'}
+                      </span>
+                    </header>
+                    {review.status === 'submitted' ? (
+                      <>
+                        <div class="ac-review-section">
+                          <h4>1. Descripción</h4>
+                          <p>{review.descripcion}</p>
+                        </div>
+                        <div class="ac-review-section">
+                          <h4>2. Qué funciona y qué no funciona</h4>
+                          <p>{review.funcionaNoFunciona}</p>
+                        </div>
+                        <div class="ac-review-section">
+                          <h4>3. Qué haría distinto y pregunta abierta</h4>
+                          <p>{review.hariaDistinto}</p>
+                        </div>
+                      </>
+                    ) : (
+                      <p class="ac-empty">Compañerx reservadx en la urna; informe aún no entregado.</p>
+                    )}
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )}
 
@@ -262,6 +387,8 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
 <script>
   import { countWords } from '../../lib/amigx-criticx/logic';
   import type { AmigxCriticxPortalState, AmigxCriticxReviewRecord } from '../../lib/amigx-criticx/service';
+
+  type PortalView = 'form' | 'devoluciones' | 'dashboard';
 
   function escHtml(value: unknown): string {
     return String(value ?? '')
@@ -275,22 +402,36 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
     return `${count} ${count === 1 ? 'palabra' : 'palabras'}`;
   }
 
-  function setPortalView(root: HTMLElement, view: 'form' | 'devoluciones', pushUrl = false) {
-    root.dataset.acView = view;
+  function setPortalView(root: HTMLElement, view: PortalView, pushUrl = false) {
+    const isTeacher = root.dataset.acIsTeacher === 'true';
+    const nextView: PortalView = view === 'dashboard' && !isTeacher ? 'form' : view;
+    root.dataset.acView = nextView;
     root.querySelectorAll<HTMLElement>('[data-ac-page]').forEach((page) => {
-      page.hidden = page.dataset.acPage !== view;
+      page.hidden = page.dataset.acPage !== nextView;
     });
     root.querySelectorAll<HTMLAnchorElement>('[data-ac-nav]').forEach((tab) => {
-      tab.classList.toggle('active', tab.dataset.acNav === view);
+      tab.classList.toggle('active', tab.dataset.acNav === nextView);
     });
     document.querySelectorAll<HTMLAnchorElement>('.chapter--amigxcriticx a.lesson-link').forEach((link) => {
-      const isDevolucionesLink = link.getAttribute('href')?.endsWith('/devoluciones');
-      const active = view === 'devoluciones' ? Boolean(isDevolucionesLink) : !isDevolucionesLink;
+      const href = link.getAttribute('href') || '';
+      const isDevolucionesLink = href.endsWith('/devoluciones');
+      const isDashboardLink = href.endsWith('/dashboard');
+      const active =
+        nextView === 'devoluciones'
+          ? isDevolucionesLink
+          : nextView === 'dashboard'
+            ? isDashboardLink
+            : !isDevolucionesLink && !isDashboardLink;
       link.classList.toggle('active', active);
     });
     if (pushUrl) {
       const prefix = window.location.pathname.startsWith('/s123/') ? '/s123/amigxcriticx' : '/amigxcriticx';
-      const targetUrl = view === 'devoluciones' ? `${prefix}/devoluciones` : prefix;
+      const targetUrl =
+        nextView === 'devoluciones'
+          ? `${prefix}/devoluciones`
+          : nextView === 'dashboard'
+            ? `${prefix}/dashboard`
+            : prefix;
       if (window.location.pathname !== targetUrl) {
         window.history.pushState({}, '', targetUrl);
       }
@@ -318,6 +459,9 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
     const resubmitBtn = root.querySelector<HTMLButtonElement>('[data-ac-resubmit-btn]');
     const feedListEl = root.querySelector<HTMLElement>('[data-ac-feed-list]');
     const countEl = root.querySelector<HTMLElement>('[data-ac-devoluciones-count]');
+    const dashStatsEl = root.querySelector<HTMLElement>('[data-ac-dash-stats]');
+    const dashTbodyEl = root.querySelector<HTMLElement>('[data-ac-dash-tbody]');
+    const dashReviewsEl = root.querySelector<HTMLElement>('[data-ac-dash-reviews]');
 
     const textareas = {
       descripcion: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="descripcion"]'),
@@ -387,6 +531,95 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
         .join('');
     }
 
+    function renderDashboard(nextState: AmigxCriticxPortalState) {
+      if (!nextState.viewer?.isTeacher) return;
+      const students = nextState.allActiveStudents ?? [];
+      const reviews = nextState.visibleReviews ?? [];
+      const submittedCount = reviews.filter((r) => r.status === 'submitted').length;
+
+      if (dashStatsEl) {
+        dashStatsEl.innerHTML = `
+          <span>Alumnxs activxs: <strong>${students.length}</strong></span>
+          <span>Selecciones en urna: <strong>${reviews.length}</strong></span>
+          <span>Informes entregados: <strong>${submittedCount}</strong></span>
+        `;
+      }
+
+      if (dashTbodyEl) {
+        const outByAuthor = new Map(reviews.map((r) => [r.authorUserId, r]));
+        const inByRecipient = new Map(reviews.map((r) => [r.recipientUserId, r]));
+        dashTbodyEl.innerHTML = students
+          .map((s) => {
+            const out = outByAuthor.get(s.id);
+            const inc = inByRecipient.get(s.id);
+            const words = out
+              ? countWords(out.descripcion) +
+                countWords(out.funcionaNoFunciona) +
+                countWords(out.hariaDistinto)
+              : 0;
+            const statusText = out
+              ? out.status === 'submitted'
+                ? `Entregado (${words} pal.)`
+                : 'En borrador / reservado'
+              : 'Sin elegir';
+            const visText = out ? (out.isPublic ? 'Público' : 'Docentes / Par') : '—';
+            const actionHtml = out
+              ? `<button type="button" class="ac-btn-mini" data-ac-release-author="${escHtml(s.id)}" data-ac-release-name="${escHtml(s.name)}">Liberar</button>`
+              : '—';
+            return `
+              <tr>
+                <td><strong>${escHtml(s.name)}</strong></td>
+                <td>${out ? escHtml(out.recipientName) : '—'}</td>
+                <td>${inc ? escHtml(inc.authorName) : '—'}</td>
+                <td>${escHtml(statusText)}</td>
+                <td>${escHtml(visText)}</td>
+                <td>${actionHtml}</td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
+
+      if (dashReviewsEl) {
+        if (reviews.length === 0) {
+          dashReviewsEl.innerHTML = '<p class="ac-empty">Todavía no hay selecciones ni devoluciones registradas.</p>';
+        } else {
+          dashReviewsEl.innerHTML = reviews
+            .map((r) => {
+              const body =
+                r.status === 'submitted'
+                  ? `
+                    <div class="ac-review-section">
+                      <h4>1. Descripción</h4>
+                      <p>${escHtml(r.descripcion)}</p>
+                    </div>
+                    <div class="ac-review-section">
+                      <h4>2. Qué funciona y qué no funciona</h4>
+                      <p>${escHtml(r.funcionaNoFunciona)}</p>
+                    </div>
+                    <div class="ac-review-section">
+                      <h4>3. Qué haría distinto y pregunta abierta</h4>
+                      <p>${escHtml(r.hariaDistinto)}</p>
+                    </div>
+                  `
+                  : `<p class="ac-empty">Compañerx reservadx en la urna; informe aún no entregado.</p>`;
+              return `
+                <article class="ac-review">
+                  <header class="ac-review-head">
+                    <strong>${escHtml(r.authorName)} → ${escHtml(r.recipientName)}</strong>
+                    <span class="ac-review-meta">
+                      ${r.status === 'submitted' ? 'ENTREGADO' : 'RESERVADO (BORRADOR)'} · ${r.isPublic ? 'Público' : 'Docentes / Par'}
+                    </span>
+                  </header>
+                  ${body}
+                </article>
+              `;
+            })
+            .join('');
+        }
+      }
+    }
+
     function applyState(nextState: AmigxCriticxPortalState, syncFields = false) {
       state = nextState;
       const myOutbound = nextState.myOutboundReview;
@@ -438,6 +671,7 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
 
       updateWordCounts();
       renderDevoluciones(nextState.visibleReviews);
+      renderDashboard(nextState);
     }
 
     // Live word counters
@@ -449,9 +683,40 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
     root.querySelectorAll<HTMLAnchorElement>('[data-ac-nav]').forEach((tab) => {
       tab.addEventListener('click', (e) => {
         e.preventDefault();
-        const view = tab.dataset.acNav === 'devoluciones' ? 'devoluciones' : 'form';
+        const nav = tab.dataset.acNav;
+        const view: PortalView =
+          nav === 'devoluciones' ? 'devoluciones' : nav === 'dashboard' ? 'dashboard' : 'form';
         setPortalView(root, view, true);
       });
+    });
+
+    // Teacher release button in AM Dashboard
+    dashTbodyEl?.addEventListener('click', async (e) => {
+      const btn = (e.target as Element | null)?.closest<HTMLButtonElement>('[data-ac-release-author]');
+      if (!btn) return;
+      const targetAuthorUserId = btn.dataset.acReleaseAuthor || '';
+      const authorName = btn.dataset.acReleaseName || 'este alumnx';
+      if (!targetAuthorUserId) return;
+      if (!window.confirm(`¿Liberar la selección de urna de ${authorName}?`)) return;
+      btn.disabled = true;
+      showFeedback('');
+      try {
+        const res = await fetch('/api/amigx-criticx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'release_recipient', targetAuthorUserId }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.state) {
+          btn.disabled = false;
+          showFeedback(data?.error || 'No se pudo liberar la asignación.', true);
+          return;
+        }
+        applyState(data.state, true);
+      } catch {
+        btn.disabled = false;
+        showFeedback('Error de red al liberar la asignación.', true);
+      }
     });
 
     // Select recipient from urn dropdown
@@ -591,8 +856,8 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
   bootAll();
   document.addEventListener('astro:page-load', bootAll);
 
-  // Allow sidebar links to /amigxcriticx and /amigxcriticx/devoluciones to switch view cleanly
-  // even when Dockview has open note panels.
+  // Allow sidebar links to /amigxcriticx, /amigxcriticx/devoluciones, and /amigxcriticx/dashboard
+  // to switch view cleanly even when Dockview has open note panels.
   const win = window as any;
   if (!win.__acNavInterceptorBound) {
     win.__acNavInterceptorBound = true;
@@ -603,7 +868,7 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
         const link = (e.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
         if (!link) return;
         const href = link.getAttribute('href') || '';
-        const isAcLink = /^\/(s123\/)?amigxcriticx(\/devoluciones)?\/?$/.test(href);
+        const isAcLink = /^\/(s123\/)?amigxcriticx(\/(devoluciones|dashboard))?\/?$/.test(href);
         if (!isAcLink) return;
 
         // Always close any open Dockview panels so the portal is not hidden behind a note pod
@@ -616,7 +881,11 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
         const root = document.querySelector<HTMLElement>('[data-ac-portal]');
         if (root) {
           e.preventDefault();
-          const targetView = href.endsWith('/devoluciones') ? 'devoluciones' : 'form';
+          const targetView: PortalView = href.endsWith('/devoluciones')
+            ? 'devoluciones'
+            : href.endsWith('/dashboard')
+              ? 'dashboard'
+              : 'form';
           setPortalView(root, targetView, true);
         }
       },
@@ -627,7 +896,7 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
 
 <style>
   .ac-simple {
-    max-width: 760px;
+    max-width: 820px;
     margin: 0 auto;
     padding: 1.25rem 1rem 3rem;
     color: var(--c-fg, #e5e5e0);
@@ -654,6 +923,7 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
     display: flex;
     gap: 0.75rem;
     font-size: 0.9rem;
+    flex-wrap: wrap;
   }
 
   .ac-tab {
@@ -845,6 +1115,7 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
   .ac-empty {
     font-size: 0.9rem;
     color: var(--c-fg-dim, #9a9a95);
+    margin: 0;
   }
 
   .ac-review {
@@ -882,5 +1153,78 @@ const submittedVisibleReviews = (initialState?.visibleReviews ?? []).filter(
     font-size: 0.92rem;
     line-height: 1.5;
     white-space: pre-wrap;
+  }
+
+  .ac-dash {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .ac-dash-stats {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    font-size: 0.88rem;
+    color: var(--c-fg-dim, #9a9a95);
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.25));
+    border-radius: 3px;
+  }
+
+  .ac-dash-stats strong {
+    color: var(--c-fg, #e5e5e0);
+  }
+
+  .ac-subhead {
+    font-size: 0.98rem;
+    font-weight: 650;
+    margin: 0.35rem 0 0;
+  }
+
+  .ac-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.25));
+    border-radius: 3px;
+  }
+
+  .ac-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+    text-align: left;
+  }
+
+  .ac-table th,
+  .ac-table td {
+    padding: 0.48rem 0.65rem;
+    border-bottom: 1px solid var(--c-border, rgba(128, 128, 128, 0.16));
+    vertical-align: middle;
+  }
+
+  .ac-table th {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--c-fg-dim, #9a9a95);
+    background: var(--c-bg-mute, rgba(128, 128, 128, 0.05));
+  }
+
+  .ac-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .ac-btn-mini {
+    font: inherit;
+    font-size: 0.76rem;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--c-border, rgba(128, 128, 128, 0.4));
+    border-radius: 3px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .ac-btn-mini:hover {
+    background: var(--c-bg-mute, rgba(128, 128, 128, 0.14));
   }
 </style>

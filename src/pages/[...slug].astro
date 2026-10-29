@@ -130,11 +130,16 @@ const isTopLevelAmigxCriticx = [
   'amigxcriticx-devoluciones',
   'amigo-critico-devoluciones',
   'amigx-criticx-devoluciones',
+  'amigxcriticx-dashboard',
+  'amigo-critico-dashboard',
+  'amigx-criticx-dashboard',
 ].includes(normalizedSlugForAc);
 const parts = isTopLevelAmigxCriticx
   ? normalizedSlugForAc.endsWith('-devoluciones')
     ? ['s123', 'amigxcriticx', 'devoluciones']
-    : ['s123', 'amigxcriticx']
+    : normalizedSlugForAc.endsWith('-dashboard')
+      ? ['s123', 'amigxcriticx', 'dashboard']
+      : ['s123', 'amigxcriticx']
   : slug.split('/');
 const requestedCoursePathSegment = parts[0];
 const isCourseForumPage = (parts.length === 2 && parts[1] === 'foro') || (parts.length === 1 && Astro.url.searchParams.has('board'));
@@ -391,10 +396,19 @@ const isAmigxCriticxPage =
     'amigxcriticx-devoluciones',
     'amigo-critico-devoluciones',
     'amigx-criticx-devoluciones',
+    'amigxcriticx-dashboard',
+    'amigo-critico-dashboard',
+    'amigx-criticx-dashboard',
   ].includes(normalizedRequestedLessonPage);
 const isAmigxCriticxDevolucionesPage =
   isAmigxCriticxPage &&
   (normalizedRequestedLessonPage.endsWith('-devoluciones') || Astro.url.searchParams.get('view') === 'devoluciones');
+const isAmigxCriticxDashboardPage =
+  isAmigxCriticxPage &&
+  (normalizedRequestedLessonPage.endsWith('-dashboard') || Astro.url.searchParams.get('view') === 'dashboard');
+if (isAmigxCriticxDashboardPage && !canManageLiveInteractions) {
+  return Astro.redirect('/amigxcriticx');
+}
 if (isAmigxCriticxPage && !session) {
   return Astro.redirect(`/login?redirect=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`);
 }
@@ -747,7 +761,11 @@ if (parts.length === 1) {
   resolvedLessonRoutePath = 'recursos';
 } else if (isAmigxCriticxPage) {
   currentEntry = courseIndex;
-  resolvedLessonRoutePath = isAmigxCriticxDevolucionesPage ? 'amigxcriticx/devoluciones' : 'amigxcriticx';
+  resolvedLessonRoutePath = isAmigxCriticxDashboardPage
+    ? 'amigxcriticx/dashboard'
+    : isAmigxCriticxDevolucionesPage
+      ? 'amigxcriticx/devoluciones'
+      : 'amigxcriticx';
 } else {
   const lessonPath = requestedLessonPath;
 
@@ -5002,7 +5020,7 @@ function renderLessonsTreeHTML(
                     <li class="lesson-item">
                       <a
                         href="/amigxcriticx"
-                        class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage }]}
+                        class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage && !isAmigxCriticxDashboardPage }]}
                         data-astro-prefetch="false"
                       >
                         <span class="lesson-icon">■</span>
@@ -5019,6 +5037,18 @@ function renderLessonsTreeHTML(
                         <span class="lesson-link-text">Devoluciones</span>
                       </a>
                     </li>
+                    {canManageLiveInteractions && (
+                      <li class="lesson-item">
+                        <a
+                          href="/amigxcriticx/dashboard"
+                          class:list={['lesson-link', { active: isAmigxCriticxDashboardPage }]}
+                          data-astro-prefetch="false"
+                        >
+                          <span class="lesson-icon">■</span>
+                          <span class="lesson-link-text">AM Dashboard</span>
+                        </a>
+                      </li>
+                    )}
                   </ul>
                 </details>
               </div>
@@ -5342,7 +5372,7 @@ function renderLessonsTreeHTML(
                       <li class="lesson-item">
                         <a
                           href="/amigxcriticx"
-                          class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage }]}
+                          class:list={['lesson-link', { active: isAmigxCriticxPage && !isAmigxCriticxDevolucionesPage && !isAmigxCriticxDashboardPage }]}
                           data-astro-prefetch="false"
                         >
                           <span class="lesson-icon">■</span>
@@ -5359,6 +5389,18 @@ function renderLessonsTreeHTML(
                           <span class="lesson-link-text">Devoluciones</span>
                         </a>
                       </li>
+                      {canManageLiveInteractions && (
+                        <li class="lesson-item">
+                          <a
+                            href="/amigxcriticx/dashboard"
+                            class:list={['lesson-link', { active: isAmigxCriticxDashboardPage }]}
+                            data-astro-prefetch="false"
+                          >
+                            <span class="lesson-icon">■</span>
+                            <span class="lesson-link-text">AM Dashboard</span>
+                          </a>
+                        </li>
+                      )}
                     </ul>
                   </details>
                 </div>
@@ -5673,7 +5715,7 @@ function renderLessonsTreeHTML(
           })
         )}
 
-        {(isLessonPage || (isPublicWikiPage && !session)) && (
+        {!isAmigxCriticxPage && !isRecursosEditorPage && (isLessonPage || (isPublicWikiPage && !session)) && (
           <>
             <div class="chapter class-toc" id="class-toc" hidden>
               <details id="class-toc-details" data-start-folded={isPublicWikiPage && !session ? 'true' : 'false'}>
@@ -5723,7 +5765,7 @@ function renderLessonsTreeHTML(
           <AmigxCriticxPortal
             courseId={canonicalCourseId || courseSlug || 's123'}
             session={session}
-            initialView={isAmigxCriticxDevolucionesPage ? 'devoluciones' : 'form'}
+            initialView={isAmigxCriticxDashboardPage ? 'dashboard' : isAmigxCriticxDevolucionesPage ? 'devoluciones' : 'form'}
           />
         ) : (
           dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />
@@ -12075,9 +12117,14 @@ function renderLessonsTreeHTML(
         const contentArea = document.querySelector('.content-area');
 
         if (!tocRoot || !tocDetails || !tocList || !contentArea) return;
+        if (contentArea.querySelector('[data-ac-portal]')) {
+          tocRoot.hidden = true;
+          tocList.innerHTML = '';
+          return;
+        }
 
         const headings = Array.from(contentArea.querySelectorAll('h1, h2, h3, h4'))
-          .filter((heading) => !heading.closest('#lesson-forum'));
+          .filter((heading) => !heading.closest('#lesson-forum, [data-ac-portal]'));
 
         if (headings.length === 0) {
           tocRoot.hidden = true;
@@ -12155,7 +12202,7 @@ function renderLessonsTreeHTML(
         if (!tocRoot) return;
         const activeLink = getCurrentLessonLink();
         const activeItem = activeLink ? activeLink.closest('.lesson-item') : null;
-        if (!activeItem) {
+        if (!activeItem || activeItem.closest('.chapter--amigxcriticx')) {
           tocRoot.classList.remove('class-toc--inline');
           return;
         }

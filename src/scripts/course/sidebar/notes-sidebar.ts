@@ -1055,7 +1055,8 @@ export function renderNotesSidebar(
     } else if (isAmigxCriticx) {
       const pathNow = window.location.pathname;
       const isDevolucionesActive = pathNow.includes('amigxcriticx/devoluciones');
-      const isFormActive = pathNow.includes('amigxcriticx') && !isDevolucionesActive;
+      const isDashboardActive = pathNow.includes('amigxcriticx/dashboard');
+      const isFormActive = pathNow.includes('amigxcriticx') && !isDevolucionesActive && !isDashboardActive;
 
       const formLi = document.createElement('li');
       formLi.className = 'lesson-item';
@@ -1075,8 +1076,18 @@ export function renderNotesSidebar(
         </a>
       `;
 
+      const dashLi = document.createElement('li');
+      dashLi.className = 'lesson-item';
+      dashLi.innerHTML = `
+        <a href="/amigxcriticx/dashboard" class="lesson-link${isDashboardActive ? ' active' : ''}" data-astro-prefetch="false">
+          <span class="lesson-icon">■</span>
+          <span class="lesson-link-text">AM Dashboard</span>
+        </a>
+      `;
+
       ul.appendChild(formLi);
       ul.appendChild(devLi);
+      ul.appendChild(dashLi);
       details.appendChild(ul);
     } else {
       details.appendChild(ul);
