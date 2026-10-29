@@ -127,12 +127,12 @@ const isTopLevelAmigxCriticx = [
   'amigxcriticx',
   'amigo-critico',
   'amigx-criticx',
-  'amigxcriticx/devoluciones',
-  'amigo-critico/devoluciones',
-  'amigx-criticx/devoluciones',
+  'amigxcriticx-devoluciones',
+  'amigo-critico-devoluciones',
+  'amigx-criticx-devoluciones',
 ].includes(normalizedSlugForAc);
 const parts = isTopLevelAmigxCriticx
-  ? normalizedSlugForAc.endsWith('/devoluciones')
+  ? normalizedSlugForAc.endsWith('-devoluciones')
     ? ['s123', 'amigxcriticx', 'devoluciones']
     : ['s123', 'amigxcriticx']
   : slug.split('/');
@@ -388,13 +388,13 @@ const isAmigxCriticxPage =
     'amigo-critico',
     'amigx-criticx',
     '85-amigx-criticx',
-    'amigxcriticx/devoluciones',
-    'amigo-critico/devoluciones',
-    'amigx-criticx/devoluciones',
+    'amigxcriticx-devoluciones',
+    'amigo-critico-devoluciones',
+    'amigx-criticx-devoluciones',
   ].includes(normalizedRequestedLessonPage);
 const isAmigxCriticxDevolucionesPage =
   isAmigxCriticxPage &&
-  (normalizedRequestedLessonPage.endsWith('/devoluciones') || Astro.url.searchParams.get('view') === 'devoluciones');
+  (normalizedRequestedLessonPage.endsWith('-devoluciones') || Astro.url.searchParams.get('view') === 'devoluciones');
 if (isAmigxCriticxPage && !session) {
   return Astro.redirect(`/login?redirect=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`);
 }
