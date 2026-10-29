@@ -1,5 +1,11 @@
 # MEMORY.md — Project Activity Log
 
+<2026-10-28 amigx-criticx-s123> <br>
+Servicio de **Amigx Críticx** para Seminarios (`s123`), implementado sobre HEAD `4d7a5b8` según la Rúbrica de Evaluación 2026 (§25.4, §27 y §31 dim. 16):
+- Rutas `/amigxcriticx` y `/s123/amigxcriticx` integradas en `src/pages/[...slug].astro` con redirección a `/login` para sesiones anónimas y sección `85 AMIGX CRÍTICX` en el sidebar izquierdo (`[...slug].astro` y `src/scripts/course/sidebar/notes-sidebar.ts`).
+- Modelo y lógica de urna (`src/lib/amigx-criticx/logic.ts`, `schema.ts`, `service.ts` y migración `postgres-patches/migrations/20261028220000_amigx_criticx.sql`): tabla `"AmigxCriticxReview"` con unicidad por autor y destinatario en el curso, transacción `FOR UPDATE` first-come-first-served y bloqueo estricto de auto-selección y reciprocidad ($A \leftrightarrow B$).
+- Portal `src/components/course/AmigxCriticxPortal.astro` y endpoint `src/pages/api/amigx-criticx/index.ts`: selector de urna, formulario de 3 campos (`1. Descripción`, `2. Qué funciona / Qué no funciona`, `3. Qué haría distinto y pregunta abierta`) con contador de palabras en vivo sin límite, estados `ENTREGAR` / `✓ ENTREGADO` + `RE-ENVIAR ENTREGA`, switch `HACER PÚBLICO`, sección de respuesta escrita del par evaluado (§27.4) y listado de devoluciones visibles por rol.
+
 <2026-09-25 so-studio-workspace-release> <br>
 Commit `2de5157`: completed the SO Studio tree/editor integration and English tracer options. Reused the Musiki editor and note handlers; fixed reviewer version reads, blocked live draft detail access for versions-only reviewers, validated annotation target identities, and made failed DB writes fail visibly. 239 tests pass, Astro production build succeeds, staging role/persistence tests and browser editor checks pass. Additive migration applied after production backup. Public homepage/content/logos deployed separately from so-web. See `docs/plans/2026-09-25-studio-deployment-status.md` for evidence and remaining Task 11 (Musiki sidebar migration).
 

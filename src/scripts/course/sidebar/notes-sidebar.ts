@@ -269,6 +269,13 @@ export function renderNotesSidebar(
     recursosGroup = { name: '80 RECURSOS', notes: [] };
     groups.push(recursosGroup);
   }
+  if (courseId === 's123') {
+    let amigxGroup = groups.find(g => g.name.toUpperCase().includes('AMIGX'));
+    if (!amigxGroup) {
+      amigxGroup = { name: '85 AMIGX CRÍTICX', notes: [] };
+      groups.push(amigxGroup);
+    }
+  }
   let notasGroup = groups.find(g => g.name.toUpperCase().includes('NOTAS'));
   if (!notasGroup) {
     notasGroup = { name: '90 NOTAS', notes: [] };
@@ -282,6 +289,7 @@ export function renderNotesSidebar(
       const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
       const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
                                name.toUpperCase().includes('RECURSOS') ||
+                               name.toUpperCase().includes('AMIGX') ||
                                name.toUpperCase().includes('NOTAS') ||
                                (notesList.length > 0 && notesList.every(n => n.order === 0));
       if (isSystemOrGlobal && fallbackFromTitle !== null) {
@@ -293,6 +301,7 @@ export function renderNotesSidebar(
       if (fallbackFromTitle !== null) return fallbackFromTitle;
       const nameUpper = name.toUpperCase();
       if (nameUpper.includes('RECURSOS')) return 80;
+      if (nameUpper.includes('AMIGX')) return 85;
       if (nameUpper.includes('NOTAS')) return 90;
       return 9999;
     };
@@ -655,8 +664,9 @@ export function renderNotesSidebar(
     const nameUpper = group.name.toUpperCase();
     const isConceptos = nameUpper.includes('CONCEPTOS');
     const isRecursos = nameUpper.includes('RECURSOS');
+    const isAmigxCriticx = nameUpper.includes('AMIGX');
     const isNotas = nameUpper.includes('NOTAS');
-    chapterEl.className = `chapter${isConceptos ? ' chapter--conceptos' : ''}${isRecursos ? ' chapter--recursos' : ''}${isNotas ? ' chapter--notas' : ''}`;
+    chapterEl.className = `chapter${isConceptos ? ' chapter--conceptos' : ''}${isRecursos ? ' chapter--recursos' : ''}${isAmigxCriticx ? ' chapter--amigxcriticx' : ''}${isNotas ? ' chapter--notas' : ''}`;
 
     const details = document.createElement('details');
     details.className = 'chapter-details';
@@ -664,8 +674,30 @@ export function renderNotesSidebar(
 
     const summary = document.createElement('summary');
     summary.className = 'chapter-title';
-    const isGlobalChapter = isRecursos || isNotas || group.notes.some(n => n.slug.startsWith('public/')) || group.name.startsWith('70 ') || group.name.startsWith('71 ') || group.name.startsWith('72 ');
-    if (isRecursos) {
+    const isGlobalChapter = isRecursos || isAmigxCriticx || isNotas || group.notes.some(n => n.slug.startsWith('public/')) || group.name.startsWith('70 ') || group.name.startsWith('71 ') || group.name.startsWith('72 ');
+    if (isAmigxCriticx) {
+      summary.innerHTML = `
+        <span class="chapter-title-main">
+          <span class="chapter-drag-handle" style="opacity: 0.15; cursor: default;" title="No se puede reordenar">⋮⋮</span>
+          <span class="chapter-caret">▸</span>
+          <span class="chapter-title-text">${escHtml(group.name)}</span>
+          <a
+            href="/amigxcriticx"
+            class="chapter-editor-link"
+            title="Portal de Amigx Críticx"
+            aria-label="Portal de Amigx Críticx"
+            onclick="event.stopPropagation()"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.82rem;height:0.82rem;stroke:currentColor;">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </a>
+        </span>
+      `;
+    } else if (isRecursos) {
       summary.innerHTML = `
         <span class="chapter-title-main">
           <span class="chapter-drag-handle" style="opacity: 0.15; cursor: default;" title="No se puede reordenar">⋮⋮</span>
@@ -1020,6 +1052,19 @@ export function renderNotesSidebar(
       if (tree) {
         details.appendChild(tree);
       }
+    } else if (isAmigxCriticx) {
+      const acLi = document.createElement('li');
+      acLi.className = 'lesson-item';
+      const isAcActive = window.location.pathname.includes('amigxcriticx');
+      acLi.innerHTML = `
+        <a href="/amigxcriticx" class="lesson-link${isAcActive ? ' active' : ''}" data-astro-prefetch="false">
+          <span class="lesson-icon">■</span>
+          <span class="lesson-link-text">Portal de Amigx Críticx</span>
+          <span class="lesson-link-trailing"><span class="lesson-type">📝</span></span>
+        </a>
+      `;
+      ul.appendChild(acLi);
+      details.appendChild(ul);
     } else {
       details.appendChild(ul);
     }
