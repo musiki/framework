@@ -25,6 +25,8 @@ export interface AmigxCriticxReviewRecord {
   recipientUserId: string;
   recipientName: string;
   descripcion: string;
+  queFunciona: string;
+  queNoFunciona: string;
   funcionaNoFunciona: string;
   hariaDistinto: string;
   recipientResponse: string;

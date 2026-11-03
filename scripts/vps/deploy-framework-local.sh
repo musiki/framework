@@ -70,11 +70,20 @@ else
 fi
 
 if [[ -n "$INSTALL_COMMAND" ]]; then
-  printf '::deploy-phase::install::Installing dependencies\n'
-  # Remove the Vite cache directory before npm ci to prevent ENOTEMPTY errors
-  # when a live process still has the directory open.
-  rm -rf node_modules/.vite 2>/dev/null || true
-  eval "$INSTALL_COMMAND"
+  CURRENT_LOCK_HASH="$(sha256sum package-lock.json 2>/dev/null | awk '{print $1}' || true)"
+  CACHED_LOCK_HASH="$(cat node_modules/.package-lock.sha256 2>/dev/null | awk '{print $1}' || true)"
+  if [[ -n "$CURRENT_LOCK_HASH" && "$CURRENT_LOCK_HASH" == "$CACHED_LOCK_HASH" && -d "node_modules/astro" ]]; then
+    printf '::deploy-phase::install::Skipping npm ci (package-lock.json unchanged)\n'
+  else
+    printf '::deploy-phase::install::Installing dependencies\n'
+    # Remove the Vite cache directory before npm ci to prevent ENOTEMPTY errors
+    # when a live process still has the directory open.
+    rm -rf node_modules/.vite 2>/dev/null || true
+    eval "$INSTALL_COMMAND"
+    if [[ -n "$CURRENT_LOCK_HASH" && -d "node_modules" ]]; then
+      echo "$CURRENT_LOCK_HASH" > node_modules/.package-lock.sha256
+    fi
+  fi
 else
   printf '::deploy-phase::install::Skipping dependency install\n'
 fi
@@ -101,6 +110,7 @@ fi
 # store and the legacy public/lily (astro build copies it into dist/client).
 node scripts/sanitize-lily-assets.mjs
 rm -rf dist_tmp
+ulimit -s 65536 2>/dev/null || true
 eval "$ASTRO_BUILD_COMMAND"
 
 printf '::deploy-phase::swap::Swapping dist folders\n'

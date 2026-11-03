@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS "AmigxCriticxReview" (
   "authorUserId"         uuid        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
   "recipientUserId"      uuid        NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
   "descripcion"          text        NOT NULL DEFAULT '',
+  "queFunciona"          text        NOT NULL DEFAULT '',
+  "queNoFunciona"        text        NOT NULL DEFAULT '',
   "funcionaNoFunciona"   text        NOT NULL DEFAULT '',
   "hariaDistinto"        text        NOT NULL DEFAULT '',
   "recipientResponse"    text        NOT NULL DEFAULT '',
@@ -19,6 +21,9 @@ CREATE TABLE IF NOT EXISTS "AmigxCriticxReview" (
   "createdAt"            timestamptz NOT NULL DEFAULT now(),
   "updatedAt"            timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE "AmigxCriticxReview" ADD COLUMN IF NOT EXISTS "queFunciona" text NOT NULL DEFAULT '';
+ALTER TABLE "AmigxCriticxReview" ADD COLUMN IF NOT EXISTS "queNoFunciona" text NOT NULL DEFAULT '';
 
 DO $$
 BEGIN

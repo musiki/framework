@@ -30,6 +30,8 @@ interface DbReviewRow {
   recipientName: string | null;
   recipientEmail: string | null;
   descripcion: string | null;
+  queFunciona: string | null;
+  queNoFunciona: string | null;
   funcionaNoFunciona: string | null;
   hariaDistinto: string | null;
   recipientResponse: string | null;
@@ -79,6 +81,9 @@ function formatDisplayName(name: string | null | undefined, email: string | null
 
 function mapReviewRow(row: DbReviewRow): AmigxCriticxReviewRecord {
   const status = row.status === 'submitted' ? 'submitted' : 'claimed';
+  const rawQueFunciona = String(row.queFunciona ?? '').trim();
+  const rawQueNoFunciona = String(row.queNoFunciona ?? '').trim();
+  const rawLegacyFunciona = String(row.funcionaNoFunciona ?? '').trim();
   return {
     id: String(row.id),
     courseId: String(row.courseId || 's123'),
@@ -87,6 +92,8 @@ function mapReviewRow(row: DbReviewRow): AmigxCriticxReviewRecord {
     recipientUserId: String(row.recipientUserId),
     recipientName: formatDisplayName(row.recipientName, row.recipientEmail, String(row.recipientUserId)),
     descripcion: String(row.descripcion ?? ''),
+    queFunciona: rawQueFunciona || rawLegacyFunciona,
+    queNoFunciona: rawQueNoFunciona,
     funcionaNoFunciona: String(row.funcionaNoFunciona ?? ''),
     hariaDistinto: String(row.hariaDistinto ?? ''),
     recipientResponse: String(row.recipientResponse ?? ''),
@@ -182,6 +189,8 @@ export async function listCourseAmigxCriticxReviews(courseId = 's123'): Promise<
         ru."name" AS "recipientName",
         ru."email" AS "recipientEmail",
         r."descripcion",
+        r."queFunciona",
+        r."queNoFunciona",
         r."funcionaNoFunciona",
         r."hariaDistinto",
         r."recipientResponse",
@@ -331,7 +340,9 @@ export async function submitAmigxCriticxReport(params: {
   authorUserId: string;
   recipientUserId: string;
   descripcion: string;
-  funcionaNoFunciona: string;
+  queFunciona: string;
+  queNoFunciona: string;
+  funcionaNoFunciona?: string;
   hariaDistinto: string;
   isPublic: boolean;
 }): Promise<{ ok: true; reviewId: string } | { ok: false; status: number; message: string }> {
@@ -341,18 +352,21 @@ export async function submitAmigxCriticxReport(params: {
     authorUserId,
     recipientUserId,
     descripcion,
-    funcionaNoFunciona,
+    queFunciona,
+    queNoFunciona,
     hariaDistinto,
     isPublic,
   } = params;
 
-  if (!descripcion.trim() || !funcionaNoFunciona.trim() || !hariaDistinto.trim()) {
+  if (!descripcion.trim() || !queFunciona.trim() || !queNoFunciona.trim() || !hariaDistinto.trim()) {
     return {
       ok: false,
       status: 400,
-      message: 'Completá los tres campos del informe según la rúbrica antes de entregar.',
+      message: 'Completá los cuatro campos del informe según la rúbrica antes de entregar.',
     };
   }
+
+  const combinedFunciona = `${queFunciona.trim()}\n\n${queNoFunciona.trim()}`;
 
   const client = await getClient();
   try {
@@ -387,6 +401,8 @@ export async function submitAmigxCriticxReport(params: {
           "authorUserId",
           "recipientUserId",
           "descripcion",
+          "queFunciona",
+          "queNoFunciona",
           "funcionaNoFunciona",
           "hariaDistinto",
           "isPublic",
@@ -395,11 +411,13 @@ export async function submitAmigxCriticxReport(params: {
           "createdAt",
           "updatedAt"
         )
-        VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, 'submitted', now(), now(), now())
+        VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, 'submitted', now(), now(), now())
         ON CONFLICT ("courseId", "authorUserId")
         DO UPDATE SET
           "recipientUserId" = EXCLUDED."recipientUserId",
           "descripcion" = EXCLUDED."descripcion",
+          "queFunciona" = EXCLUDED."queFunciona",
+          "queNoFunciona" = EXCLUDED."queNoFunciona",
           "funcionaNoFunciona" = EXCLUDED."funcionaNoFunciona",
           "hariaDistinto" = EXCLUDED."hariaDistinto",
           "isPublic" = EXCLUDED."isPublic",
@@ -412,7 +430,9 @@ export async function submitAmigxCriticxReport(params: {
         authorUserId,
         recipientUserId,
         descripcion,
-        funcionaNoFunciona,
+        queFunciona,
+        queNoFunciona,
+        combinedFunciona,
         hariaDistinto,
         Boolean(isPublic),
       ],

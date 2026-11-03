@@ -69,6 +69,8 @@ interface PostPayload {
   action?: string;
   recipientUserId?: string;
   descripcion?: string;
+  queFunciona?: string;
+  queNoFunciona?: string;
   funcionaNoFunciona?: string;
   hariaDistinto?: string;
   isPublic?: boolean;
@@ -102,7 +104,8 @@ export const POST: APIRoute = async ({ request }) => {
     if (action === 'submit_review') {
       const recipientUserId = String(body.recipientUserId || '').trim();
       const descripcion = String(body.descripcion ?? '');
-      const funcionaNoFunciona = String(body.funcionaNoFunciona ?? '');
+      const queFunciona = String(body.queFunciona ?? body.funcionaNoFunciona ?? '');
+      const queNoFunciona = String(body.queNoFunciona ?? '');
       const hariaDistinto = String(body.hariaDistinto ?? '');
       const isPublic = Boolean(body.isPublic);
 
@@ -111,7 +114,8 @@ export const POST: APIRoute = async ({ request }) => {
         authorUserId: actor.id,
         recipientUserId,
         descripcion,
-        funcionaNoFunciona,
+        queFunciona,
+        queNoFunciona,
         hariaDistinto,
         isPublic,
       });

@@ -53,8 +53,9 @@ const initialStateJson = JSON.stringify(initialState).replace(/</g, '\\u003c');
 const myOutbound = initialState?.myOutboundReview ?? null;
 const isSubmitted = myOutbound?.status === 'submitted';
 const initialWords1 = countWords(myOutbound?.descripcion ?? '');
-const initialWords2 = countWords(myOutbound?.funcionaNoFunciona ?? '');
-const initialWords3 = countWords(myOutbound?.hariaDistinto ?? '');
+const initialWords2 = countWords(myOutbound?.queFunciona ?? '');
+const initialWords3 = countWords(myOutbound?.queNoFunciona ?? '');
+const initialWords4 = countWords(myOutbound?.hariaDistinto ?? '');
 const allVisibleReviews = initialState?.visibleReviews ?? [];
 const submittedVisibleReviews = allVisibleReviews.filter((r) => r.status === 'submitted');
 const activeStudents = initialState?.allActiveStudents ?? [];
@@ -109,14 +110,6 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
 
       <!-- PÁGINA 1: FORMULARIO -->
       <div class="ac-page" data-ac-page="form" hidden={effectiveInitialView !== 'form'}>
-        <div class="ac-mo-box">
-          <p>
-            <strong>Cómo usar la Matriz Operativa (§11.4 / §24):</strong> cada concepto central del proyecto se verifica en cinco columnas:
-            <code>Concepto | Definición operativa | Fuente/genealogía | Operación en la obra | Evidencia</code>.
-            Para hacer la devolución, leé la matriz de tu compañerx <strong>de derecha a izquierda</strong> (desde la evidencia concreta en partitura, audio o ensayo hacia la operación y el concepto): comprobá si el concepto produce decisiones compositivas localizables o si queda como ornamento retórico. Evaluá el trabajo en sus propios términos, sin imponer tu propia poética (§27.3).
-          </p>
-        </div>
-
         <form class="ac-form" data-ac-review-form novalidate>
           <div class="ac-urn-row">
             <label for="ac-recipient-select" class="ac-urn-label">
@@ -150,7 +143,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
 
           <div class="ac-field">
             <div class="ac-field-head">
-              <label for="ac-field-descripcion">1. Descripción (antes de juzgar)</label>
+              <label for="ac-field-descripcion">1. Descripción</label>
               <span class="ac-words" data-ac-word-count="descripcion">
                 {initialWords1} {initialWords1 === 1 ? 'palabra' : 'palabras'}
               </span>
@@ -161,7 +154,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
               class="ac-textarea"
               data-ac-textarea="descripcion"
               rows="4"
-              placeholder="¿Qué escuché y qué leí, antes de opinar? El proyecto en tus palabras, en sus propios términos."
+              placeholder="¿Qué escuché y qué leí, antes de opinar? Se verifica que el amigx críticx entendió el proyecto en sus propios términos, no en los suyos."
               disabled={Boolean(isSubmitted)}
               required
             >{myOutbound?.descripcion ?? ''}</textarea>
@@ -169,28 +162,47 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
 
           <div class="ac-field">
             <div class="ac-field-head">
-              <label for="ac-field-funciona">2. Qué funciona y qué no funciona (localizado)</label>
-              <span class="ac-words" data-ac-word-count="funcionaNoFunciona">
+              <label for="ac-field-quefunciona">2. Qué funciona</label>
+              <span class="ac-words" data-ac-word-count="queFunciona">
                 {initialWords2} {initialWords2 === 1 ? 'palabra' : 'palabras'}
               </span>
             </div>
             <textarea
-              id="ac-field-funciona"
-              name="funcionaNoFunciona"
+              id="ac-field-quefunciona"
+              name="queFunciona"
               class="ac-textarea"
-              data-ac-textarea="funcionaNoFunciona"
+              data-ac-textarea="queFunciona"
               rows="4"
-              placeholder="Qué está resuelto y con qué procedimiento + dónde no hace lo que dice hacer (compás, sección, definición o fuente)."
+              placeholder="¿Qué está resuelto, y por qué medios concretos? Se nombran los aciertos con su procedimiento, no con adjetivos."
               disabled={Boolean(isSubmitted)}
               required
-            >{myOutbound?.funcionaNoFunciona ?? ''}</textarea>
+            >{myOutbound?.queFunciona ?? ''}</textarea>
           </div>
 
           <div class="ac-field">
             <div class="ac-field-head">
-              <label for="ac-field-distinto">3. Qué haría distinto y pregunta abierta</label>
-              <span class="ac-words" data-ac-word-count="hariaDistinto">
+              <label for="ac-field-quenofunciona">3. Qué no funciona</label>
+              <span class="ac-words" data-ac-word-count="queNoFunciona">
                 {initialWords3} {initialWords3 === 1 ? 'palabra' : 'palabras'}
+              </span>
+            </div>
+            <textarea
+              id="ac-field-quenofunciona"
+              name="queNoFunciona"
+              class="ac-textarea"
+              data-ac-textarea="queNoFunciona"
+              rows="4"
+              placeholder="¿Qué relaciones faltan o no son claras? Se localiza el problema en un compás, una sección, una definición o una fuente."
+              disabled={Boolean(isSubmitted)}
+              required
+            >{myOutbound?.queNoFunciona ?? ''}</textarea>
+          </div>
+
+          <div class="ac-field">
+            <div class="ac-field-head">
+              <label for="ac-field-distinto">4. Qué haría distinto</label>
+              <span class="ac-words" data-ac-word-count="hariaDistinto">
+                {initialWords4} {initialWords4 === 1 ? 'palabra' : 'palabras'}
               </span>
             </div>
             <textarea
@@ -199,7 +211,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
               class="ac-textarea"
               data-ac-textarea="hariaDistinto"
               rows="4"
-              placeholder="Una operación alternativa y qué ganaría el proyecto con ella + una pregunta abierta."
+              placeholder="¿Qué decisión alternativa tomaría yo, y qué ganaría? Se propone una operación, no un gusto."
               disabled={Boolean(isSubmitted)}
               required
             >{myOutbound?.hariaDistinto ?? ''}</textarea>
@@ -260,11 +272,15 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
                   <p>{review.descripcion}</p>
                 </div>
                 <div class="ac-review-section">
-                  <h4>2. Qué funciona y qué no funciona</h4>
-                  <p>{review.funcionaNoFunciona}</p>
+                  <h4>2. Qué funciona</h4>
+                  <p>{review.queFunciona}</p>
                 </div>
                 <div class="ac-review-section">
-                  <h4>3. Qué haría distinto y pregunta abierta</h4>
+                  <h4>3. Qué no funciona</h4>
+                  <p>{review.queNoFunciona}</p>
+                </div>
+                <div class="ac-review-section">
+                  <h4>4. Qué haría distinto</h4>
                   <p>{review.hariaDistinto}</p>
                 </div>
               </article>
@@ -302,7 +318,8 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
                     const inc = inboundByRecipientId.get(student.id);
                     const totalWords = out
                       ? countWords(out.descripcion) +
-                        countWords(out.funcionaNoFunciona) +
+                        countWords(out.queFunciona) +
+                        countWords(out.queNoFunciona) +
                         countWords(out.hariaDistinto)
                       : 0;
                     return (
@@ -362,11 +379,15 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
                           <p>{review.descripcion}</p>
                         </div>
                         <div class="ac-review-section">
-                          <h4>2. Qué funciona y qué no funciona</h4>
-                          <p>{review.funcionaNoFunciona}</p>
+                          <h4>2. Qué funciona</h4>
+                          <p>{review.queFunciona}</p>
                         </div>
                         <div class="ac-review-section">
-                          <h4>3. Qué haría distinto y pregunta abierta</h4>
+                          <h4>3. Qué no funciona</h4>
+                          <p>{review.queNoFunciona}</p>
+                        </div>
+                        <div class="ac-review-section">
+                          <h4>4. Qué haría distinto</h4>
                           <p>{review.hariaDistinto}</p>
                         </div>
                       </>
@@ -391,6 +412,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
   import type { AmigxCriticxPortalState, AmigxCriticxReviewRecord } from '../../lib/amigx-criticx/service';
 
   type PortalView = 'form' | 'devoluciones' | 'dashboard';
+  const FIELD_KEYS = ['descripcion', 'queFunciona', 'queNoFunciona', 'hariaDistinto'] as const;
 
   function escHtml(value: unknown): string {
     return String(value ?? '')
@@ -467,12 +489,14 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
 
     const textareas = {
       descripcion: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="descripcion"]'),
-      funcionaNoFunciona: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="funcionaNoFunciona"]'),
+      queFunciona: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="queFunciona"]'),
+      queNoFunciona: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="queNoFunciona"]'),
       hariaDistinto: root.querySelector<HTMLTextAreaElement>('[data-ac-textarea="hariaDistinto"]'),
     };
     const wordCounters = {
       descripcion: root.querySelector<HTMLElement>('[data-ac-word-count="descripcion"]'),
-      funcionaNoFunciona: root.querySelector<HTMLElement>('[data-ac-word-count="funcionaNoFunciona"]'),
+      queFunciona: root.querySelector<HTMLElement>('[data-ac-word-count="queFunciona"]'),
+      queNoFunciona: root.querySelector<HTMLElement>('[data-ac-word-count="queNoFunciona"]'),
       hariaDistinto: root.querySelector<HTMLElement>('[data-ac-word-count="hariaDistinto"]'),
     };
 
@@ -491,7 +515,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
     }
 
     function updateWordCounts() {
-      (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+      FIELD_KEYS.forEach((key) => {
         const count = countWords(textareas[key]?.value ?? '');
         if (wordCounters[key]) {
           wordCounters[key]!.textContent = formatWordLabel(count);
@@ -520,11 +544,15 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
               <p>${escHtml(r.descripcion)}</p>
             </div>
             <div class="ac-review-section">
-              <h4>2. Qué funciona y qué no funciona</h4>
-              <p>${escHtml(r.funcionaNoFunciona)}</p>
+              <h4>2. Qué funciona</h4>
+              <p>${escHtml(r.queFunciona)}</p>
             </div>
             <div class="ac-review-section">
-              <h4>3. Qué haría distinto y pregunta abierta</h4>
+              <h4>3. Qué no funciona</h4>
+              <p>${escHtml(r.queNoFunciona)}</p>
+            </div>
+            <div class="ac-review-section">
+              <h4>4. Qué haría distinto</h4>
               <p>${escHtml(r.hariaDistinto)}</p>
             </div>
           </article>
@@ -556,7 +584,8 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
             const inc = inByRecipient.get(s.id);
             const words = out
               ? countWords(out.descripcion) +
-                countWords(out.funcionaNoFunciona) +
+                countWords(out.queFunciona) +
+                countWords(out.queNoFunciona) +
                 countWords(out.hariaDistinto)
               : 0;
             const statusText = out
@@ -596,11 +625,15 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
                       <p>${escHtml(r.descripcion)}</p>
                     </div>
                     <div class="ac-review-section">
-                      <h4>2. Qué funciona y qué no funciona</h4>
-                      <p>${escHtml(r.funcionaNoFunciona)}</p>
+                      <h4>2. Qué funciona</h4>
+                      <p>${escHtml(r.queFunciona)}</p>
                     </div>
                     <div class="ac-review-section">
-                      <h4>3. Qué haría distinto y pregunta abierta</h4>
+                      <h4>3. Qué no funciona</h4>
+                      <p>${escHtml(r.queNoFunciona)}</p>
+                    </div>
+                    <div class="ac-review-section">
+                      <h4>4. Qué haría distinto</h4>
                       <p>${escHtml(r.hariaDistinto)}</p>
                     </div>
                   `
@@ -651,12 +684,13 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
 
       if (syncFields && myOutbound) {
         if (textareas.descripcion) textareas.descripcion.value = myOutbound.descripcion || '';
-        if (textareas.funcionaNoFunciona) textareas.funcionaNoFunciona.value = myOutbound.funcionaNoFunciona || '';
+        if (textareas.queFunciona) textareas.queFunciona.value = myOutbound.queFunciona || '';
+        if (textareas.queNoFunciona) textareas.queNoFunciona.value = myOutbound.queNoFunciona || '';
         if (textareas.hariaDistinto) textareas.hariaDistinto.value = myOutbound.hariaDistinto || '';
         if (publicSwitch) publicSwitch.checked = Boolean(myOutbound.isPublic);
       }
 
-      (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+      FIELD_KEYS.forEach((key) => {
         if (textareas[key]) textareas[key]!.disabled = locked;
       });
 
@@ -677,7 +711,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
     }
 
     // Live word counters
-    (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+    FIELD_KEYS.forEach((key) => {
       textareas[key]?.addEventListener('input', updateWordCounts);
     });
 
@@ -768,7 +802,7 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
     // Unlock editing on RE-ENVIAR ENTREGA
     resubmitBtn?.addEventListener('click', () => {
       editingUnlocked = true;
-      (['descripcion', 'funcionaNoFunciona', 'hariaDistinto'] as const).forEach((key) => {
+      FIELD_KEYS.forEach((key) => {
         if (textareas[key]) textareas[key]!.disabled = false;
       });
       if (submitBtn) {
@@ -794,11 +828,12 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
       }
 
       const descripcion = textareas.descripcion?.value ?? '';
-      const funcionaNoFunciona = textareas.funcionaNoFunciona?.value ?? '';
+      const queFunciona = textareas.queFunciona?.value ?? '';
+      const queNoFunciona = textareas.queNoFunciona?.value ?? '';
       const hariaDistinto = textareas.hariaDistinto?.value ?? '';
 
-      if (!descripcion.trim() || !funcionaNoFunciona.trim() || !hariaDistinto.trim()) {
-        showFeedback('Completá los tres campos antes de entregar.', true);
+      if (!descripcion.trim() || !queFunciona.trim() || !queNoFunciona.trim() || !hariaDistinto.trim()) {
+        showFeedback('Completá los cuatro campos antes de entregar.', true);
         return;
       }
 
@@ -815,7 +850,8 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
             action: 'submit_review',
             recipientUserId,
             descripcion,
-            funcionaNoFunciona,
+            queFunciona,
+            queNoFunciona,
             hariaDistinto,
             isPublic: Boolean(publicSwitch?.checked),
           }),
@@ -941,23 +977,6 @@ const inboundByRecipientId = new Map(allVisibleReviews.map((r) => [r.recipientUs
     font-weight: 600;
     text-decoration: underline;
     text-underline-offset: 4px;
-  }
-
-  .ac-mo-box {
-    font-size: 0.9rem;
-    line-height: 1.5;
-    padding: 0.75rem 0.9rem;
-    margin-bottom: 1.1rem;
-    border-left: 2px solid var(--c-border, rgba(128, 128, 128, 0.4));
-    background: var(--c-bg-mute, rgba(128, 128, 128, 0.06));
-  }
-
-  .ac-mo-box p {
-    margin: 0;
-  }
-
-  .ac-mo-box code {
-    font-size: 0.82rem;
   }
 
   .ac-msg {
