@@ -122,11 +122,39 @@ const extractColumnNameFromError = (message: string): string => {
   return '';
 };
 
+// Columns that actually exist in "Assignment". Older production schemas lack several of the
+// catalogue fields, and discovering that one failed UPDATE at a time wrote a fatal log line per
+// attempt. The set is read once and cached; an empty set (lookup failed) disables the filter and
+// leaves the per-column fallback below as the safety net.
+const ASSIGNMENT_COLUMNS_TTL_MS = 10 * 60 * 1000;
+let assignmentColumnsCache: { columns: Set<string>; loadedAt: number } | null = null;
+
+const getAssignmentColumns = async (): Promise<Set<string>> => {
+  const now = Date.now();
+  if (assignmentColumnsCache && now - assignmentColumnsCache.loadedAt < ASSIGNMENT_COLUMNS_TTL_MS) {
+    return assignmentColumnsCache.columns;
+  }
+
+  const { data, error } = await query<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = current_schema() AND table_name = 'Assignment'`,
+  );
+  const columns = new Set<string>(error || !data ? [] : data.map((row) => row.column_name));
+  assignmentColumnsCache = { columns, loadedAt: now };
+  return columns;
+};
+
+const keepKnownAssignmentColumns = async (payload: JsonRecord): Promise<JsonRecord> => {
+  const known = await getAssignmentColumns();
+  if (known.size === 0) return { ...payload };
+  return Object.fromEntries(Object.entries(payload).filter(([key]) => known.has(key)));
+};
+
 const updateAssignmentSafe = async (
   assignmentId: string,
   payload: JsonRecord,
 ): Promise<void> => {
-  let draft = { ...payload };
+  let draft = await keepKnownAssignmentColumns(payload);
   let attempts = 0;
 
   while (Object.keys(draft).length > 0 && attempts < 14) {
@@ -163,7 +191,7 @@ const updateAssignmentSafe = async (
 const insertAssignmentSafe = async (
   payload: JsonRecord,
 ): Promise<void> => {
-  let draft = { ...payload };
+  let draft = await keepKnownAssignmentColumns(payload);
   let attempts = 0;
 
   while (Object.keys(draft).length > 0 && attempts < 14) {

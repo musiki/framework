@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { createFatalLogger } from './fatal-log';
 
 const { Pool } = pg;
 
@@ -38,6 +39,8 @@ pool.on('error', (err) => {
     console.error('[DB-POOL] Unexpected error on idle client', err.message);
   }
 });
+
+const logFatal = createFatalLogger();
 
 /**
  * Standard query helper with aggressive retry logic for SSH tunnels.
@@ -83,12 +86,13 @@ export async function query<T = any>(text: string, params?: any[], retries = 3) 
 
       // If we reach here, it's either not transient or we ran out of retries
       const fatalType = attempt >= retries ? 'RETRY_EXHAUSTED' : 'NON_TRANSIENT';
-      console.error(`[DB-QUERY] Fatal Error (${fatalType})`, { 
-        text: text.slice(0, 120), 
-        duration, 
-        error: err.message, 
+      logFatal(`${fatalType}|${err.code ?? ''}|${err.message}|${text.slice(0, 60)}`, {
+        type: fatalType,
+        text: text.slice(0, 120),
+        duration,
+        error: err.message,
         code: err.code,
-        attempts: attempt
+        attempts: attempt,
       });
       return { data: null, error: err, count: 0 };
     }
