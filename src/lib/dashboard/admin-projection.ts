@@ -4,6 +4,8 @@ import { buildSearchBlob, splitDashboardName, type DashboardGridProjection } fro
 
 interface AdminProjectionInput {
   activeCourseId: string;
+  /** id → etiqueta, para mostrar y buscar por cohorte. */
+  cohortLabelsById?: Record<string, string>;
   availableCourses: Array<{ courseId: string; title?: string; code?: string }>;
   studentGroupsByUserId?: Record<string, string>;
   allUsers: any[];
@@ -22,6 +24,7 @@ const getRecordCourseId = (record: any) =>
 
 export function buildAdminProjection({
   activeCourseId,
+  cohortLabelsById = {},
   availableCourses,
   studentGroupsByUserId = {},
   allUsers,
@@ -103,6 +106,16 @@ export function buildAdminProjection({
             .filter(Boolean) as [string, { courseId: string; label: string; enrollmentId: string; roleInCourse: string }][],
         ).values(),
       ).sort((left, right) => String(left.courseId).localeCompare(String(right.courseId), 'es'));
+      // Todas las inscripciones con su cohorte, sin deduplicar por materia: es lo
+      // que filtra el panel de cohortes (ver lib/cohorts/admin-cohorts.mjs).
+      const cohortMemberships = userEnrollments.map((item: any) => {
+        const cohortId = normalizeText(item?.cohortId ?? '');
+        return {
+          courseId: normalizeText(item?.courseId || ''),
+          cohortId,
+          cohortLabel: cohortId ? normalizeText(cohortLabelsById[cohortId] || '') : '',
+        };
+      });
       const teacherByEnrollment = enrollmentCourses.some((item) => normalizeRole(item.roleInCourse) === 'teacher');
       const normalizedGlobalRole = normalizeRole(user?.role);
       const globalRole = normalizedGlobalRole === 'admin'
@@ -138,6 +151,7 @@ export function buildAdminProjection({
         courseRole: roleInCourse,
         enrollmentSummary: enrollmentCourses.length ? enrollmentCourses.map((e) => e.label || e.courseId).join(' · ') : '—',
         enrollmentCourses,
+        cohortMemberships,
         enrollmentCourseCatalog,
         lastActivityAt: latestActivityAt,
         __search: buildSearchBlob([
@@ -148,6 +162,7 @@ export function buildAdminProjection({
           globalRole,
           roleInCourse,
           ...enrollmentCourses.map((e) => e.courseId),
+          ...cohortMemberships.map((m) => m.cohortLabel),
           ...enrollmentCourses.map((e) => e.label),
           latestActivityAt,
         ]),

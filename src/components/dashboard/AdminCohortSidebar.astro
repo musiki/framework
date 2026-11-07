@@ -1,0 +1,327 @@
+---
+// Panel lateral del Admin: materias → cohortes con su conteo de alumnos. Un
+// click filtra la tabla (evento dashboard:admin-cohort-filter, que escucha
+// dashboard-handsontable.ts). ⓘ abre la ficha de la cohorte; «+ cohorte» crea
+// una por POST /api/admin/cohorts. La lógica de conteo y filtro está en
+// lib/cohorts/admin-cohorts.mjs.
+import { TERMS } from '../../lib/cohorts/cohort-labels.mjs';
+
+interface CohortNode { id: string; label: string; isActive: boolean; students: number; staff: number }
+interface CourseNode { courseId: string; title: string; students: number; unassigned: number; cohorts: CohortNode[] }
+interface Props {
+  tree: CourseNode[];
+  stats: Record<string, Record<string, unknown>>;
+}
+
+const { tree = [], stats = {} } = Astro.props;
+const totalStudents = tree.reduce((sum, c) => sum + c.students, 0);
+const currentYear = new Date().getFullYear();
+---
+
+<aside class="admin-cohorts" data-admin-cohorts aria-label="Filtrar por materia y cohorte">
+  <div class="admin-cohorts-head">Materias</div>
+  <ul class="admin-cohorts-tree">
+    <li>
+      <button type="button" class="admin-cohorts-node is-active" data-filter-course="" data-filter-cohort="">
+        <span>Todas</span><span class="admin-cohorts-count">{totalStudents}</span>
+      </button>
+    </li>
+    {tree.map((course) => (
+      <li>
+        <details class="admin-cohorts-course">
+          <summary>
+            <button type="button" class="admin-cohorts-node" data-filter-course={course.courseId} data-filter-cohort="">
+              <span>{course.title}</span><span class="admin-cohorts-count">{course.students}</span>
+            </button>
+          </summary>
+          <ul>
+            {course.cohorts.map((cohort) => (
+              <li class="admin-cohorts-row">
+                <button
+                  type="button"
+                  class="admin-cohorts-node admin-cohorts-node--cohort"
+                  data-filter-course={course.courseId}
+                  data-filter-cohort={cohort.id}
+                  title={cohort.isActive ? 'Cohorte activa' : undefined}
+                >
+                  <span><span class:list={['admin-cohorts-dot', cohort.isActive && 'is-on']} aria-hidden="true"></span>{cohort.label}</span>
+                  <span class="admin-cohorts-count">{cohort.students}</span>
+                </button>
+                <button type="button" class="admin-cohorts-info" data-cohort-info={cohort.id} data-cohort-course={course.title} data-cohort-label={cohort.label} data-cohort-active={cohort.isActive ? '1' : ''} aria-label={`Ficha de ${cohort.label}`}>ⓘ</button>
+              </li>
+            ))}
+            {course.unassigned > 0 && (
+              <li class="admin-cohorts-row">
+                <button type="button" class="admin-cohorts-node admin-cohorts-node--cohort admin-cohorts-node--warn" data-filter-course={course.courseId} data-filter-cohort="none" title="Inscripciones sin cohorte asignada">
+                  <span>sin cohorte</span><span class="admin-cohorts-count">{course.unassigned}</span>
+                </button>
+              </li>
+            )}
+          </ul>
+        </details>
+      </li>
+    ))}
+  </ul>
+  <button type="button" class="admin-cohorts-new" data-cohort-new>+ cohorte</button>
+
+  <script type="application/json" data-admin-cohort-stats set:html={JSON.stringify(stats)}></script>
+
+  <dialog class="admin-cohorts-dialog" data-cohort-dialog>
+    <form method="dialog" class="admin-cohorts-card" data-cohort-card>
+      <header><strong data-card-title></strong><button value="close" aria-label="Cerrar">×</button></header>
+      <dl data-card-stats></dl>
+    </form>
+  </dialog>
+
+  <dialog class="admin-cohorts-dialog" data-cohort-new-dialog>
+    <form class="admin-cohorts-card" data-cohort-new-form>
+      <header><strong>Nueva cohorte</strong><button type="button" data-close aria-label="Cerrar">×</button></header>
+      <label>Materia
+        <select name="courseId" required>
+          {tree.map((course) => <option value={course.courseId}>{course.title}</option>)}
+        </select>
+      </label>
+      <label>Año <input name="year" type="number" min="2000" max="2100" value={currentYear} required /></label>
+      <label>Período
+        <select name="term">{TERMS.map((t) => <option value={t}>{t}</option>)}</select>
+      </label>
+      <label>Comisión <input name="comision" placeholder="opcional" /></label>
+      <label class="admin-cohorts-check"><input type="checkbox" name="activate" checked /> Activarla (la actual queda inactiva)</label>
+      <p class="admin-cohorts-hint">Los docentes de la cohorte activa se copian. Los estudiantes no: la nueva arranca vacía y la anterior queda intacta.</p>
+      <p class="admin-cohorts-error" data-new-error hidden></p>
+      <footer><button type="submit">Crear</button></footer>
+    </form>
+  </dialog>
+</aside>
+
+<script>
+  const FILTER_EVENT = 'dashboard:admin-cohort-filter';
+  const STORE_KEY = 'musiki:admin-cohort-filter';
+
+  function init(root: HTMLElement) {
+    if (root.dataset.bound === '1') return;
+    root.dataset.bound = '1';
+
+    const stats = (() => {
+      try { return JSON.parse(root.querySelector('[data-admin-cohort-stats]')?.textContent || '{}'); }
+      catch { return {}; }
+    })() as Record<string, Record<string, unknown>>;
+
+    const nodes = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-filter-course]'));
+    const select = (courseId: string, cohortId: string) => {
+      nodes.forEach((n) => n.classList.toggle('is-active',
+        n.dataset.filterCourse === courseId && n.dataset.filterCohort === cohortId));
+      const filter = courseId ? { courseId, cohortId } : null;
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(filter)); } catch {}
+      window.dispatchEvent(new CustomEvent(FILTER_EVENT, { detail: filter }));
+    };
+
+    nodes.forEach((node) => node.addEventListener('click', (e) => {
+      e.preventDefault(); // dentro de <summary>: que el click filtre, el caret pliega
+      select(node.dataset.filterCourse || '', node.dataset.filterCohort || '');
+      node.closest('details')?.setAttribute('open', '');
+    }));
+
+    // Restaurar el último filtro. La tabla puede montarse después que este panel:
+    // por eso el evento se repite cuando avisa que está lista.
+    let saved: { courseId?: string; cohortId?: string } | null = null;
+    try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch {}
+    const restore = () => {
+      if (saved?.courseId && nodes.some((n) => n.dataset.filterCourse === saved!.courseId)) {
+        select(saved.courseId, saved.cohortId || '');
+        root.querySelector(`[data-filter-course="${CSS.escape(saved.courseId)}"]`)?.closest('details')?.setAttribute('open', '');
+      }
+    };
+    restore();
+    window.addEventListener('dashboard:admin-grid-ready', restore);
+
+    // Ficha
+    const cardDialog = root.querySelector<HTMLDialogElement>('[data-cohort-dialog]')!;
+    const fmt = (iso: unknown) => {
+      const s = String(iso || '');
+      if (!s) return '—';
+      const d = new Date(s);
+      return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-cohort-info]').forEach((btn) => btn.addEventListener('click', () => {
+      const s = stats[btn.dataset.cohortInfo || ''] || {};
+      const filas: [string, string][] = [
+        ['Estado', btn.dataset.cohortActive ? 'activa' : 'inactiva'],
+        ['Alumnos', String(s.students ?? 0)],
+        ['Docentes', String(s.staff ?? 0)],
+        ['Entregas', `${s.submissions ?? 0} · de ${s.studentsWithSubmission ?? 0} alumnos`],
+        ['Clases con asistencia', String(s.attendanceSessions ?? 0)],
+        ['Última actividad', fmt(s.lastActivityAt)],
+        ['Período', [s.year, s.term].filter(Boolean).join(' · ') || '—'],
+      ];
+      cardDialog.querySelector('[data-card-title]')!.textContent = `${btn.dataset.cohortCourse} · ${btn.dataset.cohortLabel}`;
+      const dl = cardDialog.querySelector('[data-card-stats]')!;
+      dl.replaceChildren(...filas.flatMap(([k, v]) => {
+        const dt = document.createElement('dt'); dt.textContent = k;
+        const dd = document.createElement('dd'); dd.textContent = v;
+        return [dt, dd];
+      }));
+      cardDialog.showModal();
+    }));
+
+    // Nueva cohorte
+    const newDialog = root.querySelector<HTMLDialogElement>('[data-cohort-new-dialog]')!;
+    const form = root.querySelector<HTMLFormElement>('[data-cohort-new-form]')!;
+    const errorEl = root.querySelector<HTMLElement>('[data-new-error]')!;
+    root.querySelector('[data-cohort-new]')?.addEventListener('click', () => {
+      const active = nodes.find((n) => n.classList.contains('is-active'))?.dataset.filterCourse;
+      if (active) (form.elements.namedItem('courseId') as HTMLSelectElement).value = active;
+      errorEl.hidden = true;
+      newDialog.showModal();
+    });
+    newDialog.querySelector('[data-close]')?.addEventListener('click', () => newDialog.close());
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new FormData(form);
+      const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+      submit.disabled = true;
+      errorEl.hidden = true;
+      try {
+        const res = await fetch('/api/admin/cohorts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            courseId: data.get('courseId'),
+            year: data.get('year'),
+            term: data.get('term'),
+            comision: data.get('comision'),
+            activate: data.get('activate') === 'on',
+          }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body?.error || `Error ${res.status}`);
+        try { localStorage.setItem(STORE_KEY, JSON.stringify({ courseId: data.get('courseId'), cohortId: String(body.cohort.id) })); } catch {}
+        window.location.reload();
+      } catch (err) {
+        errorEl.textContent = (err as Error).message;
+        errorEl.hidden = false;
+        submit.disabled = false;
+      }
+    });
+  }
+
+  const boot = () => document.querySelectorAll<HTMLElement>('[data-admin-cohorts]').forEach(init);
+  boot();
+  document.addEventListener('astro:page-load', boot);
+</script>
+
+<style is:global>
+  .teacher-grid-shell.admin-with-cohorts {
+    grid-template-columns: minmax(170px, 210px) minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .admin-cohorts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 0.45rem;
+    border-right: 1px solid var(--c-border);
+    font-size: 0.8rem;
+  }
+  .admin-cohorts-head {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--c-fg-dim);
+  }
+  .admin-cohorts-tree, .admin-cohorts-tree ul { list-style: none; margin: 0; padding: 0; }
+  .admin-cohorts-tree ul { padding-left: 0.7rem; }
+  .admin-cohorts-course > summary { list-style: none; cursor: pointer; }
+  .admin-cohorts-course > summary::-webkit-details-marker { display: none; }
+  .admin-cohorts-node {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.22rem 0.35rem;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: var(--c-fg);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .admin-cohorts-node:hover { background: var(--c-bg-mute); }
+  .admin-cohorts-node.is-active { background: var(--c-bg-mute); color: var(--c-link); font-weight: 600; }
+  .admin-cohorts-node--warn { color: var(--c-danger); }
+  .admin-cohorts-count { color: var(--c-fg-dim); font-variant-numeric: tabular-nums; }
+  .admin-cohorts-row { display: flex; align-items: center; }
+  .admin-cohorts-dot {
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-right: 0.35rem;
+    border: 1px solid var(--c-fg-dim);
+    border-radius: 50%;
+  }
+  .admin-cohorts-dot.is-on { background: var(--c-link); border-color: var(--c-link); }
+  .admin-cohorts-info {
+    border: 0;
+    background: none;
+    color: var(--c-fg-dim);
+    cursor: pointer;
+    padding: 0 0.2rem;
+  }
+  .admin-cohorts-info:hover { color: var(--c-link); }
+  .admin-cohorts-new {
+    align-self: flex-start;
+    border: 1px dashed var(--c-border);
+    border-radius: 4px;
+    background: none;
+    color: var(--c-fg-dim);
+    font: inherit;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+  }
+  .admin-cohorts-new:hover { color: var(--c-link); border-color: var(--c-link); }
+  .admin-cohorts-dialog {
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    padding: 0;
+    min-width: min(360px, 92vw);
+  }
+  .admin-cohorts-dialog::backdrop { background: rgb(0 0 0 / 0.25); }
+  .admin-cohorts-card { display: grid; gap: 0.55rem; padding: 0.9rem 1rem; font-size: 0.85rem; }
+  .admin-cohorts-card header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .admin-cohorts-card header button { border: 0; background: none; color: var(--c-fg-dim); font-size: 1.1rem; cursor: pointer; }
+  .admin-cohorts-card dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1rem; margin: 0; }
+  .admin-cohorts-card dt { color: var(--c-fg-dim); }
+  .admin-cohorts-card dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .admin-cohorts-card label { display: grid; gap: 0.2rem; color: var(--c-fg-dim); }
+  .admin-cohorts-card input, .admin-cohorts-card select {
+    font: inherit;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--c-border);
+    border-radius: 4px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+  .admin-cohorts-card .admin-cohorts-check { display: flex; align-items: center; gap: 0.4rem; color: var(--c-fg); }
+  .admin-cohorts-hint { margin: 0; color: var(--c-fg-dim); font-size: 0.78rem; }
+  .admin-cohorts-error { margin: 0; color: var(--c-danger); }
+  .admin-cohorts-card footer { display: flex; justify-content: flex-end; }
+  .admin-cohorts-card footer button {
+    font: inherit;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--c-link);
+    border-radius: 4px;
+    background: var(--c-link);
+    color: var(--c-bg);
+    cursor: pointer;
+  }
+  @media (max-width: 720px) {
+    .teacher-grid-shell.admin-with-cohorts { grid-template-columns: 1fr; }
+    .admin-cohorts { border-right: 0; border-bottom: 1px solid var(--c-border); max-height: 40vh; }
+  }
+</style>

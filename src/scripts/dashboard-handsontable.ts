@@ -14,6 +14,7 @@ import {
   type DashboardAnnotationVisibility,
 } from '../lib/dashboard/annotations';
 import { splitDashboardName } from '../lib/dashboard/shared';
+import { rowMatchesCohortFilter } from '../lib/cohorts/admin-cohorts.mjs';
 import 'handsontable/styles/handsontable.css';
 import 'handsontable/styles/ht-theme-main.css';
 
@@ -2238,7 +2239,10 @@ const setSheetRows = (sheet: DashboardSheet, rows: Record<string, any>[], source
 const buildPersistKey = (meta: DashboardMeta, key: string) =>
   `musiki-dashboard-sheet:${normalizeText(meta.courseId || 'all')}:${normalizeText(meta.year || 'all')}:${key}`;
 
-const installGlobalSearch = (sheets: DashboardSheet[], input: HTMLInputElement, persistKey: string, options?: { hideAbandonedButton?: HTMLButtonElement | null }) => {
+// Lo emite AdminCohortSidebar.astro: { courseId, cohortId } o null para «Todas».
+const ADMIN_COHORT_FILTER_EVENT = 'dashboard:admin-cohort-filter';
+
+const installGlobalSearch = (sheets: DashboardSheet[], input: HTMLInputElement, persistKey: string, options?: { hideAbandonedButton?: HTMLButtonElement | null; cohortFilter?: boolean }) => {
   const getStored = () => {
     try {
       return normalizeText(window.localStorage.getItem(`${persistKey}:search`));
@@ -2248,9 +2252,11 @@ const installGlobalSearch = (sheets: DashboardSheet[], input: HTMLInputElement, 
   };
   let query = normalizeTextLower(getStored());
   let hideAbandoned = false;
+  let cohortFilter: { courseId?: string; cohortId?: string } | null = null;
   const apply = () => {
     sheets.forEach((sheet) => {
       const rows = sheet.allRows.filter((row) => {
+        if (cohortFilter && !rowMatchesCohortFilter(row, cohortFilter)) return false;
         if (hideAbandoned && normalizeTextLower(row?.grupo ?? row?.groupValue ?? '') === 'x') return false;
         if (!query) return true;
         return normalizeTextLower(row.__search || Object.values(row).join(' ')).includes(query);
@@ -2272,6 +2278,12 @@ const installGlobalSearch = (sheets: DashboardSheet[], input: HTMLInputElement, 
     options.hideAbandonedButton?.setAttribute('aria-pressed', hideAbandoned ? 'true' : 'false');
     apply();
   });
+  if (options?.cohortFilter) {
+    window.addEventListener(ADMIN_COHORT_FILTER_EVENT, (event) => {
+      cohortFilter = (event as CustomEvent).detail || null;
+      apply();
+    });
+  }
   apply();
 };
 
@@ -3013,8 +3025,11 @@ export const mountDashboardSheets = (root: HTMLElement) => {
   ['admin', 'attendance-log', 'comments', 'login-log', 'teacher-eval'].forEach((key) => {
     const input = root.querySelector<HTMLInputElement>(`[data-dashboard-search="${key}"]`);
     const sheet = registry.get(key);
-    if (input && sheet) installGlobalSearch([sheet], input, buildPersistKey(meta, key));
+    if (input && sheet) installGlobalSearch([sheet], input, buildPersistKey(meta, key), { cohortFilter: key === 'admin' });
   });
+  // El panel de cohortes se monta antes que la tabla: este aviso le permite
+  // reenviar el filtro guardado.
+  if (registry.get('admin')) window.dispatchEvent(new CustomEvent('dashboard:admin-grid-ready'));
 
   bindTeacherTabs(shell, root, normalizeText(meta.initialTeacherTab || 'main') || 'main', registry);
   bindAttendanceConfig();

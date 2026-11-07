@@ -39,6 +39,8 @@ import {
 } from '../lib/dashboard/agenda';
 import { listDashboardAnnotations } from '../lib/dashboard/annotation-store';
 import { buildAdminProjection } from '../lib/dashboard/admin-projection';
+import { buildCohortTree, cohortStats } from '../lib/cohorts/admin-cohorts.mjs';
+import AdminCohortSidebar from '../components/dashboard/AdminCohortSidebar.astro';
 import { buildCommentsProjection } from '../lib/dashboard/comments-projection';
 import { buildGradebookProjection } from '../lib/dashboard/gradebook-projection';
 import { buildOverviewProjection } from '../lib/dashboard/overview-projection';
@@ -222,6 +224,17 @@ if (isTeacher) {
   } catch (error) {
     console.error('Error initializing attendance dashboard queries:', error);
   }
+}
+
+// Cohortes, para el panel lateral del Admin. Si la tabla no está (base sin la
+// migración 20261107120000_cohorts.sql) el panel se muestra vacío, no rompe.
+let allCohorts: any[] = [];
+if (isTeacher) {
+  const { data: cohortRows, error: cohortError } = await query(
+    `SELECT "id", "courseId", "label", "year", "term", "startsAt", "endsAt", "isActive" FROM "Cohort"`,
+  );
+  if (cohortError) console.error('Error loading Cohort rows:', cohortError);
+  allCohorts = cohortRows || [];
 }
 
 let allPlatformLogins: any[] = [];
@@ -2948,9 +2961,32 @@ const activeAdminStudentGroupsByUserId = (() => {
   );
 })();
 
+const cohortLabelsById = Object.fromEntries(
+  allCohorts.map((c: any) => [String(c.id), String(c.label || '')]),
+);
+const adminCohortTree = isTeacher
+  ? buildCohortTree({ courses: adminCourseMeta, cohorts: allCohorts, enrollments: allEnrollments || [] })
+  : [];
+const adminCohortStats = isTeacher
+  ? Object.fromEntries(allCohorts.map((cohort: any) => [String(cohort.id), {
+      ...cohortStats({
+        cohort,
+        enrollments: allEnrollments || [],
+        submissions: allSubmissions || [],
+        assignments: allAssignments || [],
+        attendance: allLiveClassAttendance || [],
+      }),
+      year: cohort.year ?? null,
+      term: cohort.term || '',
+      startsAt: cohort.startsAt || null,
+      endsAt: cohort.endsAt || null,
+    }]))
+  : {};
+
 const teacherAdminProjection = isTeacher
   ? buildAdminProjection({
       activeCourseId,
+      cohortLabelsById,
       availableCourses: adminCourseMeta,
       studentGroupsByUserId: activeAdminStudentGroupsByUserId,
       allUsers: allUsers || [],
@@ -6821,7 +6857,8 @@ const loginLogProjectionJson = toDashboardProjectionJson(loginLogProjection);
             data-dashboard-tab-panel="admin"
             hidden={initialTeacherDashboardTab !== 'admin'}
           >
-            <div class="teacher-grid-shell">
+            <div class="teacher-grid-shell admin-with-cohorts">
+              <AdminCohortSidebar tree={adminCohortTree} stats={adminCohortStats} />
               <div class="dashboard-sheet-host" data-dashboard-grid="admin"></div>
             </div>
           </div>
