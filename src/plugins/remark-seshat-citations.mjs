@@ -1,6 +1,7 @@
 import { Cite } from '@citation-js/core';
 import '@citation-js/plugin-csl';
 import { visit } from 'unist-util-visit';
+import { accentBibliographyAuthors } from '../lib/bibtex/apa-refs.mjs';
 
 const CITE_RE = /\[@([A-Za-z0-9:_-]{1,160})\]/g;
 const CACHE_TTL_MS = 60_000;
@@ -8,11 +9,6 @@ const cache = new Map();
 
 const normalizeHeading = (node) => String(node?.children?.map((child) => child.value || '').join('') || '')
   .trim().toLocaleLowerCase();
-
-const accentBibliographyAuthors = (html) => String(html).replace(
-  /(<div class="csl-entry">)(.*?)(?=\s+\((?:\d{4}[a-z]?|s\.\s*f\.|n\.d\.)\))/g,
-  '$1<span class="csl-author">$2</span>',
-);
 
 async function resolveCitations(keys) {
   const unique = [...new Set(keys)];

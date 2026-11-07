@@ -1270,7 +1270,8 @@ ol ol ol ol > li::marker {
   white-space: nowrap;
 }
 
-.seshat-references .csl-author {
+.seshat-references .csl-author,
+.bib-ref .csl-author {
   color: var(--c-accent, var(--accent-color, #9b4d2b));
   font-weight: 650;
 }
@@ -2848,3 +2849,57 @@ pre[class*="lang-bibtex"] .musiki-code-comment {
 .note-fm-yaml:focus { outline: none; border-color: var(--accent); }
 .note-fm-yaml.is-invalid { border-color: var(--c-danger, #c0392b); }
 .note-fm-error { margin: 0; color: var(--c-danger, #c0392b); font-size: 0.74rem; }
+
+/* ── Bloques ```bibtex renderizados en APA 7 (src/lib/bibtex/apa-refs.mjs) ── */
+.bib-refs { margin-block: 0.75rem 1.5rem; font-size: 0.94em; }
+.bib-refs-toolbar { display: flex; justify-content: flex-end; gap: 0.1rem; margin-bottom: -0.2rem; }
+.bib-ref { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; align-items: start; }
+.bib-ref-text { margin-block: 0.4rem; padding-left: 2rem; text-indent: -2rem; line-height: 1.55; }
+.bib-ref-text a { word-break: break-all; }
+.bib-ref-actions { display: flex; gap: 0.1rem; padding-top: 0.45rem; }
+.bib-copy-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--c-fg-dim);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 120ms, color 120ms;
+}
+.bib-copy-btn:hover,
+.bib-copy-btn:focus-visible { opacity: 1; color: var(--accent); outline: none; }
+.bib-copy-btn.is-copied { opacity: 1; color: var(--accent); }
+.bib-copy-btn.is-error { opacity: 1; color: var(--c-danger, #c0392b); }
+.bib-copy-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: max-content;
+  max-width: 16rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms 250ms;
+  z-index: 30;
+}
+.bib-copy-btn:hover::after,
+.bib-copy-btn:focus-visible::after,
+.bib-copy-btn.is-copied::after,
+.bib-copy-btn.is-error::after { opacity: 1; transition-delay: 0ms; }

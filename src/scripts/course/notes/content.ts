@@ -1,4 +1,5 @@
 import { hydrateLilypondBlocks, setupLilypondAutoHydration } from '../../../lib/lilypond-player';
+import { installBibRefsCopy } from '../../bib-refs-copy';
 import { initStrudelBlocks } from '../strudel-blocks';
 
 type MermaidRenderResult = {
@@ -344,6 +345,7 @@ export function hydrateCourseNotesLilypond(container: ParentNode | null | undefi
 }
 
 export function enhanceCourseNotesContent(container: ParentNode | null | undefined): void {
+  installBibRefsCopy();
   const root = getRenderableRoot(container);
   if (!root) return;
   setupCourseNotesMermaidContrastObserver();

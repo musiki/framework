@@ -24,6 +24,7 @@ import remarkDataviewLite from '../plugins/remark-dataview-lite.mjs';
 import remarkObsidianHighlight from '../plugins/remark-obsidian-highlight.mjs';
 import remarkStrudelBlocks from '../plugins/remark-strudel-blocks.mjs';
 import remarkSeshatCitations from '../plugins/remark-seshat-citations.mjs';
+import remarkBibtexApa from '../plugins/remark-bibtex-apa.mjs';
 
 const forumHighlightAliases = {
   javascript: ['js'],
@@ -247,6 +248,8 @@ function createForumMarkdownProcessor(options: RenderForumMarkdownOptions = {}) 
     .use(remarkObsidianHighlight)
     .use(remarkDataviewLite)
     .use(remarkSeshatCitations, options.citations ?? {})
+    // En modo sanitize (mm) los botones y los data-* se borrarían: queda el código.
+    .use(options.sanitize === true ? [] : [remarkBibtexApa])
     .use(remarkRemoteLilypond, {
       enabled: options.remoteLilypond !== false,
       timeoutMs: 10_000,
