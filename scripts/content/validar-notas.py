@@ -33,7 +33,7 @@ se informan y los resuelve una persona.
 import argparse
 import os
 import re
-import subprocess
+import unicodedata
 import sys
 
 CARPETAS_PUBLICABLES = ('public', 'cursos')
@@ -97,6 +97,13 @@ def sin_bloques_de_codigo(texto):
     return re.sub(r'^```.*?^```', '', texto, flags=re.S | re.M)
 
 
+def slug_de(nombre):
+    """El mismo slug que arma remark-wiki-link a partir del nombre de archivo."""
+    v = unicodedata.normalize('NFD', str(nombre or '').strip().lower())
+    v = ''.join(c for c in v if unicodedata.category(c) != 'Mn')
+    return re.sub(r'[^a-z0-9]+', '-', v).strip('-')
+
+
 def enlaces(texto):
     return [m.strip() for m in re.findall(r'\[\[([^\]|#]+)', texto) if m.strip()]
 
@@ -144,7 +151,15 @@ def arreglar(raiz, publicables, en_draft):
                         bloque = ('\n'.join(quedan_l) + '\n') if quedan_l else ''
                         nuevo_fm = nuevo_fm[:m2.start()] + f'{rel_campo}:\n' + bloque + nuevo_fm[m2.end():]
 
-                # 2. status faltante
+                # 2. slug desalineado del nombre de archivo
+                ms = re.search(r'^slug:[ \t]*(\S.*)$', nuevo_fm, re.M)
+                if ms and base == 'public':
+                    esperado = slug_de(os.path.basename(p)[:-3])
+                    if ms.group(1).strip().strip('"').strip("'") != esperado:
+                        nuevo_fm = nuevo_fm[:ms.start(1)] + esperado + nuevo_fm[ms.end(1):]
+                        hechos.append(f'{rel}: alineé el slug con el nombre de archivo')
+
+                # 3. status faltante
                 if not re.search(r'^status:\s*\S', nuevo_fm, re.M) and base == 'public':
                     nuevo_fm = nuevo_fm.rstrip('\n') + '\nstatus: draft'
                     hechos.append(f'{rel}: agregué status: draft')
@@ -215,6 +230,15 @@ def validar(raiz, publicables, en_draft):
             if not fm.get('status'):
                 avisos.append(f'{rel}: sin status (se publica como visible normal)')
 
+            # Los wikilinks se resuelven por nombre de archivo, no por el slug del
+            # frontmatter. Si no coinciden, [[la nota]] apunta a una URL que no existe.
+            declarado = (fm.get('slug') or '').strip().strip('"').strip("'")
+            esperado = slug_de(os.path.basename(p)[:-3])
+            if declarado and declarado != esperado:
+                errores.append(
+                    f'{rel}: slug "{declarado}" no coincide con el nombre de archivo '
+                    f'("{esperado}"). Los [[enlaces]] a esta nota van a romperse')
+
     return errores, avisos
 
 
@@ -269,6 +293,8 @@ def main():
         print('  · enlace roto      → la nota se renombró o se borró; --arreglar lo limpia')
         print('  · falta def        → la escribe una persona: una a tres oraciones autocontenidas')
         print('  · rastro normativo → sacar la remisión al aparato archivado')
+        print('  · slug ≠ archivo   → los [[enlaces]] resuelven por nombre de archivo; '
+              '--arreglar lo alinea')
         return 1
     return 0
 

@@ -33,5 +33,8 @@ case "$ARG" in
 esac
 
 echo "[INFO] ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+# bash -lc porque la shell del VPS es fish y el script es bash. Sin esto, fish
+# reporta «Unknown command» incluso cuando el problema es otro —por ejemplo que
+# el VPS todavía no tenga el commit— y el mensaje despista.
 exec ssh -t "${REMOTE_USER}@${REMOTE_HOST}" \
-  "cd '${REMOTE_PATH}' && ./scripts/vps/db-migrate.sh ${ARG}"
+  "bash -lc 'cd \"${REMOTE_PATH}\" && ./scripts/vps/db-migrate.sh ${ARG}'"
