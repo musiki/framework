@@ -5610,11 +5610,8 @@ function renderLessonsTreeHTML(
 
       </aside>
 
-      <!-- Main Content -->
-      <article class="content-area" id="cnw-root" transition:name="course-content" transition:animate="fade">
-        {isLessonPage && currentEntryStatus === 'draft' && (
-          <div class="draft-badge">Material en preparación</div>
-        )}
+      {/* Fuera del artículo: .content-area > :first-child le pisa el margin y el
+          modal quedaba pegado arriba. Como modal vive en el top layer. */}
         {pendingNoteTitle && (
           <dialog class="note-pending-dialog" id="note-pending-dialog" aria-labelledby="note-pending-title">
             <p class="note-pending-kicker"><span class="lesson-status-badge lesson-status-badge--draft" aria-hidden="true">D</span> Nota en preparación</p>
@@ -5622,6 +5619,11 @@ function renderLessonsTreeHTML(
             <p>Esta nota todavía se está escribiendo. Va a aparecer en la barra lateral cuando se publique.</p>
             <form method="dialog"><button type="submit" class="note-pending-close" autofocus>Entendido</button></form>
           </dialog>
+        )}
+      <!-- Main Content -->
+      <article class="content-area" id="cnw-root" transition:name="course-content" transition:animate="fade">
+        {isLessonPage && currentEntryStatus === 'draft' && (
+          <div class="draft-badge">Material en preparación</div>
         )}
         {isAssignment && (
           <div class="assignment-badge">
