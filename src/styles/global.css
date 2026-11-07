@@ -2798,6 +2798,8 @@ pre[class*="lang-bibtex"] .musiki-code-comment {
   color: var(--accent);
 }
 .note-fm-editor { display: grid; gap: 0.5rem; }
+/* La lista de lectura se oculta con [hidden], que `display: grid` pisaría. */
+.page-info-props[hidden] { display: none; }
 .note-fm-editor.is-locked .note-fm-props { opacity: 0.5; }
 .note-fm-row { position: relative; align-items: center; }
 .note-fm-row dd { display: flex; align-items: center; min-width: 0; }
