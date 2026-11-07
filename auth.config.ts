@@ -118,6 +118,69 @@ const rejectForeignTenantOnlyUser = async (userId: string, email: string): Promi
   return false;
 };
 
+/**
+ * El secreto que firma las sesiones.
+ *
+ * Antes caía a la cadena literal "fallback-musiki26-secret-must-change", que está
+ * commiteada en este repo. Si AUTH_SECRET faltara en producción, las sesiones se
+ * firmarían con un valor público y cualquiera con acceso al repositorio podría
+ * fabricar una cookie de sesión válida. Un default así no avisa cuando se activa:
+ * la aplicación arranca normal.
+ *
+ * Ahora en producción se exige la variable; en desarrollo sigue habiendo un valor
+ * de conveniencia.
+ */
+function resolveAuthSecret(): string {
+  const secret = getEnv('AUTH_SECRET');
+  if (secret) return secret;
+  const esProduccion = (process.env.NODE_ENV || '') === 'production';
+  if (esProduccion) {
+    throw new Error(
+      'AUTH_SECRET no está definida. Sin ella las sesiones se firmarían con un ' +
+      'valor conocido. Definila en el .env del servidor antes de arrancar.',
+    );
+  }
+  console.warn('[AUTH] AUTH_SECRET no definida: usando un valor de desarrollo.');
+  return 'dev-only-insecure-secret';
+}
+
+// Proveedor OIDC heredado de Authentik. Authentik se retiró del VPS en octubre de
+// 2026 (ver docs/vps-eval/2026-10-12.md) y la autenticación pasó a Logto, pero este
+// proveedor seguía en la lista sin condición, a diferencia de los de Logto.
+//
+// Dos problemas con eso. Aparecía como opción de ingreso apuntando a un emisor que
+// ya no existe, así que quien lo eligiera recibía un error. Y tenía
+// allowDangerousEmailAccountLinking con un issuer muerto: si el dominio
+// auth.musiki.org.ar alguna vez resuelve a otra cosa, eso es una vía de
+// vinculación de cuentas por correo.
+//
+// Queda condicionado a sus variables, como el resto: si no están, no existe.
+const LEGACY_OIDC_ISSUER = getEnv('OIDC_ISSUER_URL');
+const LEGACY_OIDC_CLIENT_ID = getEnv('OIDC_CLIENT_ID');
+const legacyOidcProvider = LEGACY_OIDC_ISSUER && LEGACY_OIDC_CLIENT_ID
+  ? [{
+      id: "authentik",
+      name: "OIDC",
+      type: "oidc" as const,
+      issuer: LEGACY_OIDC_ISSUER,
+      clientId: LEGACY_OIDC_CLIENT_ID,
+      clientSecret: getEnv('OIDC_CLIENT_SECRET'),
+      allowDangerousEmailAccountLinking: true,
+      authorization: { params: { scope: "openid profile email" } },
+      checks: ["pkce", "state"] as ("pkce" | "state")[],
+      client: { token_endpoint_auth_method: "client_secret_post" as const },
+      onProfile(profile: Record<string, unknown>) {
+        console.log(`[AUTH-OIDC] Profile received for: ${profile.email}`);
+        return {
+          id: profile.sub as string,
+          name: (profile.name as string) ?? (profile.preferred_username as string),
+          email: profile.email as string,
+          image: profile.picture as string,
+        };
+      },
+    }]
+  : [];
+
 export default defineConfig({
   debug: isDev,
   trustHost: true,
@@ -152,32 +215,9 @@ export default defineConfig({
       clientSecret: getEnv('GOOGLE_CLIENT_SECRET'),
       allowDangerousEmailAccountLinking: true,
     }),
-    {
-      id: "authentik",
-      name: "Authentik",
-      type: "oidc",
-      issuer: getEnv('OIDC_ISSUER_URL') || "https://auth.musiki.org.ar/application/o/musiki26/",
-      clientId: getEnv('OIDC_CLIENT_ID'),
-      clientSecret: getEnv('OIDC_CLIENT_SECRET'),
-      allowDangerousEmailAccountLinking: true,
-      authorization: { params: { scope: "openid profile email" } },
-      checks: ["pkce", "state"],
-      client: {
-        token_endpoint_auth_method: "client_secret_post",
-      },
-      // Add a bit more logging for discovery
-      onProfile(profile) {
-        console.log(`[AUTH-AUTHENTIK] Profile received for: ${profile.email}`);
-        return {
-          id: profile.sub,
-          name: profile.name ?? profile.preferred_username,
-          email: profile.email,
-          image: profile.picture,
-        };
-      },
-    },
+    ...legacyOidcProvider,
   ],
-  secret: getEnv('AUTH_SECRET') || "fallback-musiki26-secret-must-change",
+  secret: resolveAuthSecret(),
   callbacks: {
     async signIn({ user, account, profile }) {
       const email = String(user?.email || '').trim().toLowerCase();
