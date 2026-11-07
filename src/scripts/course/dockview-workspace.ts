@@ -1196,6 +1196,8 @@ export function initDockviewWorkspace(
     if (dvRoot) dvRoot.style.display = active ? '' : 'none';
     const shortcuts = container.querySelector<HTMLElement>('.scroll-shortcuts');
     if (shortcuts) shortcuts.style.display = active ? 'none' : '';
+    // Al cerrarse el último panel vuelve a verse la página: el TOC se rehace.
+    window.dispatchEvent(new CustomEvent('musiki:workspace-toggle', { detail: { active } }));
   };
   setDockviewActive(false);
   dockview.onDidAddPanel(() => {

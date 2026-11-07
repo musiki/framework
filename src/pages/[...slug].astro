@@ -11722,9 +11722,30 @@ function renderLessonsTreeHTML(
         return null;
       }
 
+      // La nota que se está leyendo: el panel activo del workspace si está
+      // abierto, si no la página. .content-area contiene las dos cosas, y la
+      // página de fondo queda oculta pero sigue en el DOM con los mismos ids.
+      function getVisibleNoteRoot() {
+        const area = document.querySelector('.content-area');
+        if (!(area instanceof HTMLElement)) return null;
+        if (area.classList.contains('is-dockview-active')) {
+          const panel = area.querySelector('.dv-active-group .cm-scroller, .dv-active-group .cnw-body')
+            || area.querySelector('.cnw-body');
+          if (panel instanceof HTMLElement) return panel;
+        }
+        return area;
+      }
+
+      // Scroller del panel activo, o null si el workspace está cerrado. Dockview
+      // nombra sus clases con dv-: los selectores .dockview-* que había acá no
+      // encontraban nada, y arriba/abajo movían la página oculta.
+      function getWorkspaceScroller() {
+        const root = getVisibleNoteRoot();
+        return root && !root.classList.contains('content-area') ? root : null;
+      }
+
       function scrollToTop(behavior = 'smooth') {
-        const wsScroller = document.querySelector('.dockview-group.dockview-active-group .cm-scroller, .dockview-group.dockview-active-group .cnw-body, .dockview-group.dockview-active-group .dockview-panel-content')
-          || document.querySelector('.dockview .cm-scroller, .dockview .cnw-body, .dockview .dockview-panel-content');
+        const wsScroller = getWorkspaceScroller();
         if (wsScroller) {
           wsScroller.scrollTo({
             top: 0,
@@ -11791,8 +11812,7 @@ function renderLessonsTreeHTML(
       }
 
       function scrollToBottom(behavior = 'smooth') {
-        const wsScroller = document.querySelector('.dockview-group.dockview-active-group .cm-scroller, .dockview-group.dockview-active-group .cnw-body, .dockview-group.dockview-active-group .dockview-panel-content')
-          || document.querySelector('.dockview .cm-scroller, .dockview .cnw-body, .dockview .dockview-panel-content');
+        const wsScroller = getWorkspaceScroller();
         if (wsScroller) {
           wsScroller.scrollTo({
             top: wsScroller.scrollHeight,
@@ -12076,7 +12096,9 @@ function renderLessonsTreeHTML(
         const normalizedTargetId = String(targetId || '').replace(/^#/, '').trim();
         if (!normalizedTargetId) return false;
 
-        const target = document.getElementById(normalizedTargetId);
+        const noteRoot = getVisibleNoteRoot();
+        const target = (noteRoot && noteRoot.querySelector(`#${CSS.escape(normalizedTargetId)}`))
+          || document.getElementById(normalizedTargetId);
         if (!(target instanceof HTMLElement)) return false;
 
         const behavior = options.behavior === 'smooth' ? 'smooth' : 'auto';
@@ -12087,8 +12109,9 @@ function renderLessonsTreeHTML(
           const anchor = resolveHeadingScrollAnchor(target);
           if (!(anchor instanceof HTMLElement)) return;
 
-          const scroller = getPrimaryScroller();
-          if (scroller instanceof HTMLElement && scroller.contains(anchor)) {
+          const scroller = [getVisibleNoteRoot(), getPrimaryScroller()].find((el) =>
+            el instanceof HTMLElement && el.contains(anchor) && el.scrollHeight > el.clientHeight);
+          if (scroller instanceof HTMLElement) {
             const scrollerRect = scroller.getBoundingClientRect();
             const anchorRect = anchor.getBoundingClientRect();
             const top = Math.max(
@@ -12130,8 +12153,10 @@ function renderLessonsTreeHTML(
           return;
         }
 
-        const headings = Array.from(contentArea.querySelectorAll('h1, h2, h3, h4'))
-          .filter((heading) => !heading.closest('#lesson-forum, [data-ac-portal]'));
+        const noteRoot = getVisibleNoteRoot() || contentArea;
+        const headings = Array.from(noteRoot.querySelectorAll('h1, h2, h3, h4'))
+          .filter((heading) => !heading.closest('#lesson-forum, .lesson-forum, [data-ac-portal]')
+            && (noteRoot !== contentArea || !heading.closest('.cnw-shell')));
 
         if (headings.length === 0) {
           tocRoot.hidden = true;
@@ -15920,6 +15945,12 @@ a[node] -->|edge| b[hub]
         setupConceptLinks();
         setupFoldableH2Sections();
         buildClassToc();
+        // El TOC sigue a la nota que se lee: se rehace cuando el workspace abre o
+        // cambia de panel, y cuando se cierra y vuelve a verse la página. El rAF
+        // deja que la sidebar marque antes el link activo, donde se cuelga el TOC.
+        const rebuildTocSoon = () => window.requestAnimationFrame(() => buildClassToc());
+        window.addEventListener('musiki:active-note', rebuildTocSoon);
+        window.addEventListener('musiki:workspace-toggle', rebuildTocSoon);
         applyCourseProgressToSidebar();
         void applyServerProgress();
         updateCourseProgress();
