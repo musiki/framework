@@ -199,3 +199,129 @@ se pueda contestar "¿dónde está esto en el vault?".
 El tercero es que el itinerario se vuelva otra tabla de comprobación con otro nombre. La
 prueba para saber si funcionó: si al final del cuatrimestre Progreso se puede leer como un
 relato de lo que pasó, funcionó; si se lee como una planilla de tildes, no.
+
+---
+
+# Parte 2 · después de la conversación
+
+Lo que sigue incorpora las decisiones tomadas y agrega lo que apareció al discutirlas.
+
+## 8. El principio que ordena todo: la gradiente de durabilidad
+
+La observación que resuelve el diseño es esta: **una clase es un ensamblaje de notas
+atómicas más algo de contenido propio, y es lo más cambiable de todo**. Depende del momento
+de la cursada, de la cohorte, del contexto. Un concepto, en cambio, puede sobrevivir años
+sin mutar.
+
+Eso no es una anécdota: es un criterio de arquitectura. Cada cosa tiene una vida media
+distinta y debería tratarse distinto.
+
+| Qué | Vida media | Se versiona | Vive en |
+|---|---|---|---|
+| Concepto, glosario | años | poco | `public/`, compartido |
+| Protocolo, metodología | varios cuatrimestres | a veces | `public/`, por materia |
+| Clase | una cohorte | cada vez | `cursos/<id>/`, efímero |
+| Assignment | una cohorte, con historia | sí | itinerario |
+| Output del estudiante | atado a su cohorte | archivo | fuera del repo |
+
+La consecuencia práctica: **lo que más se edita debería ser lo más liviano de editar, y lo
+que más dura debería ser lo más difícil de romper**. Hoy es al revés: cambiar una clase
+implica mover archivos y recalcular capítulos, mientras que un concepto se edita sin ningún
+control de que siga siendo coherente con los que lo citan.
+
+## 9. Progreso como superficie de composición
+
+Progreso pasa a ser el índice maestro: el docente arma ahí el recorrido al principio de la
+cursada, arrastrando y combinando conceptos, assignments, outputs y protocolos, cada uno con
+su color e ícono.
+
+**Una estructura, dos vistas, nunca dos significados.** El docente ve la composición: qué
+hay, en qué orden, qué falta. El estudiante ve su posición sobre esa misma estructura. Es el
+mismo objeto renderizado distinto, no dos objetos.
+
+Y acá va la advertencia que corresponde hacer. En 2026 el problema no fue la rúbrica: fue
+que un solo instrumento hacía de guía formativa y de mecanismo sancionatorio a la vez. Si
+Progreso se vuelve además la superficie donde se califica, volvemos exactamente ahí. Progreso
+muestra recorrido y retención; la nota vive en otro lado y se conversa en otro momento.
+
+### Los kinds, con su ícono
+
+El inventario real del contenido tiene unos diecisiete valores de `type` en uso —`concept`,
+`glossary`, `lesson`, `person`, `obra`, `work`, `technology`, `note`, `info`, `course`,
+`service`, `proyecto`, `imc`, `hemworks`, `latex-template`, `art_process`,
+`lilypond_recipe`— y al menos uno escrito mal (`type: concept | glossary`, copiado literal
+de la documentación del MANUAL; ya corregido en s123).
+
+Para la UI no hacen falta diecisiete íconos. Hacen falta cinco **kinds**, y el resto queda
+como subtipo:
+
+| Kind | Agrupa | Qué es para el estudiante |
+|---|---|---|
+| Concepto | `concept`, `glossary` | algo que hay que entender y retener |
+| Protocolo | `info`, `note`, métodos | cómo se hace algo |
+| Clase | `lesson` | un encuentro, con su fecha |
+| Assignment | `assignment`, evaluaciones | algo que hay que entregar |
+| Output | `obra`, `work`, `proyecto` | algo que se produjo |
+
+El resto —`person`, `technology`, `service`, `latex-template`, `lilypond_recipe`— son
+recursos de apoyo y no necesitan estar en el itinerario.
+
+## 10. El reservorio: por qué no debería ser un `status`
+
+La idea de que una clase salga del recorrido pero quede en preparación es correcta. La
+implementación como `status: idle` no, y conviene decirlo antes de que se escriba.
+
+`status` ya mezcla cosas (`draft`, `published`, `nonshown`, `public`, `inprocess`). Agregarle
+`idle` sumaría una tercera dimensión al mismo campo, porque **el estado editorial y la
+pertenencia al itinerario son ortogonales**: una clase puede estar terminada y fuera del
+recorrido de este cuatrimestre, y una clase en borrador puede estar adentro porque se da la
+semana que viene.
+
+Si el itinerario es un objeto de primera clase —una lista ordenada de paradas que referencian
+notas—, entonces **el reservorio no necesita ningún campo**: es el complemento. Todo lo que
+la materia tiene y el itinerario de este cuatrimestre no referencia. Un cajón en la UI sobre
+un conjunto que ya existe, sin estado nuevo que mantener sincronizado.
+
+Ventaja secundaria: el itinerario del cuatrimestre pasado queda como objeto completo. Se
+puede duplicar para armar el siguiente, que es exactamente lo que un docente quiere hacer en
+marzo.
+
+## 11. `public/` y el grafo: lo que hay que revisar es el tipo de arista
+
+Que `public/` sea la fuente de conocimiento común a todo musiki está bien y conviene
+conservarlo. Lo que no está bien es que la pertenencia sea implícita y que la UI la resuelva
+con nombres reservados.
+
+Sobre el grafo universal hay una cosa que revisar y es más de fondo que el filtrado. Hoy
+conviven relaciones de naturaleza distinta y el grafo las dibuja igual:
+
+- `hyper` / `hypo` son **semánticas**: hiperonimia e hiponimia, género y especie.
+- `connect` es **lateral declarada**: el autor dice que dos cosas se tocan.
+- La carpeta es **estructural**: dónde está el archivo.
+- El wikilink en el cuerpo es **referencial**: lo nombré al pasar.
+
+Si las cuatro producen la misma arista, la cercanía en el grafo no significa nada, y un grafo
+donde la cercanía no significa nada es un adorno. **Las aristas tienen que ser tipadas y
+filtrables**: ver sólo la jerarquía semántica, o sólo lo lateral, o todo. Es lo que separa un
+grafo que se usa de uno que se mira una vez.
+
+Segundo punto a revisar: hoy `hyper` suele apuntar al nombre de la carpeta —lo vimos en s123,
+donde varias notas tenían `hyper: [[timbre-orquestacion]]`, que no era una nota sino un
+directorio. Si la carpeta deja de ser pedagógica, esos enlaces tienen que apuntar a conceptos
+reales o desaparecer.
+
+## 12. Plan revisado
+
+Las etapas 0 a 3 quedan como estaban. Se precisan las dos últimas:
+
+**Etapa 4 · itinerario como objeto.** La parada deja de ser un string y pasa a ser una
+entidad con nombre, orden, kind y referencia a la nota. El reservorio aparece solo, como
+complemento. El itinerario se puede duplicar de un cuatrimestre al siguiente.
+
+**Etapa 5 · Progreso como composición y recorrido.** Vista docente para armar, vista
+estudiante para ubicarse. Avance sobre el itinerario, retención sobre los conceptos.
+
+**Etapa 6 · aristas tipadas en el grafo.** Separar jerarquía semántica, lateral, estructural
+y referencial. Filtros por tipo de arista. Limpiar los `hyper` que apuntan a carpetas.
+
+El orden importa: la 6 depende de que la carpeta haya dejado de significar algo, o sea de la 2.
