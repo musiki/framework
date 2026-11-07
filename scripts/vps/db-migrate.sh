@@ -43,8 +43,10 @@ descubrir_contenedor() {
       return
     fi
   done
-  # uno solo y sin poder verificar: igual es la mejor apuesta
-  printf '%s' "$(printf '%s' "$candidatos" | head -1)"
+  # Sin verificación no se elige nada. Antes esto devolvía el primer candidato
+  # "porque era la mejor apuesta", y en un VPS donde conviven varias bases la
+  # mejor apuesta puede ser la base de otro sistema.
+  printf ''
 }
 
 DB_CONTAINER="$(descubrir_contenedor)"
@@ -74,6 +76,27 @@ psql_run() { docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v 
 psql_quiet() { psql_run -tAq "$@"; }
 
 echo "[INFO] Base ${DB_NAME} en el contenedor ${DB_CONTAINER}."
+
+# Que la base se llame musiki26 y acepte al usuario app no alcanza para saber que
+# es la nuestra: en este VPS conviven varias bases en el mismo Postgres, y el
+# contenedor se llama authentik-postgresql por razones históricas. Antes de
+# escribir una sola línea, comprobamos que estén las tablas del LMS.
+CENTINELAS="${CENTINELAS:-User Enrollment}"
+for tabla in $CENTINELAS; do
+  existe=$(psql_quiet -c "SELECT to_regclass('public.\"${tabla}\"') IS NOT NULL;" 2>/dev/null | tr -d '[:space:]')
+  if [ "$existe" != "t" ]; then
+    echo "" >&2
+    echo "[ERROR] En ${DB_CONTAINER}/${DB_NAME} no está la tabla \"${tabla}\"." >&2
+    echo "        Esta no parece la base del LMS. No se toca nada." >&2
+    echo "" >&2
+    echo "        Para ver qué hay:" >&2
+    echo "          docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} -c '\\dt'" >&2
+    echo "        Para apuntar a otra:" >&2
+    echo "          DB_CONTAINER=<nombre> DB_NAME=<base> \$0 ${1:-}" >&2
+    exit 1
+  fi
+done
+echo "[INFO] Verificada: están las tablas del LMS (${CENTINELAS})."
 
 # La tabla de registro se crea sola la primera vez.
 psql_quiet -c '
