@@ -16,6 +16,7 @@ Qué chequea:
 
   ERROR   frontmatter que se abre y no cierra
   ERROR   wikilink que no resuelve en el material publicable
+  ERROR   tags escalar donde el esquema de Astro pide lista
   ERROR   nota de public/ sin campo def
   ERROR   rastro del aparato normativo archivado
   AVISO   nota de public/ sin status
@@ -25,6 +26,7 @@ Qué corrige con --arreglar:
 
   · saca de hypo/hyper/connect las relaciones que no resuelven
   · convierte a texto plano los wikilinks colgados del cuerpo
+  · envuelve tags en lista
   · agrega status: draft donde falta
 
 No corrige lo que requiere criterio: una def faltante o un rastro normativo
@@ -108,6 +110,16 @@ def enlaces(texto):
     return [m.strip() for m in re.findall(r'\[\[([^\]|#]+)', texto) if m.strip()]
 
 
+def tags_sin_lista(valor):
+    """True si `tags` trae un escalar donde el esquema espera una lista.
+
+    Vacío no es error: el campo es opcional. `[...]` ya es lista en línea, y una
+    lista en bloque (`tags:` y guiones abajo) deja el valor vacío en esta línea.
+    """
+    v = (valor or '').strip()
+    return bool(v) and not v.startswith('[')
+
+
 # --------------------------------------------------------------------------- #
 
 def arreglar(raiz, publicables, en_draft):
@@ -159,7 +171,13 @@ def arreglar(raiz, publicables, en_draft):
                         nuevo_fm = nuevo_fm[:ms.start(1)] + esperado + nuevo_fm[ms.end(1):]
                         hechos.append(f'{rel}: alineé el slug con el nombre de archivo')
 
-                # 3. status faltante
+                # 3. tags escalar donde el esquema pide lista
+                mt = re.search(r'^tags:[ \t]*(\S.*)$', nuevo_fm, re.M)
+                if mt and tags_sin_lista(mt.group(1)):
+                    nuevo_fm = nuevo_fm[:mt.start(1)] + f'[{mt.group(1).strip()}]' + nuevo_fm[mt.end(1):]
+                    hechos.append(f'{rel}: puse tags como lista')
+
+                # 4. status faltante
                 if not re.search(r'^status:\s*\S', nuevo_fm, re.M) and base == 'public':
                     nuevo_fm = nuevo_fm.rstrip('\n') + '\nstatus: draft'
                     hechos.append(f'{rel}: agregué status: draft')
@@ -200,6 +218,15 @@ def validar(raiz, publicables, en_draft):
 
             fm_crudo, cuerpo, _ = partir(texto)
             fm = campos(fm_crudo)
+
+            # tags es el único campo que el esquema de Astro exige como lista:
+            # z.array(z.string()). Un valor pelado rompe el build entero —no la
+            # nota, el build— y el error aparece recién en el VPS, después del
+            # pull y del npm ci, con el deploy a medias.
+            if tags_sin_lista(fm.get('tags')):
+                errores.append(
+                    f'{rel}: tags: {fm["tags"]} tiene que ser lista — '
+                    f'tags: [{fm["tags"]}]. Así como está, rompe el build')
 
             for destino in enlaces(texto):
                 if destino in publicables:
