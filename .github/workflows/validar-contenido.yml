@@ -1,0 +1,64 @@
+name: Validar contenido de un course
+
+# Validador global de contenido. Vive acá, en el framework, y lo llaman los repos
+# de cada materia en lugar de tener cada uno su copia.
+#
+# Uso desde el repo de una materia (por ejemplo musiki/s123):
+#
+#   jobs:
+#     validar:
+#       uses: musiki/framework/.github/workflows/validar-contenido.yml@main
+#       with:
+#         arreglar: false
+#
+# Si una materia necesita reglas propias, puede dejar su propio
+# `tools/validar-notas.py`: este workflow lo usa en lugar del global.
+# Esa es la distinción entre validador global y local; se empieza por el global.
+
+on:
+  workflow_call:
+    inputs:
+      arreglar:
+        description: "Corregir lo mecánico antes de validar"
+        type: boolean
+        default: false
+      ref:
+        description: "Rama o commit del framework del que tomar el validador"
+        type: string
+        default: main
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Traer el contenido de la materia
+        uses: actions/checkout@v4
+
+      - name: Traer el validador del framework
+        uses: actions/checkout@v4
+        with:
+          repository: musiki/framework
+          ref: ${{ inputs.ref }}
+          path: .framework
+          sparse-checkout: scripts/content
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Elegir validador (local si existe, global si no)
+        id: elegir
+        run: |
+          if [ -f tools/validar-notas.py ]; then
+            echo "Esta materia tiene validador propio."
+            echo "script=tools/validar-notas.py" >> "$GITHUB_OUTPUT"
+          else
+            echo "Usando el validador global del framework."
+            echo "script=.framework/scripts/content/validar-notas.py" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validar
+        run: |
+          python3 "${{ steps.elegir.outputs.script }}" \
+            --vault . ${{ inputs.arreglar && '--arreglar' || '' }}

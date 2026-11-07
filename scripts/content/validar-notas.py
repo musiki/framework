@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""Valida y corrige el contenido publicable de un course de musiki.
+
+Uso:
+    python3 tools/validar-notas.py              # valida
+    python3 tools/validar-notas.py --arreglar   # corrige lo mecánico y vuelve a validar
+    python3 tools/validar-notas.py --aviso      # informa sin fallar
+    python3 tools/validar-notas.py --vault RUTA # valida otro course
+
+Principio: se valida contra lo que se publica, no contra lo que hay en disco.
+Las carpetas ignoradas por git —`draft/` entre ellas— no existen para el sitio,
+así que un enlace desde `public/` hacia una nota de `draft/` está roto aunque
+en Obsidian se vea bien. Es la diferencia que hacía que local y CI no coincidieran.
+
+Qué chequea:
+
+  ERROR   frontmatter que se abre y no cierra
+  ERROR   wikilink que no resuelve en el material publicable
+  ERROR   nota de public/ sin campo def
+  ERROR   rastro del aparato normativo archivado
+  AVISO   nota de public/ sin status
+  AVISO   def demasiado larga para el índice
+
+Qué corrige con --arreglar:
+
+  · saca de hypo/hyper/connect las relaciones que no resuelven
+  · convierte a texto plano los wikilinks colgados del cuerpo
+  · agrega status: draft donde falta
+
+No corrige lo que requiere criterio: una def faltante o un rastro normativo
+se informan y los resuelve una persona.
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+
+CARPETAS_PUBLICABLES = ('public', 'cursos')
+IGNORAR_SIEMPRE = {'.git', '.obsidian', '.trash', 'node_modules', '.github', 'tools'}
+RELACIONES = ('hypo', 'hyper', 'connect')
+
+RASTRO_NORMATIVO = re.compile(
+    r'§\d|Rúbrica de Evaluación|rúbrica de evaluación|caducidad de la regularidad|'
+    r'contrato pedagógico|solicitud de excepción',
+)
+# §N precedido de un año o de "cap./p." es una cita legítima a un manual,
+# por ejemplo (Popper, 1959, §20) o "Notas al pie: §2.13" del manual de APA.
+CITA_LEGITIMA = re.compile(r'\d{4}\s*,?\s*§\d|(?:cap\.|p\.|pp\.)[^§]{0,30}§\d|APA|Chicago')
+
+
+def carpetas_ignoradas_por_git(raiz):
+    """Lee .gitignore y devuelve los directorios de primer nivel que se ignoran."""
+    ignoradas = set()
+    gi = os.path.join(raiz, '.gitignore')
+    if os.path.exists(gi):
+        for linea in open(gi, encoding='utf-8'):
+            linea = linea.strip()
+            if not linea or linea.startswith('#'):
+                continue
+            if linea.endswith('/'):
+                ignoradas.add(linea.rstrip('/').lstrip('/'))
+    return ignoradas
+
+
+def archivos_md(raiz, base=None, excluir=frozenset()):
+    inicio = os.path.join(raiz, base) if base else raiz
+    if not os.path.isdir(inicio):
+        return
+    for d, subd, fs in os.walk(inicio):
+        subd[:] = [s for s in subd if s not in IGNORAR_SIEMPRE and s not in excluir]
+        for f in sorted(fs):
+            if f.endswith('.md'):
+                yield os.path.join(d, f)
+
+
+def partir(texto):
+    """Devuelve (frontmatter_crudo, cuerpo, fin_del_frontmatter)."""
+    m = re.match(r'^---\n(.*?)\n---\n?', texto, re.S)
+    if not m:
+        return None, texto, 0
+    return m.group(1), texto[m.end():], m.end()
+
+
+def campos(fm_crudo):
+    d = {}
+    if not fm_crudo:
+        return d
+    for linea in fm_crudo.split('\n'):
+        mm = re.match(r'^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$', linea)
+        if mm:
+            d[mm.group(1)] = mm.group(2).strip()
+    return d
+
+
+def sin_bloques_de_codigo(texto):
+    return re.sub(r'^```.*?^```', '', texto, flags=re.S | re.M)
+
+
+def enlaces(texto):
+    return [m.strip() for m in re.findall(r'\[\[([^\]|#]+)', texto) if m.strip()]
+
+
+# --------------------------------------------------------------------------- #
+
+def arreglar(raiz, publicables, en_draft):
+    """Corrige lo mecánico. Devuelve la lista de cambios hechos."""
+    hechos = []
+    for base in CARPETAS_PUBLICABLES:
+        for p in archivos_md(raiz, base):
+            rel = os.path.relpath(p, raiz)
+            texto = open(p, encoding='utf-8').read()
+            original = texto
+            fm_crudo, cuerpo, fin = partir(texto)
+
+            # 1. relaciones colgadas en el frontmatter
+            if fm_crudo:
+                nuevo_fm = fm_crudo
+                for rel_campo in RELACIONES:
+                    # formato en línea: connect: ["[[a]]", "[[b]]"]
+                    m = re.search(rf'^{rel_campo}:\s*\[(.*?)\]\s*$', nuevo_fm, re.M)
+                    if m:
+                        items = re.findall(r'"\[\[([^\]]+)\]\]"', m.group(1))
+                        quedan = [i for i in items if i.split('|')[0].strip() in publicables]
+                        if len(quedan) != len(items):
+                            for i in items:
+                                if i.split('|')[0].strip() not in publicables:
+                                    hechos.append(f'{rel}: saqué {rel_campo} [[{i}]]')
+                            valor = ', '.join(f'"[[{i}]]"' for i in quedan)
+                            nuevo_fm = nuevo_fm[:m.start()] + f'{rel_campo}: [{valor}]' + nuevo_fm[m.end():]
+                    # formato en lista:
+                    #   connect:
+                    #     - "[[a]]"
+                    m2 = re.search(rf'^{rel_campo}:\s*$\n((?:\s+-\s+.*\n?)*)', nuevo_fm, re.M)
+                    if m2:
+                        lineas = m2.group(1).rstrip('\n').split('\n')
+                        quedan_l = []
+                        for ln in lineas:
+                            mm = re.search(r'\[\[([^\]]+)\]\]', ln)
+                            if mm and mm.group(1).split('|')[0].strip() not in publicables:
+                                hechos.append(f'{rel}: saqué {rel_campo} [[{mm.group(1)}]]')
+                            else:
+                                quedan_l.append(ln)
+                        bloque = ('\n'.join(quedan_l) + '\n') if quedan_l else ''
+                        nuevo_fm = nuevo_fm[:m2.start()] + f'{rel_campo}:\n' + bloque + nuevo_fm[m2.end():]
+
+                # 2. status faltante
+                if not re.search(r'^status:\s*\S', nuevo_fm, re.M) and base == 'public':
+                    nuevo_fm = nuevo_fm.rstrip('\n') + '\nstatus: draft'
+                    hechos.append(f'{rel}: agregué status: draft')
+
+                if nuevo_fm != fm_crudo:
+                    texto = '---\n' + nuevo_fm.rstrip('\n') + '\n---\n' + cuerpo
+
+            # 3. wikilinks colgados en el cuerpo → texto plano
+            fm2, cuerpo2, _ = partir(texto)
+            def a_texto(m):
+                destino = m.group(1).split('|')[0].strip()
+                if destino in publicables:
+                    return m.group(0)
+                visible = m.group(1).split('|')[-1].strip()
+                hechos.append(f'{rel}: pasé a texto plano [[{destino}]]')
+                return visible
+            cuerpo_nuevo = re.sub(r'\[\[([^\]#]+?)\]\]', a_texto, cuerpo2)
+            if cuerpo_nuevo != cuerpo2:
+                texto = ('---\n' + fm2.rstrip('\n') + '\n---\n' + cuerpo_nuevo) if fm2 else cuerpo_nuevo
+
+            if texto != original:
+                open(p, 'w', encoding='utf-8').write(texto)
+    return hechos
+
+
+def validar(raiz, publicables, en_draft):
+    errores, avisos = [], []
+    for base in CARPETAS_PUBLICABLES:
+        for p in archivos_md(raiz, base):
+            rel = os.path.relpath(p, raiz)
+            texto = open(p, encoding='utf-8').read()
+
+            if texto.startswith('---\n') and '\n---' not in texto[4:]:
+                errores.append(f'{rel}: el frontmatter se abre y no se cierra')
+                continue
+
+            fm_crudo, cuerpo, _ = partir(texto)
+            fm = campos(fm_crudo)
+
+            for destino in enlaces(texto):
+                if destino in publicables:
+                    continue
+                if destino in en_draft:
+                    errores.append(
+                        f'{rel}: [[{destino}]] existe en draft/, que no se publica. '
+                        f'Publicá la nota o sacá el enlace')
+                else:
+                    errores.append(f'{rel}: enlace roto [[{destino}]]')
+
+            for n, linea in enumerate(sin_bloques_de_codigo(texto).split('\n'), 1):
+                if not RASTRO_NORMATIVO.search(linea):
+                    continue
+                if 'Reglamento de Estudios' in linea or CITA_LEGITIMA.search(linea):
+                    continue
+                errores.append(f'{rel}:{n}: rastro normativo archivado — {linea.strip()[:70]}')
+
+            if base != 'public':
+                continue
+
+            d = (fm.get('def') or '').strip().strip('"').strip("'")
+            if not d:
+                errores.append(f'{rel}: falta el campo def (no va a aparecer en el índice)')
+            elif len(d) > 320:
+                avisos.append(f'{rel}: def de {len(d)} caracteres, el índice la va a cortar')
+
+            if not fm.get('status'):
+                avisos.append(f'{rel}: sin status (se publica como visible normal)')
+
+    return errores, avisos
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=True)
+    ap.add_argument('--vault', default=None, help='raíz del course a validar')
+    ap.add_argument('--arreglar', action='store_true', help='corrige lo mecánico')
+    ap.add_argument('--aviso', action='store_true', help='informa sin fallar')
+    args = ap.parse_args()
+
+    raiz = os.path.abspath(args.vault) if args.vault \
+        else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    ignoradas = carpetas_ignoradas_por_git(raiz)
+
+    # lo que ve el sitio
+    publicables = set()
+    for base in CARPETAS_PUBLICABLES:
+        if base in ignoradas:
+            continue
+        for p in archivos_md(raiz, base):
+            publicables.add(os.path.basename(p)[:-3])
+    # lo que existe sólo en disco, para dar un mensaje útil
+    en_draft = set()
+    for carpeta in ignoradas:
+        for p in archivos_md(raiz, carpeta):
+            en_draft.add(os.path.basename(p)[:-3])
+
+    if args.arreglar:
+        hechos = arreglar(raiz, publicables, en_draft)
+        for h in hechos:
+            print(f'  arreglado · {h}')
+        if not hechos:
+            print('  no había nada mecánico para arreglar')
+        print()
+
+    errores, avisos = validar(raiz, publicables, en_draft)
+
+    for a in avisos:
+        print(f'  aviso · {a}')
+    for e in errores:
+        print(f'  ERROR · {e}')
+
+    print()
+    print(f'{len(errores)} errores · {len(avisos)} avisos '
+          f'· {len(publicables)} notas publicables')
+
+    if errores and not args.aviso:
+        print()
+        print('No se publica así.')
+        print('  · enlace a draft/  → publicá la nota, o corré --arreglar para sacar el enlace')
+        print('  · enlace roto      → la nota se renombró o se borró; --arreglar lo limpia')
+        print('  · falta def        → la escribe una persona: una a tres oraciones autocontenidas')
+        print('  · rastro normativo → sacar la remisión al aparato archivado')
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

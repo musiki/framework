@@ -160,7 +160,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const message = `${mode === 'create' ? 'create' : 'edit'}: ${targetPath}\n\n${editSummary}`;
   const isPublicPath = targetPath.startsWith('public/');
-  const usePRWorkflow = isPublicPath;
+  // Edits under `public/` go through a branch + PR unless the course opted into
+  // committing straight to the branch. Without that opt-in, a course whose
+  // teachers edit online and have nobody merging PRs sees the editor report
+  // success while the site never changes.
+  const usePRWorkflow = isPublicPath && (source.publicPublishMode || 'pr') !== 'direct';
   const renderedContent = await renderRuntimeMarkdown(finalContent, targetPath).catch((error) => {
     console.error('Runtime markdown render error during publish:', error);
     return null;

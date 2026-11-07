@@ -35,7 +35,8 @@
       "branch": "main",
       "contentRoot": ".",
       "localPath": "../s123",
-      "tenant": "musiki"
+      "tenant": "musiki",
+      "publicPublishMode": "direct"
     },
     {
       "id": "internetmusic",

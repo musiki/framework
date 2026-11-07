@@ -15,6 +15,8 @@ export type TreeRenderOptions = {
   showVisibility: boolean; selectedNoteId?: string | null;
   /** Opt-in search box + fold-all/unfold-all toggle above the tree (so studio). Off by default, so musiki's notes sidebar is unchanged. */
   toolbar?: boolean;
+  /** Start every folder collapsed instead of expanded. The user's own toggles still win for the life of the panel; only the initial state changes. */
+  foldedByDefault?: boolean;
   load(): Promise<{ folders: TreeFolder[]; notes: TreeNote[] }>;
   onOpenNote(id: string): void;
   /** Optional per-note icon (e.g. musiki's concept/draft glyph), prefixed onto the label text. */
@@ -44,7 +46,16 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
   let generation = 0;
   let busy = false;
   let dragged: { id: string; kind: 'note' | 'folder'; parentId: string | null } | null = null;
-  const closed = new Set<string>();
+  // Folders open by default unless `foldedByDefault` flips it. `flipped` holds the
+  // ids whose state the user changed by hand, so it reads the same either way and
+  // the user's toggles always win over the default.
+  const defaultOpen = !opts.foldedByDefault;
+  const flipped = new Set<string>();
+  const isOpen = (id: string) => (flipped.has(id) ? !defaultOpen : defaultOpen);
+  const setOpen = (id: string, open: boolean) => {
+    if (open === defaultOpen) flipped.delete(id);
+    else flipped.add(id);
+  };
   const status = document.createElement('p'); status.setAttribute('role', 'status');
   const content = document.createElement('div'); content.className = 'writing-tree';
   const button = (label: string, action: () => void) => {
@@ -64,7 +75,7 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
   const syncFoldToggle = () => {
     if (!foldToggle || !nodes) return;
     const ids = folderIds(nodes);
-    const folded = ids.length > 0 && ids.every(id => closed.has(id));
+    const folded = ids.length > 0 && ids.every(id => !isOpen(id));
     foldToggle.setAttribute('aria-pressed', String(folded));
     foldToggle.title = folded ? (l.unfoldAll ?? '') : (l.foldAll ?? '');
     foldToggle.disabled = ids.length === 0 || filter !== null;
@@ -87,8 +98,8 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
     foldToggle.addEventListener('click', () => {
       if (!nodes) return;
       const ids = folderIds(nodes);
-      if (foldToggle!.getAttribute('aria-pressed') === 'true') closed.clear();
-      else for (const id of ids) closed.add(id);
+      const abrirTodo = foldToggle!.getAttribute('aria-pressed') === 'true';
+      for (const id of ids) setOpen(id, abrirTodo);
       paint();
     });
     bar.append(search, foldToggle);
@@ -165,13 +176,13 @@ export function renderTree(opts: TreeRenderOptions): { refresh(): Promise<void>;
       const details = document.createElement('details');
       if (node.kind === 'folder') {
         // While searching, matches' ancestors are forced open and the user's
-        // own fold state (`closed`) is left untouched for when the search clears.
+        // own fold state (`flipped`) is left untouched for when the search clears.
         const searching = filter !== null;
-        details.open = searching ? filter!.expand.has(item.id) : !closed.has(item.id);
+        details.open = searching ? filter!.expand.has(item.id) : isOpen(item.id);
         const summary = document.createElement('summary'); summary.append(row); details.append(summary);
         label.addEventListener('click', e => e.preventDefault());
         details.addEventListener('toggle', () => {
-          if (!searching) { if (details.open) closed.delete(item.id); else closed.add(item.id); syncFoldToggle(); }
+          if (!searching) { setOpen(item.id, details.open); syncFoldToggle(); }
           label.setAttribute('aria-expanded', String(details.open));
         });
         label.setAttribute('aria-expanded', String(details.open));

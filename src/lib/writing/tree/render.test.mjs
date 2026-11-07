@@ -265,3 +265,25 @@ test('nested lists carry their depth for indentation styling', async () => {
   assert.deepEqual(depths, ['0', '1', '1', '2']); // Anexos, Capítulo, Capítulo/Fuentes
   tree.destroy();
 });
+
+test('foldedByDefault starts every folder collapsed, and the user toggle still wins', async () => {
+  const { container, tree } = mountToolbar({ foldedByDefault: true });
+  await tree.refresh();
+  const details = () => [...container.querySelectorAll('.writing-tree details:not(.wt-actions)')];
+  assert.deepEqual(details().map(d => d.open), [false, false, false]); // f1, su anidada f2, y f3
+  // la carpeta que el usuario abre queda abierta despues de repintar
+  const primera = details()[0];
+  primera.open = true; primera.dispatchEvent(new window.Event('toggle'));
+  await tree.refresh();
+  assert.equal(details()[0].open, true);
+  assert.equal(details()[2].open, false); // f3 sigue plegada
+  tree.destroy();
+});
+
+test('without foldedByDefault folders keep opening expanded', async () => {
+  const { container, tree } = mountToolbar();
+  await tree.refresh();
+  const abiertas = [...container.querySelectorAll('.writing-tree details:not(.wt-actions)')].map(d => d.open);
+  assert.deepEqual(abiertas, [true, true, true]);
+  tree.destroy();
+});

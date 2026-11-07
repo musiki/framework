@@ -16,6 +16,14 @@ type SourceManifestSource = {
   tenant?: string;
   /** `false` for data sources (not courses), e.g. soog-instruments. */
   assemble?: boolean;
+  /**
+   * How edits under `public/` reach the repo.
+   * `pr` (default) opens a branch + pull request that someone has to merge.
+   * `direct` commits straight to the branch, like edits under `cursos/` already do.
+   * Courses whose teachers edit online without a review step want `direct`:
+   * with `pr` the editor says "published" while nothing shows up on the site.
+   */
+  publicPublishMode?: 'pr' | 'direct';
 };
 
 type SourceManifest = {

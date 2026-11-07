@@ -229,6 +229,7 @@ export function renderNotesTree(
     locale: TREE_LOCALE,
     canManage: true, // owner's own DB-notes tree
     showVisibility: false,
+    foldedByDefault: true, // the sidebar opens quiet; the user expands what needs
     selectedNoteId: null,
     noteIcon: (note) => getNoteIconInfo(note as unknown as NoteItem).char,
     noteActions: (note) => [{
