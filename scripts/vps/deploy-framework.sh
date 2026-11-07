@@ -2,8 +2,9 @@
 #
 # Deploy del framework. Un comando, desde tu máquina.
 #
-#   ./scripts/vps/deploy-framework.sh          # deploya main
+#   ./scripts/vps/deploy-framework.sh                     # deploya main
 #   ./scripts/vps/deploy-framework.sh alguna-rama
+#   ./scripts/vps/deploy-framework.sh --skip-migrations   # emergencia
 #
 # Hace ssh al VPS y corre scripts/vps-update.sh allá, que es el que sabe el
 # orden correcto: pull, deps, migraciones, build, restart.
@@ -23,10 +24,15 @@ VPS_USER="${VPS_USER:-zz}"
 VPS_HOST="${VPS_HOST:-46.225.154.68}"
 VPS_PORT="${VPS_PORT:-22}"
 VPS_PATH="${VPS_PATH:-/opt/musiki/framework}"
+SKIP=""
+if [ "${1:-}" = "--skip-migrations" ]; then
+  SKIP="SKIP_MIGRATIONS=1 "
+  shift
+fi
 BRANCH="${1:-main}"
 
 printf '\n[framework] %s@%s:%s (%s)\n\n' "$VPS_USER" "$VPS_HOST" "$VPS_PATH" "$BRANCH"
 
 # bash -lc porque la shell del VPS es fish y vps-update.sh es bash.
 exec ssh -t -p "$VPS_PORT" "${VPS_USER}@${VPS_HOST}" \
-  "bash -lc 'cd \"${VPS_PATH}\" && ./scripts/vps-update.sh \"${BRANCH}\"'"
+  "bash -lc 'cd \"${VPS_PATH}\" && ${SKIP}./scripts/vps-update.sh \"${BRANCH}\"'"

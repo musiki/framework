@@ -20,10 +20,34 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-DB_CONTAINER="${DB_CONTAINER:-devmusiki-db}"
 DB_USER="${DB_USER:-app}"
 DB_NAME="${DB_NAME:-musiki26}"
 MIGRATIONS_DIR="postgres-patches/migrations"
+
+# El nombre del contenedor estaba hardcodeado como 'devmusiki-db' y no es el que
+# corre. Antes de inventar otro nombre fijo, que lo busque: cualquier contenedor
+# cuya imagen sea postgres sirve, y si hay más de uno se elige el que tenga la
+# base que buscamos.
+descubrir_contenedor() {
+  if [ -n "${DB_CONTAINER:-}" ]; then
+    printf '%s' "$DB_CONTAINER"
+    return
+  fi
+  local candidatos
+  candidatos=$(docker ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null \
+    | awk -F'\t' 'tolower($2) ~ /postgres|postgis/ { print $1 }')
+  # si hay varios, nos quedamos con el que tenga la base
+  for c in $candidatos; do
+    if docker exec "$c" psql -U "$DB_USER" -lqt 2>/dev/null | cut -d'|' -f1 | grep -qw "$DB_NAME"; then
+      printf '%s' "$c"
+      return
+    fi
+  done
+  # uno solo y sin poder verificar: igual es la mejor apuesta
+  printf '%s' "$(printf '%s' "$candidatos" | head -1)"
+}
+
+DB_CONTAINER="$(descubrir_contenedor)"
 
 MODE="apply"
 case "${1:-}" in
@@ -34,10 +58,16 @@ case "${1:-}" in
   *) echo "Uso: $0 [--status|--dry-run|--baseline]" >&2; exit 1 ;;
 esac
 
-docker inspect "$DB_CONTAINER" >/dev/null 2>&1 || {
-  echo "[ERROR] No encuentro el contenedor '${DB_CONTAINER}'." >&2
+if [ -z "$DB_CONTAINER" ] || ! docker inspect "$DB_CONTAINER" >/dev/null 2>&1; then
+  echo "[ERROR] No encuentro ningún contenedor de PostgreSQL." >&2
+  echo "" >&2
+  echo "Contenedores corriendo ahora:" >&2
+  docker ps --format '  {{.Names}}  ({{.Image}})' >&2 || echo "  (docker ps falló)" >&2
+  echo "" >&2
+  echo "Si el que corresponde está en la lista, indicalo:" >&2
+  echo "  DB_CONTAINER=<nombre> $0 ${1:-}" >&2
   exit 1
-}
+fi
 
 # psql dentro del contenedor: sin red, sin túnel, sin contraseña en el comando.
 psql_run() { docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"; }

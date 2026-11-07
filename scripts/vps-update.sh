@@ -55,7 +55,16 @@ if [ "${SKIP_MIGRATIONS:-0}" = "1" ]; then
   echo "--> Migraciones salteadas (SKIP_MIGRATIONS=1)."
 elif [ -x ./scripts/vps/db-migrate.sh ]; then
   echo "--> Aplicando migraciones pendientes..."
-  ./scripts/vps/db-migrate.sh
+  # Si falla, el deploy se corta acá y NO se rebuildea ni se reinicia. Eso es
+  # deliberado: la app que está corriendo sigue siendo la build vieja, que es
+  # coherente con el esquema viejo. Producción queda sana, el deploy incompleto.
+  if ! ./scripts/vps/db-migrate.sh; then
+    echo ""
+    echo "[ERROR] Las migraciones fallaron. El deploy se detiene antes del build."
+    echo "        La app sigue corriendo la versión anterior: producción está sana."
+    echo "        Para deployar igual, sin migrar:  SKIP_MIGRATIONS=1 $0 ${BRANCH}"
+    exit 1
+  fi
 else
   echo "--> scripts/vps/db-migrate.sh no está, se omite."
 fi
