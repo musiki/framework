@@ -27,6 +27,7 @@ import remarkObsidianHighlight from './src/plugins/remark-obsidian-highlight.mjs
 import auth from 'auth-astro';
 import node from '@astrojs/node';
 import react from '@astrojs/react';
+import { unified } from '@astrojs/markdown-remark';
 
 const localhostUrlRe = /^https?:\/\/(?:localhost|127(?:\.\d+){3}|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i;
 
@@ -115,6 +116,8 @@ export default defineConfig({
       ],
     },
   },
+  // Astro 7 pasa a 'jsx' por defecto; mantenemos la compresión de siempre.
+  compressHTML: true,
   // Auth.js already validates CSRF tokens for auth endpoints.
   // Astro's origin guard can false-positive behind reverse proxies.
   security: {
@@ -144,29 +147,33 @@ export default defineConfig({
         'strudel': 'javascript',
       }
     },
-    remarkPlugins: [
-      remarkGfm,
-      remarkLanguageBlocks,   // <!--lang:fr/en--> -> alternable blocks (inert without markers)
-      remarkDefCallout,       // inserta el def del frontmatter como callout [!def]
-      remarkCoverBlock,
-      slugMathRemark,         // primero traducís $<
-      remarkMath,
-      remarkStrudelBlocks,    // convierte ```strudel en bloques interactivos antes de Shiki
-      remarkMermaid,          // luego procesá mermaid si aparece dentro
-      remarkEvalBlocks,       // procesa bloques eval
-      remarkDataviewLite,     // procesa bloques dataview
-      remarkWikiLink,         // procesa wiki links [[Link]]
-      remarkLily,             // usa renderer local de lilypond
-      remarkObsidianHighlight,
-      remarkSeshatCitations,
-      remarkBibtexApa,        // ```bibtex → referencias APA 7 con botones de copia
-    ],
-    rehypePlugins: [
-      rehypeObsidianCallouts, // detecta y transforma callouts tipo GitHub/Obsidian
-      rehypeRaw,              // permite inyectar HTML desde remark
-      [rehypeKatex, { strict: false }], // Render math even if there are minor LaTeX errors
-      rehypeLazyYouTube,
-      rehypeCodeSyntax,
-    ]
+    // Astro 7 usa Sätteri por defecto; todos los plugins de abajo son de
+    // unified (remark/rehype), así que fijamos ese procesador explícitamente.
+    processor: unified({
+      remarkPlugins: [
+        remarkGfm,
+        remarkLanguageBlocks,   // <!--lang:fr/en--> -> alternable blocks (inert without markers)
+        remarkDefCallout,       // inserta el def del frontmatter como callout [!def]
+        remarkCoverBlock,
+        slugMathRemark,         // primero traducís $<
+        remarkMath,
+        remarkStrudelBlocks,    // convierte ```strudel en bloques interactivos antes de Shiki
+        remarkMermaid,          // luego procesá mermaid si aparece dentro
+        remarkEvalBlocks,       // procesa bloques eval
+        remarkDataviewLite,     // procesa bloques dataview
+        remarkWikiLink,         // procesa wiki links [[Link]]
+        remarkLily,             // usa renderer local de lilypond
+        remarkObsidianHighlight,
+        remarkSeshatCitations,
+        remarkBibtexApa,        // ```bibtex → referencias APA 7 con botones de copia
+      ],
+      rehypePlugins: [
+        rehypeObsidianCallouts, // detecta y transforma callouts tipo GitHub/Obsidian
+        rehypeRaw,              // permite inyectar HTML desde remark
+        [rehypeKatex, { strict: false }], // Render math even if there are minor LaTeX errors
+        rehypeLazyYouTube,
+        rehypeCodeSyntax,
+      ]
+    }),
   }
 })

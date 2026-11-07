@@ -15,6 +15,10 @@
 // standalone image/svg+xml file. `sanitizeLilypondSvgMarkup` (lilypond-support)
 // remains a cosmetic pass (currentColor → theme ink) applied afterwards.
 import createDOMPurify from 'dompurify';
+// Import estático: Astro 7 carga la config (y estos plugins) con el module
+// runner de Vite y lo cierra antes de renderizar el markdown; un import()
+// diferido acá falla con "Vite module runner has been closed".
+import { JSDOM } from 'jsdom';
 
 const FORBID_TAGS = [
   'script', 'foreignObject', 'foreignobject', 'image', 'feImage', 'feimage',
@@ -40,7 +44,6 @@ let jsdomWindow = null;
 
 async function loadPurifier() {
   if (purifier) return purifier;
-  const { JSDOM } = await import('jsdom');
   jsdomWindow = new JSDOM('<!doctype html><html><body></body></html>').window;
   const instance = createDOMPurify(jsdomWindow);
 
