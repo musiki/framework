@@ -51,6 +51,7 @@ gh run view <id> --log-failed
 | VPS | `zz@46.225.154.68` (shell fish: usar `bash -lc '...'` por ssh) |
 | Código | `/opt/musiki/framework` |
 | App | proceso PM2 **`musiki-framework`**, puerto 4321 (`dist/server/entry.mjs`) |
+| Node | 24 en todo el sistema (NodeSource `node_24.x`, desde 2026-11-07; lo comparten ~12 apps de PM2). El CI también buildea con 24. Vuelta atrás: `/root/nodesource.sources.node22.bak` + `apt install nodejs=22.22.2-1nodesource1` + `pm2 update` |
 | Otros procesos | `musiki-framework-dev` (4325), `musiki-content-bus` (4322) |
 | Base | Postgres en Docker, contenedor `authentik-postgresql`, base `musiki26`, usuario `app` |
 | Registro de migraciones | tabla `SchemaMigration` en `musiki26` |
