@@ -2785,3 +2785,66 @@ pre[class*="lang-bibtex"] .musiki-code-comment {
     font-size: 0.8rem !important;
   }
 }
+
+/* ── Propiedades de la nota en edición (pod Info, frontmatter-pod.ts) ── */
+.note-fm-host:empty { display: none; }
+.note-fm-pod { display: grid; gap: 0.55rem; font-size: 0.8rem; }
+.note-fm-pod .page-info-properties-title {
+  margin: 0;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-fg-dim);
+}
+.note-fm-pod-badge {
+  margin-left: 0.35rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--accent);
+}
+.note-fm-fields fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.45rem 0.6rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.note-fm-fields fieldset:disabled { opacity: 0.5; }
+.note-fm-fields label,
+.note-fm-yaml-label { display: grid; gap: 0.15rem; color: var(--c-fg-dim); font-size: 0.72rem; }
+.note-fm-fields input,
+.note-fm-fields select {
+  min-width: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--c-bg);
+  color: var(--c-fg);
+}
+.note-fm-yaml {
+  width: 100%;
+  min-height: 8rem;
+  height: 16rem;
+  max-height: 80vh;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--c-bg-mute);
+  color: var(--c-fg);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+.note-fm-yaml:focus { outline: none; border-color: var(--accent); }
+.note-fm-yaml.is-invalid { border-color: var(--c-danger, #c0392b); }
+.note-fm-error { margin: 0; color: var(--c-danger, #c0392b); font-size: 0.74rem; }

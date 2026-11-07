@@ -5,6 +5,7 @@ import { NotesPersistence } from './notes-persistence';
 import { getNote } from '../notes-editor/api';
 import { mountDbNoteEditor } from '../notas/personal-notes-workspace';
 import { parseFrontmatter } from '../notes-editor/yaml-strip';
+import { releaseFrontmatterPod } from './notes/frontmatter-pod';
 import type { InlineEditorOptions } from './notes/inline-editor';
 import { buildShell, injectWorkspaceCss, type NoteMode } from './dockview-shell';
 import type { LiveMdEditor } from './notes/live-md-editor';
@@ -739,6 +740,7 @@ async function enterPreviewMode(state: PanelState) {
   }
   state.mode = 'preview';
   state.bodyEl.innerHTML = '';
+  releaseFrontmatterPod(); // sólo suelta si su editor ya no está en el DOM
   state.pencilBtn.title = 'Editar';
   state.pencilBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
   state.statusDot.className = 'cnw-status';
@@ -1570,6 +1572,7 @@ export function initDockviewWorkspace(
     }
 
     dbNotePanelStates.get(event.id)?.liveEditor?.destroy();
+    if (state) requestAnimationFrame(() => releaseFrontmatterPod());
     panelStates.delete(event.id);
     dbNotePanelStates.delete(event.id);
     qaShells.delete(event.id);

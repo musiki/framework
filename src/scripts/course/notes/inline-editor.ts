@@ -8,11 +8,10 @@ import {
 import {
   parseFrontmatter,
   serializeFrontmatter,
-  populateYamlStrip,
-  readYamlStrip,
-  parseYamlBlock,
+  joinFrontmatter,
   type FrontmatterData,
 } from '../../notes-editor/yaml-strip';
+import { mountFrontmatterPod, releaseFrontmatterPod, type FrontmatterPodHandle } from './frontmatter-pod';
 import { initToolbar } from '../../notes-editor/toolbar';
 import type { NoteListItem } from '../../notes-editor/types';
 
@@ -26,7 +25,7 @@ export type InlineEditorOptions = {
   // New fields (optional for backward compatibility):
   persistence?: import('../notes-persistence').NotesPersistence | null;
   hideHeader?: boolean;       // hide the top header bar (we have our own in the panel)
-  showMetadata?: boolean;     // keep the YAML property strip available in headerless pods
+  showMetadata?: boolean;     // editar las propiedades en el pod Info del sidebar derecho
   overrideContent?: string | null; // pre-loaded content (e.g. recovered draft)
 };
 
@@ -38,6 +37,10 @@ let editorCreated = false;
 let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 let mountToken = 0;
 let currentFmData: FrontmatterData | null = null;
+// YAML original que no se pudo leer: se reescribe intacto hasta que se corrija
+// en el pod Info, para no perder propiedades al autoguardar.
+let rawFmOverride: string | null = null;
+let fmPod: FrontmatterPodHandle | null = null;
 
 function resetState() {
   mounted = false;
@@ -45,6 +48,9 @@ function resetState() {
   notesList = [];
   editorCreated = false;
   currentFmData = null;
+  rawFmOverride = null;
+  fmPod = null;
+  releaseFrontmatterPod();
   if (keydownHandler) {
     document.removeEventListener('keydown', keydownHandler);
     keydownHandler = null;
@@ -98,17 +104,12 @@ function injectNieCss() {
       box-shadow:0 1px 4px rgba(0,0,0,.15);
     }
     #nie-toolbar .snip-btn:hover::after { opacity:1; }
-    #nie-yaml-dialog::backdrop {
-      background: rgba(0, 0, 0, 0.45);
-      backdrop-filter: blur(4px);
-    }
   `;
   document.head.appendChild(s);
 }
 
 function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: string, _slug: string | null, hideHeader: boolean = false): void {
   injectNieCss();
-  const inputStyle = 'background:var(--c-bg-mute,var(--c-bg));border:1px solid var(--c-border);color:var(--c-fg);padding:1px 4px;font-size:11px;border-radius:2px;';
   mountEl.innerHTML = `
     ${hideHeader ? '' : `<div id="nie-header" style="display:flex;align-items:center;gap:.5rem;padding:.35rem .75rem;background:var(--c-bg-surface,var(--c-bg-mute));border-bottom:1px solid var(--c-border);flex-shrink:0;">
       <span style="font-size:11px;color:var(--c-fg-subtle);flex-shrink:0;">Notas</span>
@@ -123,39 +124,13 @@ function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: strin
       </div>
       <div id="nie-toolbar" style="display:none;flex-shrink:0;border-bottom:1px solid var(--c-border);padding:.25rem .5rem;font-size:11px;color:var(--c-fg-dim);">
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;">
-          <form id="nie-yaml-form" style="display:contents;">
-            <label style="display:flex;gap:.25rem;align-items:center;">
-              Tipo
-              <select id="fm-type" style="${inputStyle}"><!-- opciones desde note-metadata-schema --></select>
-            </label>
-            <label style="display:flex;gap:.25rem;align-items:center;">
-              Capítulo
-              <input id="fm-chapter" list="fm-chapter-list" placeholder="nuevo…" style="${inputStyle}width:100px;" />
-              <datalist id="fm-chapter-list"></datalist>
-            </label>
-            <label style="display:flex;gap:.25rem;align-items:center;">
-              Estado
-              <select id="fm-status" style="${inputStyle}"><!-- opciones desde note-metadata-schema --></select>
-            </label>
-            <label style="display:flex;gap:.25rem;align-items:center;">
-              Orden
-              <input id="fm-order" type="number" value="0" style="${inputStyle}width:50px;" />
-            </label>
-            <label style="display:flex;gap:.25rem;align-items:center;">
-              Tema
-              <select id="fm-theme" style="${inputStyle}">
-                <option value="">—</option>
-              </select>
-            </label>
-          </form>
-          <span style="display:block;width:1px;height:14px;background:var(--c-border);flex-shrink:0;"></span>
           <button class="snip-btn" data-snippet="cover" title="Insertar portada" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">cover</button>
           <button class="snip-btn" data-snippet="lily" title="Insertar bloque LilyPond" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">lily</button>
           <button class="snip-btn" data-snippet="mermaid" title="Insertar diagrama Mermaid" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">mermaid</button>
           <button class="snip-btn" data-snippet="iframe" title="Insertar iframe" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">iframe</button>
           <button class="snip-btn" data-snippet="eval" title="Insertar bloque eval" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">eval</button>
           <button class="snip-btn" data-snippet="img" title="Subir imagen" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;">img</button>
-          <button id="nie-yaml-raw-btn" title="Editar YAML Frontmatter" style="background:none;border:none;padding:2px 6px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:3px;font-weight:bold;margin-left:auto;border:1px solid var(--c-border);background:var(--c-bg-mute,rgba(128,128,128,.1));">YAML</button>
+          <button id="nie-props-btn" class="snip-btn" title="Propiedades y YAML en el panel Info (⌘/Ctrl+I)" style="background:none;border:none;padding:1px 4px;font-size:11px;color:var(--c-fg-dim);cursor:pointer;border-radius:2px;margin-left:auto;">propiedades ›</button>
         </div>
       </div>
       <div id="editor-cm-wrap" style="flex:1;overflow:hidden;min-height:0;"></div>
@@ -190,7 +165,7 @@ async function loadNote(
         noteContent = await res.text();
       }
     }
-    const { data, body } = parseFrontmatter(noteContent);
+    const { data, body, raw, error } = parseFrontmatter(noteContent);
     const listed = notesList.find(note => note.slug === slug || note.filePath === slug);
     const effectiveData: FrontmatterData = {
       ...data,
@@ -205,7 +180,24 @@ async function loadNote(
     const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
     if (titleEl) titleEl.value = effectiveData.title || '';
 
-    if (showMetadata) populateYamlStrip(notesList, effectiveData, mountEl);
+    currentFmData = effectiveData;
+    rawFmOverride = error ? raw : null;
+    if (showMetadata) {
+      fmPod = mountFrontmatterPod({
+        owner: mountEl,
+        notes: notesList,
+        data: effectiveData,
+        rawYaml: rawFmOverride,
+        error,
+        onChange: (next) => {
+          currentFmData = next;
+          const titleInput = mountEl.querySelector<HTMLInputElement>('#nie-title');
+          if (titleInput && titleInput.value !== String(next.title || '')) titleInput.value = String(next.title || '');
+          onEditorChange?.();
+        },
+        onRawFixed: () => { rawFmOverride = null; },
+      });
+    }
 
     if (editorCreated) {
       setEditorContent(body);
@@ -219,8 +211,7 @@ async function loadNote(
     }
 
     currentSlug = slug;
-    currentFmData = effectiveData;
-    setStatus(statusEl, '');
+    setStatus(statusEl, error ? `YAML inválido: se conserva tal cual (${error})` : '', error ? 'error' : undefined);
     return effectiveData;
   } catch (err) {
     setStatus(statusEl, err instanceof Error ? err.message : 'Error al cargar', 'error');
@@ -228,6 +219,15 @@ async function loadNote(
   }
 }
 
+
+/** La nota completa: frontmatter (del estado único) + cuerpo del editor. */
+function composeNote(mountEl: HTMLElement, body: string): string {
+  if (!currentFmData) return body;
+  const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
+  if (titleEl) currentFmData = { ...currentFmData, title: titleEl.value };
+  if (rawFmOverride != null) return joinFrontmatter(rawFmOverride, body);
+  return serializeFrontmatter(currentFmData, body);
+}
 
 async function saveCurrentNote(
   courseId: string,
@@ -241,24 +241,7 @@ async function saveCurrentNote(
 
   setStatus(statusEl, 'Guardando...');
   try {
-    const body = getEditorContent();
-    const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
-    const title = titleEl?.value || '';
-
-    const yamlFields = readYamlStrip(mountEl);
-    const fmData: FrontmatterData = {
-      ...currentFmData,
-      title,
-      // Si el control viniera vacío, se conserva lo que la nota ya tenía. El
-      // default literal degradaba cualquier tipo desconocido a lesson.
-      type: yamlFields.type || currentFmData.type || 'lesson',
-      chapter: yamlFields.chapter || '',
-      status: yamlFields.status || currentFmData.status || 'draft',
-      order: yamlFields.order ?? 0,
-      theme: yamlFields.theme || '',
-    };
-
-    const fullContent = serializeFrontmatter(fmData, body);
+    const fullContent = composeNote(mountEl, getEditorContent());
     await saveNote(courseId, currentSlug, fullContent);
     setStatus(statusEl, 'Guardado', 'ok');
     setTimeout(() => setStatus(statusEl, ''), 2000);
@@ -266,71 +249,6 @@ async function saveCurrentNote(
   } catch (err) {
     setStatus(statusEl, err instanceof Error ? err.message : 'Error al guardar', 'error');
   }
-}
-
-function showYamlModal(currentData: Record<string, any>, onSave: (newData: Record<string, any>) => void) {
-  let dialog = document.getElementById('nie-yaml-dialog') as HTMLDialogElement;
-  if (!dialog) {
-    dialog = document.createElement('dialog');
-    dialog.id = 'nie-yaml-dialog';
-    dialog.style.cssText = `
-      background: var(--c-bg-surface, #f9f9f9);
-      color: var(--c-fg, #111);
-      border: 1px solid var(--c-border, #dcdcdc);
-      border-radius: 8px;
-      padding: 1.5rem;
-      width: 90%;
-      max-width: 500px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-      outline: none;
-    `;
-    document.body.appendChild(dialog);
-  }
-
-  const lines: string[] = [];
-  for (const [k, v] of Object.entries(currentData)) {
-    if (v === null || v === undefined) continue;
-    if (Array.isArray(v)) {
-      lines.push(`${k}:`);
-      v.forEach(item => lines.push(`  - ${item}`));
-    } else if (typeof v === 'string') {
-      const escaped = /[:#\[\]{}|>&!'",%@`\n]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v;
-      lines.push(`${k}: ${escaped}`);
-    } else {
-      lines.push(`${k}: ${v}`);
-    }
-  }
-  const yamlText = lines.join('\n');
-
-  dialog.innerHTML = `
-    <h3 style="margin-top:0;font-size:14px;color:var(--c-fg);border-bottom:1px solid var(--c-border);padding-bottom:.5rem;margin-bottom:1rem;font-weight:600;">Editar YAML Frontmatter</h3>
-    <textarea id="nie-yaml-textarea" style="width:100%;height:250px;font-family:monospace;font-size:12px;background:var(--c-bg, #fff);color:var(--c-fg, #111);border:1px solid var(--c-border, #dcdcdc);padding:.5rem;border-radius:4px;box-sizing:border-box;resize:vertical;outline:none;" spellcheck="false">${yamlText}</textarea>
-    <div style="display:flex;justify-content:end;gap:.5rem;margin-top:1rem;">
-      <button id="nie-yaml-cancel" style="background:none;border:1px solid var(--c-border);color:var(--c-fg-dim);padding:4px 12px;border-radius:4px;font-size:12px;cursor:pointer;transition:background 0.2s;">Cancelar</button>
-      <button id="nie-yaml-save" style="background:var(--c-link,#0b6cff);border:none;color:white;padding:4px 16px;border-radius:4px;font-size:12px;cursor:pointer;font-weight:bold;transition:opacity 0.2s;">Guardar</button>
-    </div>
-  `;
-
-  const cancelBtn = dialog.querySelector<HTMLButtonElement>('#nie-yaml-cancel')!;
-  const saveBtn = dialog.querySelector<HTMLButtonElement>('#nie-yaml-save')!;
-
-  cancelBtn.addEventListener('mouseenter', () => { cancelBtn.style.background = 'var(--c-bg-mute,rgba(128,128,128,.1))'; });
-  cancelBtn.addEventListener('mouseleave', () => { cancelBtn.style.background = 'none'; });
-  saveBtn.addEventListener('mouseenter', () => { saveBtn.style.opacity = '0.85'; });
-  saveBtn.addEventListener('mouseleave', () => { saveBtn.style.opacity = '1'; });
-
-  dialog.querySelector('#nie-yaml-cancel')?.addEventListener('click', () => {
-    dialog.close();
-  });
-
-  dialog.querySelector('#nie-yaml-save')?.addEventListener('click', () => {
-    const text = dialog.querySelector<HTMLTextAreaElement>('#nie-yaml-textarea')?.value || '';
-    const parsed = parseYamlBlock(text);
-    onSave(parsed);
-    dialog.close();
-  });
-
-  dialog.showModal();
 }
 
 export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
@@ -384,6 +302,8 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
       document.removeEventListener('keydown', keydownHandler);
       keydownHandler = null;
     }
+    releaseFrontmatterPod(mountEl);
+    fmPod = null;
     destroyEditor();
     editorCreated = false;
     currentSlug = null;
@@ -407,32 +327,8 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
     });
   }
 
-  const yamlRawBtn = mountEl.querySelector<HTMLButtonElement>('#nie-yaml-raw-btn');
-  yamlRawBtn?.addEventListener('click', () => {
-    if (!currentSlug) return;
-    const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
-    const yamlFields = readYamlStrip(mountEl);
-    
-    const mergedData: FrontmatterData = {
-      ...currentFmData,
-      title: titleEl?.value || currentFmData?.title || '',
-      type: yamlFields.type || currentFmData?.type || 'lesson',
-      chapter: yamlFields.chapter || currentFmData?.chapter || '',
-      status: yamlFields.status || currentFmData?.status || 'draft',
-      order: yamlFields.order ?? currentFmData?.order ?? 0,
-      theme: yamlFields.theme || currentFmData?.theme || '',
-    };
-
-    showYamlModal(mergedData, (parsed) => {
-      currentFmData = parsed as FrontmatterData;
-
-      if (titleEl) titleEl.value = String(parsed.title || '');
-      populateYamlStrip(notesList, parsed as FrontmatterData, mountEl);
-
-      if (opts.persistence && persistenceOnChange) {
-        persistenceOnChange();
-      }
-    });
+  mountEl.querySelector<HTMLButtonElement>('#nie-props-btn')?.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('musiki:open-page-info', { detail: { open: true } }));
   });
 
   if (!opts.persistence) {
@@ -467,34 +363,15 @@ export function mountInlineNotesEditor(opts: InlineEditorOptions): void {
 
     // Mutable ref captures frontmatter after loadNote so persistenceOnChange can re-serialize it
     const persistenceOnChange = opts.persistence
-      ? () => {
-        const body = getEditorContent();
-        if (showMetadata && currentFmData) {
-          const titleEl = mountEl.querySelector<HTMLInputElement>('#nie-title');
-          const yamlFields = readYamlStrip(mountEl);
-          const fmData: FrontmatterData = {
-            ...currentFmData,
-            title: titleEl?.value || currentFmData?.title || '',
-            type: yamlFields.type || currentFmData?.type || 'lesson',
-            chapter: yamlFields.chapter || currentFmData?.chapter || '',
-            status: yamlFields.status || currentFmData?.status || 'draft',
-            order: yamlFields.order ?? currentFmData?.order ?? 0,
-            theme: yamlFields.theme || currentFmData?.theme || '',
-          };
-          opts.persistence!.onChange(serializeFrontmatter(fmData, body));
-        } else if (currentFmData) {
-          opts.persistence!.onChange(serializeFrontmatter(currentFmData, body));
-        } else {
-          opts.persistence!.onChange(body);
-        }
-      }
+      ? () => opts.persistence!.onChange(composeNote(mountEl, getEditorContent()))
       : undefined;
 
-    if (persistenceOnChange && showMetadata) {
-      const yamlForm = mountEl.querySelector<HTMLFormElement>('#nie-yaml-form');
-      yamlForm?.addEventListener('change', persistenceOnChange);
-      yamlForm?.addEventListener('input', persistenceOnChange);
-    }
+    mountEl.querySelector<HTMLInputElement>('#nie-title')?.addEventListener('input', () => {
+      if (!currentFmData) return;
+      currentFmData = { ...currentFmData, title: mountEl.querySelector<HTMLInputElement>('#nie-title')?.value || '' };
+      fmPod?.setData(currentFmData);
+      persistenceOnChange?.();
+    });
 
     if (mode === 'edit' && slug) {
       currentFmData = await loadNote(slug, courseId, mountEl, showMetadata, activeStatusEl, opts.overrideContent ?? null, persistenceOnChange);

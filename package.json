@@ -121,6 +121,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@astrojs/mdx": "^5.0.4",
+    "@types/js-yaml": "^4.0.9",
     "@types/pg": "^8.20.0",
     "astro": "^6.2.1",
     "rehype-katex": "^7.0.1",

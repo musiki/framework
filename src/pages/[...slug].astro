@@ -1484,6 +1484,36 @@ function renderLessonsTreeHTML(
         touch-action: pan-y;
       }
 
+      .course-sidebar-resize-handle--right {
+        left: -4px;
+        right: auto;
+      }
+
+      .course-sidebar-resize-handle--right::after {
+        left: 4px;
+      }
+
+      .course-container.is-right-resizing .course-sidebar-resize-handle--right::after {
+        opacity: 1;
+        background: color-mix(in srgb, var(--accent) 72%, var(--c-border));
+      }
+
+      .course-container.is-right-resizing,
+      .course-container.is-right-resizing * {
+        cursor: col-resize !important;
+        user-select: none !important;
+      }
+
+      .course-container[data-right-maximized='true'] .course-sidebar-resize-handle--right {
+        display: none;
+      }
+
+      /* Mientras se edita una nota, el pod Info muestra sus propiedades
+         editables; las de la página de fondo confundirían. */
+      #page-info-sidebar[data-editing-frontmatter='true'] .page-info-properties--static {
+        display: none;
+      }
+
       .sidebar--right:has(.lesson-forum) {
         display: flex;
         flex-direction: column;
@@ -5927,6 +5957,14 @@ function renderLessonsTreeHTML(
       </article>
 
       <aside class="sidebar sidebar--right" data-course-sidebar="right" aria-label="Panel derecho">
+        <div
+          class="course-sidebar-resize-handle course-sidebar-resize-handle--right"
+          data-right-sidebar-resize
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionar panel derecho"
+          title="Redimensionar panel derecho"
+        ></div>
         <div class="right-pod-tabs" role="tablist" aria-label="Paneles del lado derecho">
           {hasForumSidebar && (
             <button type="button" class="right-pod-tab" data-right-pod="forum" aria-pressed="false">Foro</button>
@@ -6075,8 +6113,10 @@ function renderLessonsTreeHTML(
               >×</button>
             </div>
 
+            <div class="note-fm-host" data-note-frontmatter-host></div>
+
             {pageProperties.length > 0 && (
-              <section class="page-info-properties" aria-label="Propiedades">
+              <section class="page-info-properties page-info-properties--static" aria-label="Propiedades">
                 <h3 class="page-info-properties-title">Propiedades</h3>
                 <dl class="page-info-props">
                   {pageProperties.map((prop) => (
@@ -7002,6 +7042,7 @@ function renderLessonsTreeHTML(
 	          root.dataset.rightMaximized === 'true',
 	        );
 	        let leftSidebarWidth = Number.parseInt(window.localStorage.getItem('musiki:course:left-width') || '', 10);
+	        let rightSidebarWidth = Number.parseInt(window.localStorage.getItem('musiki:course:right-width') || '', 10);
 
 	        const getLeftSidebarWidthBounds = () => {
 	          const viewport = window.innerWidth || 0;
@@ -7025,6 +7066,25 @@ function renderLessonsTreeHTML(
 
 	        if (Number.isFinite(leftSidebarWidth)) {
 	          applyLeftSidebarWidth(leftSidebarWidth, false);
+	        }
+
+	        const applyRightSidebarWidth = (width: number, persist = false) => {
+	          if (!Number.isFinite(width)) {
+	            root.style.removeProperty('--right-sidebar-width');
+	            return;
+	          }
+	          const viewport = window.innerWidth || 0;
+	          const min = Math.min(300, Math.max(240, viewport - 240));
+	          const max = Math.max(min, Math.min(960, Math.round(viewport * 0.6)));
+	          rightSidebarWidth = Math.min(max, Math.max(min, Math.round(width)));
+	          root.style.setProperty('--right-sidebar-width', `${rightSidebarWidth}px`);
+	          if (persist) {
+	            try { window.localStorage.setItem('musiki:course:right-width', String(rightSidebarWidth)); } catch {}
+	          }
+	        };
+
+	        if (Number.isFinite(rightSidebarWidth)) {
+	          applyRightSidebarWidth(rightSidebarWidth, false);
 	        }
 
         const syncShellOffsets = () => {
@@ -7258,7 +7318,11 @@ function renderLessonsTreeHTML(
           }
         });
 
-        window.addEventListener('musiki:open-page-info', () => toggleRightPod('info'));
+        // detail.open: abrir siempre (botón «propiedades» del editor); sin detail, alterna (⌘I).
+        window.addEventListener('musiki:open-page-info', (event) => {
+          if ((event as CustomEvent).detail?.open) setRightPod('info');
+          else toggleRightPod('info');
+        });
 
         // Progreso pod: close button, ribbon toggle, and open event.
         document.querySelectorAll('[data-progress-close]').forEach((btn) => {
@@ -7336,6 +7400,9 @@ function renderLessonsTreeHTML(
 	          if (Number.isFinite(leftSidebarWidth)) {
 	            applyLeftSidebarWidth(leftSidebarWidth, true);
 	          }
+	          if (Number.isFinite(rightSidebarWidth)) {
+	            applyRightSidebarWidth(rightSidebarWidth, true);
+	          }
 	          syncLayoutState();
 	        };
 
@@ -7373,6 +7440,43 @@ function renderLessonsTreeHTML(
 	          leftResizeHandle.addEventListener('pointercancel', stopResize);
 	          leftResizeHandle.addEventListener('lostpointercapture', () => {
 	            root.classList.remove('is-left-resizing');
+	          });
+	        }
+
+	        const rightResizeHandle = root.querySelector('[data-right-sidebar-resize]');
+	        const rightSidebar = root.querySelector('[data-course-sidebar="right"]');
+	        if (rightResizeHandle instanceof HTMLElement && rightResizeHandle.dataset.boundRightSidebarResize !== 'true') {
+	          rightResizeHandle.dataset.boundRightSidebarResize = 'true';
+	          let resizeStartX = 0;
+	          let resizeStartWidth = 0;
+
+	          const stopResize = (event?: PointerEvent) => {
+	            root.classList.remove('is-right-resizing');
+	            if (event && rightResizeHandle.hasPointerCapture(event.pointerId)) {
+	              rightResizeHandle.releasePointerCapture(event.pointerId);
+	            }
+	          };
+
+	          rightResizeHandle.addEventListener('pointerdown', (event) => {
+	            if (isMobileViewport() || event.button !== 0 || !(rightSidebar instanceof HTMLElement)) return;
+	            event.preventDefault();
+	            resizeStartX = event.clientX;
+	            resizeStartWidth = rightSidebar.getBoundingClientRect().width;
+	            rightResizeHandle.setPointerCapture(event.pointerId);
+	            root.classList.add('is-right-resizing');
+	          });
+
+	          // El borde está a la izquierda: arrastrar hacia la izquierda agranda.
+	          rightResizeHandle.addEventListener('pointermove', (event) => {
+	            if (!root.classList.contains('is-right-resizing')) return;
+	            event.preventDefault();
+	            applyRightSidebarWidth(resizeStartWidth - (event.clientX - resizeStartX), true);
+	          });
+
+	          rightResizeHandle.addEventListener('pointerup', stopResize);
+	          rightResizeHandle.addEventListener('pointercancel', stopResize);
+	          rightResizeHandle.addEventListener('lostpointercapture', () => {
+	            root.classList.remove('is-right-resizing');
 	          });
 	        }
 

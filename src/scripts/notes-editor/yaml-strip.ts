@@ -1,4 +1,5 @@
 import type { NoteListItem } from './types';
+import { load, dump, CORE_SCHEMA } from 'js-yaml';
 import { NOTE_TYPES, NOTE_STATUSES, optionsFor } from './note-metadata-schema.mjs';
 
 /**
@@ -31,56 +32,54 @@ export type FrontmatterData = {
   [key: string]: unknown;
 };
 
-// Browser-safe frontmatter parser — handles scalars and simple arrays
+// El frontmatter se lee y escribe con js-yaml. El parser casero anterior sólo
+// entendía `clave: valor` y listas simples: claves con espacios (`born in
+// city:`), mapas anidados o bloques `|` se perdían al guardar desde el editor.
+// CORE_SCHEMA: sin timestamps, para que `date: 2026-03-01` vuelva como texto.
+const YAML_OPTIONS = { schema: CORE_SCHEMA };
+
+export class FrontmatterYamlError extends Error {}
+
+/** Parsea el bloque YAML (sin los `---`). Lanza FrontmatterYamlError si no es válido. */
 export function parseYamlBlock(yaml: string): Record<string, unknown> {
-  const data: Record<string, unknown> = {};
-  let currentKey: string | null = null;
-  for (const line of yaml.split('\n')) {
-    // YAML array item under a previous key: "  - value"
-    const arrItem = /^[ \t]+-\s+(.*)$/.exec(line);
-    if (arrItem && currentKey) {
-      const existing = data[currentKey];
-      const item = arrItem[1].trim();
-      data[currentKey] = Array.isArray(existing) ? [...existing, item] : [item];
-      continue;
-    }
-    const m = /^([a-zA-Z_][a-zA-Z0-9_-]*):\s*(.*)$/.exec(line);
-    if (!m) { currentKey = null; continue; }
-    currentKey = m[1];
-    let val: unknown = m[2].trim();
-    if (val === '') {
-      // empty value — may be followed by array items
-      data[currentKey] = '';
-      continue;
-    }
-    if (/^['"][\s\S]*['"]$/.test(val as string)) {
-      val = (val as string).slice(1, -1);
-    } else if (!isNaN(Number(val as string))) {
-      val = Number(val);
-    } else if (val === 'true') {
-      val = true;
-    } else if (val === 'false') {
-      val = false;
-    }
-    data[currentKey] = val;
+  let parsed: unknown;
+  try {
+    parsed = load(yaml, YAML_OPTIONS);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message.split('\n')[0] : String(err);
+    throw new FrontmatterYamlError(reason);
   }
-  return data;
+  if (parsed == null) return {};
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new FrontmatterYamlError('el frontmatter tiene que ser una lista de clave: valor');
+  }
+  return parsed as Record<string, unknown>;
 }
 
-function stringifyYamlValue(v: unknown): string {
-  if (Array.isArray(v)) {
-    return '\n' + v.map(item => `  - ${stringifyYamlValue(item)}`).join('\n');
+/** Texto YAML de las propiedades (sin `---`). Omite las vacías salvo null, que queda como `clave:`. */
+export function frontmatterToYaml(data: Record<string, unknown>): string {
+  const fm: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v === undefined || v === '') continue;
+    fm[k] = v;
   }
-  if (typeof v === 'string') {
-    return /[:#\[\]{}|>&!'",%@`\n]/.test(v) ? `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : v;
-  }
-  return String(v);
+  if (!Object.keys(fm).length) return '';
+  return dump(fm, { ...YAML_OPTIONS, lineWidth: -1, noRefs: true, styles: { '!!null': 'empty' } });
 }
 
-export function parseFrontmatter(content: string): { data: FrontmatterData; body: string } {
+const FRONTMATTER_RE = /^(?:[ \t]*\r?\n)*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+
+export function parseFrontmatter(content: string): { data: FrontmatterData; body: string; raw: string; error: string | null } {
   const normalized = content.replace(/^\uFEFF/, '');
-  const match = /^(?:[ \t]*\r?\n)*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/.exec(normalized);
-  const raw = match ? parseYamlBlock(match[1]) : {};
+  const match = FRONTMATTER_RE.exec(normalized);
+  const rawYaml = match ? match[1] : '';
+  let raw: Record<string, unknown> = {};
+  let error: string | null = null;
+  try {
+    raw = rawYaml ? parseYamlBlock(rawYaml) : {};
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  }
   const body = match ? normalized.slice(match[0].length) : normalized;
   return {
     data: {
@@ -93,20 +92,21 @@ export function parseFrontmatter(content: string): { data: FrontmatterData; body
       ...raw,
     },
     body,
+    raw: rawYaml,
+    error,
   };
 }
 
 export function serializeFrontmatter(data: FrontmatterData, body: string): string {
   const fm: Record<string, unknown> = { ...data };
   if (!fm.theme) delete fm.theme;
-  const lines = ['---'];
-  for (const [k, v] of Object.entries(fm)) {
-    if (v === null || v === undefined || v === '') continue;
-    lines.push(`${k}: ${stringifyYamlValue(v)}`);
-  }
-  lines.push('---', '');
+  return joinFrontmatter(frontmatterToYaml(fm), body);
+}
+
+/** Arma la nota con un bloque YAML ya escrito (p. ej. el original, intacto). */
+export function joinFrontmatter(yaml: string, body: string): string {
   const trimmed = body.replace(/^\n+/, '');
-  return lines.join('\n') + trimmed;
+  return `---\n${yaml.replace(/\n*$/, '\n')}---\n${trimmed}`;
 }
 
 export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData, root: ParentNode = document) {
