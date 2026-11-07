@@ -1,6 +1,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupByChapter, computeNewOrders, noteSlugToRelPath, slugify, escHtml } from './notes-sidebar-utils.mjs';
+import {
+  groupByChapter, computeNewOrders, noteSlugToRelPath, slugify, escHtml,
+  isGlobalChapter, chapterSortKey, chapterClassNames, chapterRendersAsTree, virtualChaptersFor,
+} from './notes-sidebar-utils.mjs';
 
 describe('groupByChapter', () => {
   test('groups notes by chapter and sorts by order', () => {
@@ -119,5 +122,45 @@ describe('slugify', () => {
 describe('escHtml', () => {
   test('escapes HTML entities', () => {
     assert.equal(escHtml('<script>&"test"</script>'), '&lt;script&gt;&amp;&quot;test&quot;&lt;/script&gt;');
+  });
+});
+
+describe('CHAPTER_CONVENTION', () => {
+  test('los capítulos globales son índices: no aceptan reordenar', () => {
+    for (const nombre of ['70 Conceptos', '71 Glosario', 'INSTRUMENTOS', 'speakers']) {
+      assert.equal(isGlobalChapter(nombre), true, nombre);
+    }
+    assert.equal(isGlobalChapter('10 Fundamentos'), false);
+  });
+
+  test('el umbral del 70 ordena como capítulo de sistema', () => {
+    // un capítulo con notas de order bajo pero prefijo >= 70 va al final igual
+    assert.equal(chapterSortKey('70 Conceptos', [{ order: 1 }]), 70);
+    // y uno por debajo del umbral se ordena por sus notas
+    assert.equal(chapterSortKey('10 Fundamentos', [{ order: 3 }, { order: 7 }]), 3);
+  });
+
+  test('los capítulos virtuales vacíos caen en su orden declarado', () => {
+    assert.equal(chapterSortKey('80 RECURSOS', []), 80);
+    assert.equal(chapterSortKey('90 NOTAS', []), 90);
+    assert.equal(chapterSortKey('Algo sin prefijo', []), 9999);
+  });
+
+  test('AMIGX CRÍTICX es virtual sólo para s123', () => {
+    const paraS123 = virtualChaptersFor('s123').map(v => v.match);
+    const paraI1 = virtualChaptersFor('i1').map(v => v.match);
+    assert.ok(paraS123.includes('AMIGX'));
+    assert.ok(!paraI1.includes('AMIGX'));
+    // los otros dos son para todas las materias
+    for (const m of ['RECURSOS', 'NOTAS']) {
+      assert.ok(paraS123.includes(m) && paraI1.includes(m), m);
+    }
+  });
+
+  test('sólo Conceptos se dibuja como árbol, y cada capítulo trae su clase CSS', () => {
+    assert.equal(chapterRendersAsTree('70 Conceptos'), true);
+    assert.equal(chapterRendersAsTree('71 Glosario'), false);
+    assert.deepEqual(chapterClassNames('80 RECURSOS'), ['chapter--recursos']);
+    assert.deepEqual(chapterClassNames('10 Fundamentos'), []);
   });
 });

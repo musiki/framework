@@ -1,4 +1,105 @@
-// Pure utility functions mirrored from notes-sidebar.ts for Node test runner
+// Funciones puras y convención de capítulos de la sidebar de notas.
+//
+// Esto era un espejo a mano de notes-sidebar.ts, mantenido sólo para que el test
+// runner de Node pudiera importarlo. Dos copias de la misma lógica: los tests
+// pasaban en verde mientras el runtime usaba otra versión. Ahora es la única
+// fuente y el .ts importa de acá, como ya hace publish.ts con los .mjs de lilypond.
+
+/**
+ * Convención de capítulos.
+ *
+ * Estaba repartida en cinco lugares del .ts: los nombres reservados escritos con
+ * subconjuntos distintos en cada sitio, un umbral numérico —a partir de 70 un
+ * capítulo se trata como «de sistema»— que no figuraba en ninguna documentación,
+ * un `if (courseId === 's123')` suelto, y dos copias del criterio de orden que ya
+ * diferían entre sí.
+ *
+ * Es el paso previo a moverla a configuración por materia: cuando eso pase, hay un
+ * solo lugar que tocar y la forma del objeto ya es la que va a tener el config.
+ *
+ * Importante: esto gobierna cómo se *ordena y pinta* un capítulo, no si existe. Los
+ * capítulos salen del contenido, así que cambiar algo acá no hace desaparecer a
+ * ninguno.
+ */
+export const CHAPTER_CONVENTION = {
+  /** Índices, no recorridos: no se reordenan notas adentro ni aceptan drops. */
+  global: ['CONCEPTOS', 'INSTRUMENTOS', 'SPEAKERS', 'GLOSARIO'],
+  /** Desde este prefijo numérico, el capítulo se ordena como de sistema, al final. */
+  systemOrderFrom: 70,
+  /** Capítulos que la sidebar crea si la materia no los trae. */
+  virtual: [
+    {
+      match: 'RECURSOS', name: '80 RECURSOS', order: 80, courses: null,
+      placeholder: { slug: 'recursos-info', title: 'Recursos Info' },
+    },
+    {
+      match: 'AMIGX', name: '85 AMIGX CRÍTICX', order: 85, courses: ['s123'],
+      placeholder: null,
+    },
+    {
+      match: 'NOTAS', name: '90 NOTAS', order: 90, courses: null,
+      placeholder: { slug: 'notas-info', title: 'Notas Info' },
+    },
+  ],
+  /** Capítulos que se dibujan como árbol jerárquico en vez de lista plana. */
+  treeView: ['CONCEPTOS'],
+  /** Clase CSS extra por capítulo, para color e ícono. */
+  styles: [
+    { match: 'CONCEPTOS', className: 'chapter--conceptos' },
+    { match: 'RECURSOS', className: 'chapter--recursos' },
+    { match: 'AMIGX', className: 'chapter--amigxcriticx' },
+    { match: 'NOTAS', className: 'chapter--notas' },
+  ],
+};
+
+const chapterUpper = (name) => String(name || '').toUpperCase();
+
+/** Un capítulo global es un índice: se lee, no se reordena. */
+export function isGlobalChapter(name) {
+  return CHAPTER_CONVENTION.global.some((word) => chapterUpper(name).includes(word));
+}
+
+/** Prefijo numérico del capítulo, o null si no tiene. */
+export function chapterNumber(name) {
+  const match = String(name || '').trim().match(/^(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/** La entrada de capítulo virtual que corresponde a este nombre, si hay. */
+export function virtualChapterFor(name) {
+  return CHAPTER_CONVENTION.virtual.find((v) => chapterUpper(name).includes(v.match)) || null;
+}
+
+/** Capítulos virtuales que corresponden a esta materia. */
+export function virtualChaptersFor(courseId) {
+  return CHAPTER_CONVENTION.virtual.filter((v) => !v.courses || v.courses.includes(courseId));
+}
+
+/** Clases CSS extra del capítulo, según la convención. */
+export function chapterClassNames(name) {
+  return CHAPTER_CONVENTION.styles
+    .filter((s) => chapterUpper(name).includes(s.match))
+    .map((s) => s.className);
+}
+
+/** Este capítulo se dibuja como árbol jerárquico, no como lista. */
+export function chapterRendersAsTree(name) {
+  return CHAPTER_CONVENTION.treeView.some((word) => chapterUpper(name).includes(word));
+}
+
+/** Clave de orden de un capítulo. Una sola implementación, usada en los dos sitios. */
+export function chapterSortKey(name, notes) {
+  const prefix = chapterNumber(name);
+  const virtual = virtualChapterFor(name);
+  const esDeSistema =
+    (prefix !== null && prefix >= CHAPTER_CONVENTION.systemOrderFrom) ||
+    virtual !== null ||
+    (notes.length > 0 && notes.every((n) => n.order === 0));
+  if (esDeSistema && prefix !== null) return prefix;
+  if (notes.length > 0) return Math.min(...notes.map((n) => n.order));
+  if (prefix !== null) return prefix;
+  return virtual ? virtual.order : 9999;
+}
 
 export function groupByChapter(notes) {
   const map = new Map();
@@ -8,32 +109,15 @@ export function groupByChapter(notes) {
     map.get(ch).push(note);
   }
   return Array.from(map.entries())
-    .map(([name, notes]) => ({
+    .map(([name, grouped]) => ({
       name,
-      notes: [...notes].sort((a, b) => a.order - b.order || (a.title ?? '').localeCompare(b.title ?? '')),
+      notes: [...grouped].sort(
+        (a, b) => a.order - b.order || (a.title ?? '').localeCompare(b.title ?? ''),
+      ),
     }))
-    .sort((a, b) => {
-      const getMinOrder = (name, notesList) => {
-        const matchDigits = name.trim().match(/^(\d+)/);
-        const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
-        const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
-                                 name.toUpperCase().includes('RECURSOS') ||
-                                 name.toUpperCase().includes('NOTAS') ||
-                                 (notesList.length > 0 && notesList.every(n => n.order === 0));
-        if (isSystemOrGlobal && fallbackFromTitle !== null) {
-          return fallbackFromTitle;
-        }
-        if (notesList.length > 0) {
-          return Math.min(...notesList.map(n => n.order));
-        }
-        if (fallbackFromTitle !== null) return fallbackFromTitle;
-        const nameUpper = name.toUpperCase();
-        if (nameUpper.includes('RECURSOS')) return 80;
-        if (nameUpper.includes('NOTAS')) return 90;
-        return 9999;
-      };
-      return getMinOrder(a.name, a.notes) - getMinOrder(b.name, b.notes) || a.name.localeCompare(b.name);
-    });
+    .sort((a, b) =>
+      chapterSortKey(a.name, a.notes) - chapterSortKey(b.name, b.notes)
+      || a.name.localeCompare(b.name));
 }
 
 export function computeNewOrders(notesInChapter, draggedSlug, insertAfterSlug) {

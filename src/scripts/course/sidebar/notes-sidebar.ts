@@ -2,95 +2,49 @@ import type { NoteListItem } from '../../notes-editor/types';
 
 export type ChapterGroup = { name: string; notes: NoteListItem[] };
 
-export function groupByChapter(notes: NoteListItem[]): ChapterGroup[] {
-  const map = new Map<string, NoteListItem[]>();
-  for (const note of notes) {
-    const ch = note.chapter || '(sin capítulo)';
-    if (!map.has(ch)) map.set(ch, []);
-    map.get(ch)!.push(note);
-  }
-  return Array.from(map.entries())
-    .map(([name, notes]) => ({
-      name,
-      notes: [...notes].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title ?? '')),
-    }))
-    .sort((a, b) => {
-      const getMinOrder = (name: string, notesList: NoteListItem[]) => {
-        const matchDigits = name.trim().match(/^(\d+)/);
-        const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
-        const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
-                                 name.toUpperCase().includes('RECURSOS') ||
-                                 name.toUpperCase().includes('NOTAS') ||
-                                 (notesList.length > 0 && notesList.every(n => n.order === 0));
-        if (isSystemOrGlobal && fallbackFromTitle !== null) {
-          return fallbackFromTitle;
-        }
-        if (notesList.length > 0) {
-          return Math.min(...notesList.map(n => n.order));
-        }
-        if (fallbackFromTitle !== null) return fallbackFromTitle;
-        const nameUpper = name.toUpperCase();
-        if (nameUpper.includes('RECURSOS')) return 80;
-        if (nameUpper.includes('NOTAS')) return 90;
-        return 9999;
-      };
-      return getMinOrder(a.name, a.notes) - getMinOrder(b.name, b.notes) || a.name.localeCompare(b.name);
-    });
-}
+import {
+  CHAPTER_CONVENTION,
+  chapterClassNames,
+  chapterNumber,
+  chapterRendersAsTree,
+  chapterSortKey,
+  computeNewOrders,
+  escHtml,
+  groupByChapter,
+  isGlobalChapter,
+  noteSlugToRelPath,
+  slugify,
+  virtualChapterFor,
+  virtualChaptersFor,
+} from './notes-sidebar-utils.mjs';
 
-export function computeNewOrders(
-  notesInChapter: NoteListItem[],
-  draggedSlug: string,
-  insertAfterSlug: string | null,
-): { slug: string; order: number }[] {
-  const withoutDragged = notesInChapter.filter(n => n.slug !== draggedSlug);
-  const dragged = notesInChapter.find(n => n.slug === draggedSlug);
-  if (!dragged) return [];
-  const insertIdx = insertAfterSlug === null
-    ? 0
-    : withoutDragged.findIndex(n => n.slug === insertAfterSlug) + 1;
-  const reordered = [
-    ...withoutDragged.slice(0, insertIdx),
-    dragged,
-    ...withoutDragged.slice(insertIdx),
-  ];
-  return reordered.map((n, i) => ({ slug: n.slug, order: i }));
-}
+const chapterUpper = (name: string) => String(name || '').toUpperCase();
+
+// La convención de capítulos y las funciones puras viven en el .mjs de al lado,
+// que es lo que importa el test runner. Antes había dos copias y los tests
+// cubrían la que no corría. Se reexportan para no romper a quien las importe.
+export {
+  CHAPTER_CONVENTION,
+  chapterClassNames,
+  chapterNumber,
+  chapterRendersAsTree,
+  chapterSortKey,
+  computeNewOrders,
+  escHtml,
+  groupByChapter,
+  isGlobalChapter,
+  noteSlugToRelPath,
+  slugify,
+  virtualChapterFor,
+  virtualChaptersFor,
+};
+
 
 // slug = "cursos/s123/10 Chapter/note.md", courseId = "s123"
 // Returns the URL path segment after the courseId prefix, without extension
 // e.g. "10 Chapter/note.md" -> "10-chapter/note"
-export function noteSlugToRelPath(slug: string, courseId: string): string {
-  if (slug.startsWith('public/')) {
-    const parts = slug.split('/');
-    const filename = parts[parts.length - 1].replace(/\.md$/, '');
-    return slugify(filename);
-  }
-  const relPath = slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
-  return relPath
-    .split('/')
-    .map(seg =>
-      seg.normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .replace(/\s+/g, '-')
-        .toLowerCase(),
-    )
-    .join('/');
-}
 
-export function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-');
-}
 
-export function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 import { listNotes, getNote, saveNote, createNote, deleteNote, moveNote } from '../../notes-editor/api';
 import { parseFrontmatter, serializeFrontmatter } from '../../notes-editor/yaml-strip';
@@ -263,50 +217,17 @@ export function renderNotesSidebar(
 
   const groups = groupByChapter(notes);
 
-  // Ensure virtual chapters are present in groups
-  let recursosGroup = groups.find(g => g.name.toUpperCase().includes('RECURSOS'));
-  if (!recursosGroup) {
-    recursosGroup = { name: '80 RECURSOS', notes: [] };
-    groups.push(recursosGroup);
-  }
-  if (courseId === 's123') {
-    let amigxGroup = groups.find(g => g.name.toUpperCase().includes('AMIGX'));
-    if (!amigxGroup) {
-      amigxGroup = { name: '85 AMIGX CRÍTICX', notes: [] };
-      groups.push(amigxGroup);
-    }
-  }
-  let notasGroup = groups.find(g => g.name.toUpperCase().includes('NOTAS'));
-  if (!notasGroup) {
-    notasGroup = { name: '90 NOTAS', notes: [] };
-    groups.push(notasGroup);
+  // Capítulos virtuales: los que la sidebar crea si la materia no los trae.
+  // Qué materia recibe cuáles sale de CHAPTER_CONVENTION, no de ifs sueltos.
+  for (const virtual of virtualChaptersFor(courseId)) {
+    const existe = groups.some((g) => g.name.toUpperCase().includes(virtual.match));
+    if (!existe) groups.push({ name: virtual.name, notes: [] });
   }
 
-  // Sort groups by min note order (with defaults for empty groups)
-  groups.sort((a, b) => {
-    const getMinOrder = (name: string, notesList: NoteListItem[]) => {
-      const matchDigits = name.trim().match(/^(\d+)/);
-      const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
-      const isSystemOrGlobal = (fallbackFromTitle !== null && fallbackFromTitle >= 70) ||
-                               name.toUpperCase().includes('RECURSOS') ||
-                               name.toUpperCase().includes('AMIGX') ||
-                               name.toUpperCase().includes('NOTAS') ||
-                               (notesList.length > 0 && notesList.every(n => n.order === 0));
-      if (isSystemOrGlobal && fallbackFromTitle !== null) {
-        return fallbackFromTitle;
-      }
-      if (notesList.length > 0) {
-        return Math.min(...notesList.map(n => n.order));
-      }
-      if (fallbackFromTitle !== null) return fallbackFromTitle;
-      const nameUpper = name.toUpperCase();
-      if (nameUpper.includes('RECURSOS')) return 80;
-      if (nameUpper.includes('AMIGX')) return 85;
-      if (nameUpper.includes('NOTAS')) return 90;
-      return 9999;
-    };
-    return getMinOrder(a.name, a.notes) - getMinOrder(b.name, b.notes) || a.name.localeCompare(b.name);
-  });
+  // Mismo criterio de orden que groupByChapter, una sola implementación.
+  groups.sort((a, b) =>
+    chapterSortKey(a.name, a.notes) - chapterSortKey(b.name, b.notes)
+    || a.name.localeCompare(b.name));
 
   const newChapterEls: HTMLElement[] = [];
 
@@ -556,11 +477,13 @@ export function renderNotesSidebar(
         let globalOrder = 0;
         for (const g of reorderedGroups) {
           if (g.notes.length === 0) {
-            const isRecursos = g.name.toUpperCase().includes('RECURSOS');
-            const isNotas = g.name.toUpperCase().includes('NOTAS');
-            if (isRecursos || isNotas) {
-              const slug = isRecursos ? 'recursos-info' : 'notas-info';
-              const title = isRecursos ? 'Recursos Info' : 'Notas Info';
+            // Un capítulo virtual vacío no puede guardar su orden sin al menos una
+            // nota, así que se crea la de relleno que declara la convención.
+            const virtual = CHAPTER_CONVENTION.virtual.find(
+              (v) => chapterUpper(g.name).includes(v.match),
+            );
+            if (virtual?.placeholder) {
+              const { slug, title } = virtual.placeholder;
               try {
                 await createNote(courseId, {
                   slug, title, type: 'info',
@@ -598,8 +521,7 @@ export function renderNotesSidebar(
   function makeDropLine(chapter: string, afterSlug: string | null): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'ns-drop-line';
-    const isGlobal = chapter.toUpperCase().includes('CONCEPTOS') || chapter.toUpperCase().includes('INSTRUMENTOS') || chapter.toUpperCase().includes('SPEAKERS') || chapter.toUpperCase().includes('GLOSARIO');
-    if (isGlobal) return li;
+    if (isGlobalChapter(chapter)) return li;
 
     li.addEventListener('dragover', e => {
       if (!canAcceptDraggedNote(e)) return;
@@ -661,12 +583,7 @@ export function renderNotesSidebar(
   // ── Chapter loop ──────────────────────────────────────────────────────
   for (const group of groups) {
     const chapterEl = document.createElement('div');
-    const nameUpper = group.name.toUpperCase();
-    const isConceptos = nameUpper.includes('CONCEPTOS');
-    const isRecursos = nameUpper.includes('RECURSOS');
-    const isAmigxCriticx = nameUpper.includes('AMIGX');
-    const isNotas = nameUpper.includes('NOTAS');
-    chapterEl.className = `chapter${isConceptos ? ' chapter--conceptos' : ''}${isRecursos ? ' chapter--recursos' : ''}${isAmigxCriticx ? ' chapter--amigxcriticx' : ''}${isNotas ? ' chapter--notas' : ''}`;
+    chapterEl.className = ['chapter', ...chapterClassNames(group.name)].join(' ');
 
     const details = document.createElement('details');
     details.className = 'chapter-details';
@@ -897,7 +814,7 @@ export function renderNotesSidebar(
 
     ul.appendChild(makeDropLine(group.name, null));
 
-    if (group.name.toUpperCase().includes('CONCEPTOS')) {
+    if (chapterRendersAsTree(group.name)) {
       const tree = buildNoteTree(group.notes);
       renderNoteTree(tree, ul, isGlobalChapter);
     } else {
