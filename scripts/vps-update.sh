@@ -7,6 +7,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 BRANCH="${1:-main}"
+SELF="scripts/vps-update.sh"
+SELF_HASH="$(git hash-object "${SELF}")"
 
 echo "==> vps-update: branch=${BRANCH}"
 
@@ -31,6 +33,15 @@ fi
 # Production commits land on top of the new framework commits.
 echo "--> Pulling origin/${BRANCH} with rebase..."
 git pull --rebase origin "${BRANCH}"
+
+# Este script se trae a sí mismo con el pull. Si cambió, lo que sigue corriendo es
+# la versión vieja (bash conserva el archivo que abrió), y los pasos de abajo son
+# los de antes del deploy. Pasó: un deploy que arreglaba el restart corrió el
+# restart roto. Se relanza la versión nueva, una sola vez.
+if [ "${VPS_UPDATE_REEXEC:-0}" != "1" ] && [ "$(git hash-object "${SELF}")" != "${SELF_HASH}" ]; then
+  echo "--> ${SELF} cambió con el pull; se relanza la versión nueva."
+  VPS_UPDATE_REEXEC=1 exec "${ROOT_DIR}/${SELF}" "$@"
+fi
 
 # ── 3. Push production commits back so local devs can pull content changes ───
 # Uncomment if you want VPS-generated content (e.g. .ly sources) to flow back
