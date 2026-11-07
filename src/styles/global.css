@@ -3130,6 +3130,8 @@ details.page-info-history[open] > summary::before { transform: rotate(90deg); }
 
 /* ── Aviso "nota en preparación" (link a un borrador, sin permiso de verlo) ── */
 .note-pending-dialog {
+  /* algún reset deja margin: 0 y el modal queda pegado arriba */
+  margin: auto;
   max-width: min(26rem, calc(100vw - 2rem));
   padding: 1.25rem 1.4rem 1.1rem;
   border: 1px solid var(--c-border);
