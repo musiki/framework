@@ -128,6 +128,25 @@ psql_quiet -c '
 
 aplicadas=$(psql_quiet -c 'SELECT "name" FROM public."SchemaMigration";' || true)
 
+# --unmark va acá arriba, antes de calcular pendientes. Si va después, la salida
+# temprana de «no hay nada que aplicar» lo come: desmarcar sólo hace falta
+# cuando el registro dice que todo está aplicado, que es justo el caso en que el
+# script se iba antes de llegar a esta rama. Desmarcar no necesita la lista de
+# pendientes; necesita exactamente lo contrario.
+if [ "$MODE" = "unmark" ]; then
+  if [ ! -f "${MIGRATIONS_DIR}/${ARG2}" ]; then
+    echo "[ERROR] No existe ${MIGRATIONS_DIR}/${ARG2}" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$aplicadas" | grep -Fxq "$ARG2"; then
+    echo "[INFO] ${ARG2} no figura como aplicada. No hay nada que desmarcar."
+    exit 0
+  fi
+  psql_quiet -c "DELETE FROM public.\"SchemaMigration\" WHERE \"name\" = '${ARG2}';" >/dev/null
+  echo "[OK] ${ARG2} desmarcada. Vuelve a figurar como pendiente."
+  exit 0
+fi
+
 pendientes=()
 for archivo in "${MIGRATIONS_DIR}"/*.sql; do
   [ -e "$archivo" ] || continue
@@ -175,12 +194,6 @@ if [ "$MODE" = "baseline" ]; then
     marcadas=$((marcadas + 1))
   done
   echo "[OK] ${marcadas} marcadas hasta ${ARG2}. Las posteriores siguen pendientes."
-  exit 0
-fi
-
-if [ "$MODE" = "unmark" ]; then
-  psql_quiet -c "DELETE FROM public.\"SchemaMigration\" WHERE \"name\" = '${ARG2}';" >/dev/null
-  echo "[OK] ${ARG2} desmarcada. Vuelve a figurar como pendiente."
   exit 0
 fi
 
