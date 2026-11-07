@@ -226,7 +226,21 @@ for archivo in "${pendientes[@]}"; do
   nombre=$(basename "$archivo")
   echo "[INFO] Aplicando ${nombre}..."
   if [ "$MODE" = "dry-run" ]; then
-    { echo 'BEGIN;'; cat "$archivo"; echo 'ROLLBACK;'; } | psql_run >/dev/null
+    # La mayoría de las migraciones traen su propio BEGIN; ... COMMIT;. Envueltas
+    # tal cual, ese COMMIT confirmaba el ensayo y el ROLLBACK de acá no revertía
+    # nada: el --dry-run aplicaba de verdad, sin registrar, con sólo dos WARNING.
+    # Se sacan esas dos líneas, y si psql igual avisa de una transacción anidada o
+    # cerrada antes de tiempo, se corta: no hay forma de saber qué quedó escrito.
+    salida=$({ echo 'BEGIN;'
+               sed -E '/^[[:space:]]*(BEGIN|COMMIT|begin|commit)[[:space:]]*;[[:space:]]*$/d' "$archivo"
+               echo 'ROLLBACK;'; } | psql_run 2>&1 >/dev/null) || { echo "$salida" >&2; exit 1; }
+    if printf '%s' "$salida" | grep -qE 'already a transaction in progress|no transaction in progress'; then
+      echo "$salida" >&2
+      echo "[ERROR] ${nombre} maneja su propia transacción de una forma que el ensayo" >&2
+      echo "        no puede envolver. Puede haber quedado APLICADA sin registrar:" >&2
+      echo "        revisá la base antes de seguir." >&2
+      exit 1
+    fi
     echo "       ensayo OK, revertido"
   else
     psql_run < "$archivo" >/dev/null
