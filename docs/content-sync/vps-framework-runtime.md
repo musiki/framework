@@ -134,32 +134,20 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-## 5. Fish
+## 5. Deploy manual
 
-Deploy manual desde tu máquina, sólo como fallback:
-
-- [scripts/vps/deploy-framework.sh](/Users/zztt/projects/26-musiki/framework/scripts/vps/deploy-framework.sh)
-
-Función Fish sugerida:
-
-```fish
-function musiki-deploy
-  env \
-    VPS_HOST=musiki.org.ar \
-    VPS_USER=deploy \
-    VPS_PATH=/opt/musiki/framework \
-    /Users/zztt/projects/26-musiki/framework/scripts/vps/deploy-framework.sh
-end
-```
-
-Luego:
+El camino de deploy está en [DEPLOYMENT.md](../../DEPLOYMENT.md). Manual, desde tu máquina:
 
 ```bash
-source ~/.config/fish/config.fish
-musiki-deploy
+./scripts/vps/deploy-framework.sh
 ```
 
+Dispara el mismo workflow que un push; no hace ssh ni buildea por su cuenta.
+
 ## 5.1 Build manual útil en este VPS
+
+> **Histórico (2026-03).** No buildear a mano en el VPS: compite con el deploy del CI en el
+> mismo directorio. Ver [DEPLOYMENT.md](../../DEPLOYMENT.md).
 
 En este servidor, `npm run build:local` puede fallar si `content:pull` intenta fetch remoto sin credenciales GitHub. La secuencia que sí funcionó en la actualización del `2026-03-28` fue:
 

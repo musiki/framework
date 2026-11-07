@@ -88,7 +88,7 @@ correrlas sería, en el mejor caso, un error. `--baseline` las marca como aplica
 sin ejecutarlas; de ahí en más sólo corre lo nuevo. El script se niega a avanzar
 solo si detecta ese escenario, así que no hay forma de pisarlo por distracción.
 
-Desde este commit, `vps-update.sh` aplica las pendientes antes del build. Si el
+El deploy (`scripts/vps/deploy-framework-local.sh`, ver `DEPLOYMENT.md`) aplica las pendientes antes del build. Si el
 esquema no está al día, la app arrancaría contra una base sin las columnas que el
 código espera.
 

@@ -1,78 +1,84 @@
-# Deployment Guide - Musiki Framework (VPS)
+# Deploy — Musiki Framework
 
-This project is deployed on a **VPS** (`musiki.org.ar`) using **PM2** for process management and **Caddy** as a reverse proxy.
+Un solo camino. Si algo en otro documento contradice este, manda este.
 
-## 1. Infrastructure Overview
+## Regla corta
 
-- **Host**: `musiki.org.ar`
-- **Application Server**: Node.js (Astro SSR) managed by PM2.
-- **Database**: Supabase (Remote).
-- **Reverse Proxy**: Caddy.
-- **Deployment User**: `deploy`
+- **Framework**: `git push origin main`. El push deploya solo.
+- **Contenido de un course** (s123, i1, i2, cym…): push al repo del course. Su workflow
+  avisa al framework (`repository_dispatch`) y el framework se redeploya con el contenido nuevo.
+- **Deploy manual** (sin commit nuevo): `./scripts/vps/deploy-framework.sh`.
+- **Nunca** buildear ni reiniciar a mano en el VPS mientras puede estar corriendo un deploy.
 
-## 2. Process Management (PM2)
+## Cómo funciona
 
-The application is managed via `ecosystem.config.cjs`. There are three main processes:
-
-1.  **musiki-framework**: The production Astro server (Port 4321).
-2.  **musiki-framework-dev**: A development instance (Port 4325).
-3.  **musiki-content-bus**: Manages content synchronization (Port 4322).
-
-### Common PM2 Commands (on Server)
-```bash
-pm2 list
-pm2 reload ecosystem.config.cjs --only musiki-framework
-pm2 logs musiki-framework
+```
+push framework/main ─┐
+push de un course ───┼─▶ .github/workflows/sync-content-sources.yml
+deploy-framework.sh ─┘       (runner self-hosted en el VPS, Node 24)
+                             │
+                             ├─ validate: npm ci + content:pull + assemble en seco
+                             └─ deploy:  rsync del repo a /opt/musiki/framework
+                                         └─▶ scripts/vps/deploy-framework-local.sh
 ```
 
-## 3. Deployment Workflow
+`scripts/vps/deploy-framework-local.sh` es **el único script que deploya**. En orden:
 
-Deployment is automated via a local script that pushes changes and triggers a pull/build on the server.
+1. Toma un lock (`flock /tmp/musiki-framework-deploy.lock`): dos deploys nunca corren a la vez.
+2. `git reset --hard origin/main` en `/opt/musiki/framework`. Cambios hechos a mano en el
+   VPS sobre archivos versionados **se pierden**.
+3. `npm ci`, sólo si cambió `package-lock.json`.
+4. **Migraciones**: `scripts/vps/db-migrate.sh`. Si fallan, corta acá y la build anterior sigue
+   sirviendo. Emergencia: `VPS_SKIP_MIGRATIONS=1`.
+5. Contenido: `content:pull --clean` + `content:assemble`.
+6. Build en `dist_tmp/`. Si falla, `dist/` no se toca y producción sigue como estaba.
+7. Swap `dist_tmp/` → `dist/` y `pm2 reload ecosystem.config.cjs`.
 
-### Automated Deploy (Recommended)
-Run this from your local machine:
-```bash
-bash scripts/vps/deploy-framework.sh
-```
-This script performs the following steps:
-1. SSH into the VPS.
-2. `git pull` the latest `main` branch.
-3. `npm ci` (install dependencies).
-4. `npm run build` (build production assets).
-5. `pm2 reload` the framework process.
+El workflow tiene `concurrency: content-sync` con `cancel-in-progress`: un push nuevo cancela
+el deploy en curso y empieza otro.
 
-### Manual Deploy (Emergency)
-If the script fails, you can manually deploy:
-1. `git push origin main`
-2. `ssh deploy@musiki.org.ar`
-3. `cd /opt/musiki/framework`
-4. `git pull`
-5. `npm run build`
-6. `pm2 reload musiki-framework`
-
-## 4. Environment Variables
-
-Variables are managed in a `.env` file on the VPS. Key variables include:
-
-- `SUPABASE_URL` & `SUPABASE_KEY`
-- `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`
-- `AUTH_SECRET`
-- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
-- `CORRECTION_API_URL` (Ollama VPS)
-
-## 5. Maintenance Commands
+## Ver qué pasó
 
 ```bash
-# Force a clean build of content and site
-npm run build:content
-npm run build
-
-# Push local database schema changes to Supabase
-astro db push --remote
+gh run list --workflow sync-content-sources.yml --limit 5
+gh run view <id> --log-failed
 ```
 
-## 6. Pre-deployment Checklist
+## Producción
 
-- [ ] Ensure all local changes are committed.
-- [ ] Run `bash scripts/preflight.sh` to verify build integrity.
-- [ ] Verify that `main` branch is pushed to origin.
+| Qué | Dónde |
+|---|---|
+| VPS | `zz@46.225.154.68` (shell fish: usar `bash -lc '...'` por ssh) |
+| Código | `/opt/musiki/framework` |
+| App | proceso PM2 **`musiki-framework`**, puerto 4321 (`dist/server/entry.mjs`) |
+| Otros procesos | `musiki-framework-dev` (4325), `musiki-content-bus` (4322) |
+| Base | Postgres en Docker, contenedor `authentik-postgresql`, base `musiki26`, usuario `app` |
+| Registro de migraciones | tabla `SchemaMigration` en `musiki26` |
+
+No hay contenedor de la app: `docker restart devmusiki-app` no existe.
+
+## Migraciones
+
+Van en `postgres-patches/migrations/`, con nombre `AAAAMMDDhhmmss_descripcion.sql`, y las aplica
+el deploy. Para mirarlas o repararlas a mano, desde tu máquina:
+
+```bash
+./scripts/db-migrate.sh --status            # aplicadas · pendientes
+./scripts/db-migrate.sh --dry-run           # ensaya y revierte
+./scripts/db-migrate.sh --unmark <archivo>  # vuelve a marcarla pendiente
+```
+
+## Emergencia: deploy sin GitHub
+
+Sólo si GitHub Actions no anda. Usa el mismo script y el mismo lock:
+
+```bash
+ssh zz@46.225.154.68 "bash -lc 'cd /opt/musiki/framework && git fetch origin && git reset --hard origin/main && bash scripts/vps/deploy-framework-local.sh'"
+```
+
+## Problema conocido
+
+Desde el 2026-10-18 el build falla seguido con `Maximum call stack size exceeded` en
+`@shiguredo/rnnoise-wasm` (rollup, `commonjs--resolver`). Es intermitente y no se cura con más
+pila: falla igual con `--stack-size=32768`. Cuando falla, producción sigue con la build anterior.
+Reintentar con `./scripts/vps/deploy-framework.sh`.

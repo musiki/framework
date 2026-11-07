@@ -32,6 +32,7 @@ Welcome, Agent. This project is a complex LMS/Wiki system built with Astro. Use 
 - [Media Sync](docs/room/media-sync.md) — Playback synchronization details.
 
 ### 🛠️ Infrastructure & Ops
+- **[DEPLOYMENT.md](DEPLOYMENT.md) — el único camino de deploy. Leelo antes de deployar o tocar el VPS.** Push a `main` deploya solo; `./scripts/vps/deploy-framework.sh` para uno manual. No buildear ni reiniciar a mano en el VPS.
 - [VPS Framework Runtime](docs/content-sync/vps-framework-runtime.md) — Production environment specs.
 - [Database Management](docs/db/database-management.md) — Backup and persistence.
 - [Ollama VPS Workflow](docs/ollama-vps-workflow.md) — Local AI integration.

@@ -88,6 +88,20 @@ else
   printf '::deploy-phase::install::Skipping dependency install\n'
 fi
 
+# Migraciones antes del build: si el esquema no está al día, la build nueva
+# arrancaría contra una base sin las columnas que espera. Si fallan, el deploy se
+# corta acá y la build anterior sigue sirviendo, coherente con el esquema viejo.
+# VPS_SKIP_MIGRATIONS=1 para saltearlas en una emergencia.
+if [[ "${VPS_SKIP_MIGRATIONS:-0}" == "1" ]]; then
+  printf '::deploy-phase::migrate::Skipping migrations (VPS_SKIP_MIGRATIONS=1)\n'
+else
+  printf '::deploy-phase::migrate::Applying pending migrations\n'
+  if ! bash scripts/vps/db-migrate.sh; then
+    printf '[framework] Migrations failed: stopping before build. The previous build keeps serving.\n' >&2
+    exit 1
+  fi
+fi
+
 printf '::deploy-phase::content::Preparing content\n'
 eval "$CONTENT_PULL_COMMAND"
 eval "$CONTENT_ASSEMBLE_COMMAND"

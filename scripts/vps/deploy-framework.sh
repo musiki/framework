@@ -1,40 +1,45 @@
 #!/usr/bin/env bash
 #
-# Deploy del framework. Un comando, desde tu máquina.
+# Deploy manual del framework, desde tu máquina:
 #
-#   ./scripts/vps/deploy-framework.sh                     # deploya main
-#   ./scripts/vps/deploy-framework.sh alguna-rama
-#   ./scripts/vps/deploy-framework.sh --skip-migrations   # emergencia
+#   ./scripts/vps/deploy-framework.sh
 #
-# Hace ssh al VPS y corre scripts/vps-update.sh allá, que es el que sabe el
-# orden correcto: pull, deps, migraciones, build, restart.
+# No deploya por su cuenta: dispara el mismo workflow de GitHub Actions que
+# corre en cada push (sync-content-sources.yml) y lo sigue hasta el final. Así
+# hay un solo camino —el runner del VPS ejecutando scripts/vps/deploy-framework-local.sh—
+# y un deploy manual entra en la misma cola que los automáticos en vez de pisarse
+# con ellos. Ver DEPLOYMENT.md.
 #
-# Antes este script tenía su propia secuencia (git pull + npm ci + build +
-# `pm2 reload`) que había divergido de vps-update.sh. Al unificarlos quedó el
-# `docker restart devmusiki-app` de vps-update.sh, que era el equivocado: ese
-# contenedor no existe y la app corre en PM2. Ahora vps-update.sh usa PM2.
-# Además apuntaba a deploy@musiki.org.ar:22, que no acepta SSH: daba «Operation timed
-# out». El acceso real es zz@46.225.154.68. Dos caminos de deploy que se
-# contradicen son peores que uno solo, así que ahora hay uno.
-#
-# Los courses no pasan por acá: se publican solos cuando pushean, vía el
-# workflow de contenido y el Content Bus.
+# Antes había un segundo camino (ssh + scripts/vps-update.sh) sin lock: lanzado
+# después de un push, corría a la vez que el del CI en el mismo directorio, con
+# un npm ci borrando node_modules debajo de un build. Se eliminó.
 
 set -euo pipefail
 
-VPS_USER="${VPS_USER:-zz}"
-VPS_HOST="${VPS_HOST:-46.225.154.68}"
-VPS_PORT="${VPS_PORT:-22}"
-VPS_PATH="${VPS_PATH:-/opt/musiki/framework}"
-SKIP=""
-if [ "${1:-}" = "--skip-migrations" ]; then
-  SKIP="SKIP_MIGRATIONS=1 "
-  shift
+cd "$(dirname "$0")/../.."
+
+WORKFLOW="sync-content-sources.yml"
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "[ERROR] Falta gh (GitHub CLI). Alternativa: Actions → ${WORKFLOW} → Run workflow." >&2
+  exit 1
 fi
-BRANCH="${1:-main}"
 
-printf '\n[framework] %s@%s:%s (%s)\n\n' "$VPS_USER" "$VPS_HOST" "$VPS_PATH" "$BRANCH"
+# El deploy construye origin/main. Commits locales sin pushear no van a estar, y
+# deployar creyendo que sí es exactamente el error silencioso que queremos evitar.
+git fetch -q origin main
+if [ -n "$(git rev-list origin/main..HEAD 2>/dev/null)" ]; then
+  echo "[ERROR] Hay commits sin pushear; el deploy construye origin/main y no los incluiría:" >&2
+  git log --oneline origin/main..HEAD >&2
+  echo "        Pusheá primero (el push ya dispara el deploy por sí solo)." >&2
+  exit 1
+fi
 
-# bash -lc porque la shell del VPS es fish y vps-update.sh es bash.
-exec ssh -t -p "$VPS_PORT" "${VPS_USER}@${VPS_HOST}" \
-  "bash -lc 'cd \"${VPS_PATH}\" && ${SKIP}./scripts/vps-update.sh \"${BRANCH}\"'"
+echo "[framework] Disparando ${WORKFLOW} sobre origin/main ($(git rev-parse --short origin/main))..."
+gh workflow run "$WORKFLOW" --ref main -f trigger_deploy=true
+
+# gh workflow run no devuelve el id del run: se toma el más reciente de ese workflow.
+sleep 5
+RUN_ID="$(gh run list --workflow "$WORKFLOW" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
+echo "[framework] Run ${RUN_ID}. Siguiéndolo (Ctrl-C deja de mirar; el deploy sigue)."
+gh run watch "$RUN_ID" --exit-status
