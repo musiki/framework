@@ -170,6 +170,9 @@ def arreglar(raiz, publicables, en_draft):
                     if ms.group(1).strip().strip('"').strip("'") != esperado:
                         nuevo_fm = nuevo_fm[:ms.start(1)] + esperado + nuevo_fm[ms.end(1):]
                         hechos.append(f'{rel}: alineé el slug con el nombre de archivo')
+                elif ms and base == 'cursos':
+                    nuevo_fm = re.sub(r'^slug:[^\n]*\n?', '', nuevo_fm, count=1, flags=re.M)
+                    hechos.append(f'{rel}: saqué el slug (en cursos/ reemplaza el id)')
 
                 # 3. tags escalar donde el esquema pide lista
                 mt = re.search(r'^tags:[ \t]*(\S.*)$', nuevo_fm, re.M)
@@ -244,6 +247,14 @@ def validar(raiz, publicables, en_draft):
                 if 'Reglamento de Estudios' in linea or CITA_LEGITIMA.search(linea):
                     continue
                 errores.append(f'{rel}:{n}: rastro normativo archivado — {linea.strip()[:70]}')
+
+            # En cursos/ el slug del frontmatter no es un alias: Astro lo toma como
+            # id de la entrada y la nota deja de ser s123/..., así que la materia
+            # no la encuentra por ninguna URL. Alinearlo no alcanza; tiene que irse.
+            if base == 'cursos' and (fm.get('slug') or '').strip():
+                errores.append(
+                    f'{rel}: slug "{fm["slug"].strip()}" en una nota de curso. Saca la '
+                    f'nota de la materia y todo enlace a ella termina en /cursos')
 
             if base != 'public':
                 continue
