@@ -5,7 +5,8 @@
 #   ./scripts/vps/db-migrate.sh             # aplica lo que falte
 #   ./scripts/vps/db-migrate.sh --status    # sólo informa, no toca nada
 #   ./scripts/vps/db-migrate.sh --dry-run   # aplica y revierte, para validar
-#   ./scripts/vps/db-migrate.sh --baseline  # marca lo viejo como aplicado, sin correrlo
+#   ./scripts/vps/db-migrate.sh --baseline <hasta>  # marca como aplicado HASTA ese archivo
+#   ./scripts/vps/db-migrate.sh --unmark <archivo>  # desmarca una, para volver a correrla
 #
 # Reemplaza al par db-tunnel + psql desde la laptop. Ese esquema venía de cuando
 # se desarrollaba local contra la base remota; hoy el camino local → github → vps
@@ -52,13 +53,33 @@ descubrir_contenedor() {
 DB_CONTAINER="$(descubrir_contenedor)"
 
 MODE="apply"
+ARG2="${2:-}"
 case "${1:-}" in
   --status)   MODE="status" ;;
   --dry-run)  MODE="dry-run" ;;
   --baseline) MODE="baseline" ;;
+  --unmark)   MODE="unmark" ;;
   "")         ;;
-  *) echo "Uso: $0 [--status|--dry-run|--baseline]" >&2; exit 1 ;;
+  *) echo "Uso: $0 [--status|--dry-run|--baseline <hasta>|--unmark <archivo>]" >&2; exit 1 ;;
 esac
+
+# --baseline sin corte marcaba TODO, incluida la migración nueva que todavía no
+# corrió: el sistema quedaba creyendo que estaba aplicada y la tabla sin crear.
+# Ahora el corte es obligatorio y explícito.
+if [ "$MODE" = "baseline" ] && [ -z "$ARG2" ]; then
+  echo "[ERROR] --baseline necesita hasta dónde marcar." >&2
+  echo "" >&2
+  echo "        Marca como aplicadas las migraciones HASTA ese archivo inclusive," >&2
+  echo "        y deja pendientes las posteriores, que son las que sí hay que correr." >&2
+  echo "" >&2
+  echo "        Para ver la lista:  $0 --status" >&2
+  echo "        Ejemplo:            $0 --baseline 20261028220000_amigx_criticx.sql" >&2
+  exit 1
+fi
+if [ "$MODE" = "unmark" ] && [ -z "$ARG2" ]; then
+  echo "[ERROR] --unmark necesita el nombre del archivo a desmarcar." >&2
+  exit 1
+fi
 
 if [ -z "$DB_CONTAINER" ] || ! docker inspect "$DB_CONTAINER" >/dev/null 2>&1; then
   echo "[ERROR] No encuentro ningún contenedor de PostgreSQL." >&2
@@ -136,13 +157,30 @@ fi
 # cuando el repo trae migraciones que ya se corrieron a mano antes de que
 # existiera la tabla de registro.
 if [ "$MODE" = "baseline" ]; then
+  if [ ! -f "${MIGRATIONS_DIR}/${ARG2}" ]; then
+    echo "[ERROR] No existe ${MIGRATIONS_DIR}/${ARG2}" >&2
+    exit 1
+  fi
+  marcadas=0
   for archivo in "${pendientes[@]}"; do
     nombre=$(basename "$archivo")
+    # Orden lexicográfico: los nombres empiezan con la fecha, así que alcanza.
+    if [[ "$nombre" > "$ARG2" ]]; then
+      echo "       QUEDA PENDIENTE · ${nombre}"
+      continue
+    fi
     psql_quiet -c "INSERT INTO public.\"SchemaMigration\" (\"name\") VALUES ('${nombre}')
                    ON CONFLICT (\"name\") DO NOTHING;" >/dev/null
     echo "       marcada sin ejecutar · ${nombre}"
+    marcadas=$((marcadas + 1))
   done
-  echo "[OK] Baseline listo. De acá en más sólo corre lo nuevo."
+  echo "[OK] ${marcadas} marcadas hasta ${ARG2}. Las posteriores siguen pendientes."
+  exit 0
+fi
+
+if [ "$MODE" = "unmark" ]; then
+  psql_quiet -c "DELETE FROM public.\"SchemaMigration\" WHERE \"name\" = '${ARG2}';" >/dev/null
+  echo "[OK] ${ARG2} desmarcada. Vuelve a figurar como pendiente."
   exit 0
 fi
 

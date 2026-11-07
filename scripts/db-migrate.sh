@@ -4,7 +4,8 @@
 #
 #   ./scripts/db-migrate.sh --status     # qué falta aplicar
 #   ./scripts/db-migrate.sh --dry-run    # aplica y revierte, para validar
-#   ./scripts/db-migrate.sh --baseline   # marca lo viejo como aplicado
+#   ./scripts/db-migrate.sh --baseline <hasta>   # marca como aplicado hasta ahí
+#   ./scripts/db-migrate.sh --unmark <archivo>   # desmarca una, para recorrerla
 #   ./scripts/db-migrate.sh              # aplica lo pendiente
 #
 # El trabajo real lo hace scripts/vps/db-migrate.sh, que corre allá, donde la
@@ -27,9 +28,10 @@ REMOTE_HOST="${VPS_HOST:-46.225.154.68}"
 REMOTE_PATH="${VPS_PATH:-/opt/musiki/framework}"
 
 ARG="${1:-}"
+ARG2="${2:-}"
 case "$ARG" in
-  ""|--status|--dry-run|--baseline) ;;
-  *) echo "Uso: $0 [--status|--dry-run|--baseline]" >&2; exit 1 ;;
+  ""|--status|--dry-run|--baseline|--unmark) ;;
+  *) echo "Uso: $0 [--status|--dry-run|--baseline <hasta>|--unmark <archivo>]" >&2; exit 1 ;;
 esac
 
 echo "[INFO] ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
@@ -37,4 +39,4 @@ echo "[INFO] ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
 # reporta «Unknown command» incluso cuando el problema es otro —por ejemplo que
 # el VPS todavía no tenga el commit— y el mensaje despista.
 exec ssh -t "${REMOTE_USER}@${REMOTE_HOST}" \
-  "bash -lc 'cd \"${REMOTE_PATH}\" && ./scripts/vps/db-migrate.sh ${ARG}'"
+  "bash -lc 'cd \"${REMOTE_PATH}\" && ./scripts/vps/db-migrate.sh ${ARG} ${ARG2}'"
