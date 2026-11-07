@@ -208,7 +208,19 @@ def arreglar(raiz, publicables, en_draft):
     return hechos
 
 
-def validar(raiz, publicables, en_draft):
+def visible(base, fm):
+    """Si la nota tiene página propia en el sitio.
+
+    En public/ la ruta exige status: public, cualquier otro valor la deja sin URL.
+    En cursos/ se ve todo lo que no sea draft ni private.
+    """
+    status = (fm.get('status') or '').strip().strip('"').strip("'").lower()
+    if base == 'public':
+        return status == 'public'
+    return status not in ('draft', 'private')
+
+
+def validar(raiz, publicables, en_draft, sin_ruta=frozenset()):
     errores, avisos = [], []
     for base in CARPETAS_PUBLICABLES:
         for p in archivos_md(raiz, base):
@@ -232,6 +244,13 @@ def validar(raiz, publicables, en_draft):
                     f'tags: [{fm["tags"]}]. Así como está, rompe el build')
 
             for destino in enlaces(texto):
+                # Existe, pero en public/ sin status: public no tiene URL: el
+                # enlace termina en /cursos. Sólo importa si quien enlaza se ve.
+                if destino in sin_ruta and visible(base, fm):
+                    errores.append(
+                        f'{rel}: [[{destino}]] está en public/ sin status: public, así que '
+                        f'no tiene página y el enlace termina en /cursos')
+                    continue
                 if destino in publicables:
                     continue
                 if destino in en_draft:
@@ -313,7 +332,15 @@ def main():
             print('  no había nada mecánico para arreglar')
         print()
 
-    errores, avisos = validar(raiz, publicables, en_draft)
+    # notas de public/ que existen pero no tienen página
+    sin_ruta = set()
+    if 'public' not in ignoradas:
+        for p in archivos_md(raiz, 'public'):
+            fm, _, _ = partir(open(p, encoding='utf-8').read())
+            if not visible('public', campos(fm)):
+                sin_ruta.add(os.path.basename(p)[:-3])
+
+    errores, avisos = validar(raiz, publicables, en_draft, sin_ruta)
 
     for a in avisos:
         print(f'  aviso · {a}')
@@ -329,6 +356,8 @@ def main():
         print('No se publica así.')
         print('  · enlace a draft/  → publicá la nota, o corré --arreglar para sacar el enlace')
         print('  · enlace roto      → la nota se renombró o se borró; --arreglar lo limpia')
+        print('  · sin status public → la nota de public/ no tiene página: status: public, '
+              'o sacá el enlace')
         print('  · falta def        → la escribe una persona: una a tres oraciones autocontenidas')
         print('  · rastro normativo → sacar la remisión al aparato archivado')
         print('  · slug ≠ archivo   → los [[enlaces]] resuelven por nombre de archivo; '
