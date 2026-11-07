@@ -10,8 +10,10 @@
 # orden correcto: pull, deps, migraciones, build, restart.
 #
 # Antes este script tenía su propia secuencia (git pull + npm ci + build +
-# `pm2 reload`) que había divergido de vps-update.sh (que usa `docker restart`),
-# y apuntaba a deploy@musiki.org.ar:22, que no acepta SSH: daba «Operation timed
+# `pm2 reload`) que había divergido de vps-update.sh. Al unificarlos quedó el
+# `docker restart devmusiki-app` de vps-update.sh, que era el equivocado: ese
+# contenedor no existe y la app corre en PM2. Ahora vps-update.sh usa PM2.
+# Además apuntaba a deploy@musiki.org.ar:22, que no acepta SSH: daba «Operation timed
 # out». El acceso real es zz@46.225.154.68. Dos caminos de deploy que se
 # contradicen son peores que uno solo, así que ahora hay uno.
 #

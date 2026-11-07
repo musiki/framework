@@ -5,6 +5,9 @@ node_modules/
 dist/
 dist_old/
 dist_tmp/
+dist.next/
+dist.prev/
+dist.failed/
 .tmp/
 .cache/
 

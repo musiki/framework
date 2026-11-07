@@ -70,11 +70,55 @@ else
 fi
 
 # ── 6. Build ─────────────────────────────────────────────────────────────────
-echo "--> Building..."
-npm run build
+# Se buildea en dist.next y recién si termina entero se cambia por dist/. Antes
+# npm run build escribía directo en dist/: un build fallido borraba dist/client
+# y la app que seguía corriendo servía HTML con todos los JS en 404.
+NEXT_DIR=dist.next
+PREV_DIR=dist.prev
+rm -rf "${NEXT_DIR}"
+echo "--> Building en ${NEXT_DIR}..."
+if ! npm run build -- --outDir "${NEXT_DIR}"; then
+  rm -rf "${NEXT_DIR}"
+  echo ""
+  echo "[ERROR] El build falló. dist/ no se tocó: producción sigue con la build anterior."
+  exit 1
+fi
+if [ ! -f "${NEXT_DIR}/server/entry.mjs" ] || [ ! -d "${NEXT_DIR}/client" ]; then
+  echo "[ERROR] El build terminó sin server/entry.mjs o sin client/. No se cambia nada."
+  exit 1
+fi
+rm -rf "${PREV_DIR}"
+if [ -d dist ]; then mv dist "${PREV_DIR}"; fi
+mv "${NEXT_DIR}" dist
 
 # ── 7. Restart ───────────────────────────────────────────────────────────────
-echo "--> Restarting app..."
-docker restart devmusiki-app
+# La app es un proceso PM2, no un contenedor. Nombre y puerto salen del mismo
+# ecosystem que la levanta, así este script sirve también para la instancia hem.
+read -r APP_NAME APP_PORT < <(node -e "
+  const a = require('./ecosystem.config.cjs').apps.find((x) => x.script === 'dist/server/entry.mjs');
+  if (!a) process.exit(1);
+  console.log(a.name, a.env.PORT);
+") || { echo "[ERROR] ecosystem.config.cjs no declara la app de dist/server/entry.mjs."; exit 1; }
+
+echo "--> Reiniciando ${APP_NAME}..."
+pm2 restart "${APP_NAME}" --update-env
+
+# Si la build nueva no responde, se vuelve a la anterior en vez de dejar
+# producción caída esperando que alguien lo note.
+healthy=0
+for _ in $(seq 1 20); do
+  sleep 2
+  if curl -fsS -o /dev/null --max-time 5 "http://127.0.0.1:${APP_PORT}/"; then healthy=1; break; fi
+done
+if [ "${healthy}" != "1" ]; then
+  echo "[ERROR] ${APP_NAME} no responde en :${APP_PORT} con la build nueva. Vuelvo a la anterior."
+  if [ -d "${PREV_DIR}" ]; then
+    rm -rf dist.failed && mv dist dist.failed && mv "${PREV_DIR}" dist
+    pm2 restart "${APP_NAME}" --update-env
+    echo "        Build fallida guardada en dist.failed para revisar."
+  fi
+  exit 1
+fi
+rm -rf "${PREV_DIR}"
 
 echo "==> Done."
