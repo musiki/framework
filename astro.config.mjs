@@ -1,5 +1,5 @@
 // astro.config.mjs
-import { defineConfig } from 'astro/config'
+import { defineConfig, passthroughImageService } from 'astro/config'
 import { TENANTS } from './src/lib/tenant/tenants.ts'
 import mdx from '@astrojs/mdx'
 import remarkMath from 'remark-math'
@@ -81,6 +81,12 @@ export default defineConfig({
   adapter: node({
     mode: 'standalone'
   }),
+  // Sin optimización de imágenes: nadie usa `astro:assets` en el proyecto, y en
+  // SSR el endpoint /_image queda expuesto y lo respalda sharp. Ese es el vector
+  // del RCE por AVIF (dependabot #190 y #192). El servicio passthrough sirve las
+  // imágenes tal cual y deja el endpoint sin procesador.
+  // Si alguna vez hace falta <Image>, sacar esta línea y subir Astro primero.
+  image: { service: passthroughImageService() },
   vite: {
     server: viteServerConfig,
     ssr: {
