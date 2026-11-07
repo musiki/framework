@@ -7,7 +7,10 @@ Sesión de estabilización (commits `2e1d8d0`..`365ce3c`):
 - **TOC**: `[...slug].astro` arma el índice y hace scroll sobre el panel activo de Dockview (`musiki:active-note`, nuevo `musiki:workspace-toggle`), no sobre la página de fondo oculta.
 - **Deploy**: un solo camino, el CI self-hosted (`deploy-framework-local.sh`), que ahora corre migraciones. `scripts/vps-update.sh` borrado; `deploy-framework.sh` sólo dispara el workflow. Ver `DEPLOYMENT.md`. `db-migrate.sh --dry-run` aplicaba de verdad: corregido (`27f4d30`).
 - **Admin / cohortes**: panel lateral `src/components/dashboard/AdminCohortSidebar.astro` (materia → cohorte, filtro de la tabla, ficha con estadísticas, «+ cohorte»). Lógica pura en `src/lib/cohorts/admin-cohorts.mjs` (14 tests). Verificado en producción: conteos y ficha coinciden con la base.
-- Abierto: el build falla de forma intermitente desde 2026-10-18 con `Maximum call stack size exceeded` en `@shiguredo/rnnoise-wasm` (no es el tamaño de stack). La cohorte de `agentic-music` es huérfana (la materia ya no está en el contenido; sólo 1 docente inscripto).
+- **Editor / Info** (`94f79bd`, `36071d9`): propiedades y YAML de la nota en edición viven en el pod Info (`src/scripts/course/notes/frontmatter-pod.ts`); el frontmatter se lee/escribe con js-yaml (antes se perdían claves con espacios y mapas anidados: 60 notas en cym). Sidebar derecho redimensionable (`musiki:course:right-width`).
+- **BibTeX → APA 7** (`aaa7345`): `remark-bibtex-apa` + `src/lib/bibtex/apa-refs.mjs` (citation-js/CSL, como Seshat) en Astro, runtime y foros (no en mm/sanitize). Copia APA (rich text) y BibTeX por referencia y global. 190 bloques reales, 827 entradas, 0 perdidas.
+- **rnnoise** (`b6a0383`): se carga con `?url`; el build ya no pasa sus 4,8 MB por la transformación de Vite. Ver DEPLOYMENT.md.
+- Antes abierto: el build falla de forma intermitente desde 2026-10-18 con `Maximum call stack size exceeded` en `@shiguredo/rnnoise-wasm` (no es el tamaño de stack). La cohorte de `agentic-music` es huérfana (la materia ya no está en el contenido; sólo 1 docente inscripto).
 
 <2026-10-29 amigx-criticx-s123> <br>
 Servicio de **Amigx Críticx** para Seminarios (`s123`), implementado y simplificado sobre `10f29d1`:
