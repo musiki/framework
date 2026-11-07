@@ -8,12 +8,22 @@ REMOTE_HOST="46.225.154.68"
 REMOTE_PORT="5432"
 LOCAL_PORT="5433" # Using 5433 to avoid conflict with local postgres if any
 
-echo "[INFO] Resolving remote PostgreSQL container IP..."
-CONTAINER_IP=$(ssh ${REMOTE_USER}@${REMOTE_HOST} "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' devmusiki-db" 2>/dev/null || echo "172.18.0.2")
+FALLBACK_IP="172.18.0.2"
 
-if [ -z "$CONTAINER_IP" ]; then
-  echo "[WARN] Could not resolve container IP, falling back to 172.18.0.2"
-  CONTAINER_IP="172.18.0.2"
+echo "[INFO] Resolving remote PostgreSQL container IP..."
+# `ssh` devuelve la salida de docker con un \r pegado. Sin limpiarlo, la
+# especificación del forward queda "5433:172.18.0.2\r:5432", que ssh rechaza con
+# «Bad local forwarding specification» — y el \r además ensucia el mensaje de
+# error, así que el síntoma no se parece a la causa. Los echo de abajo se veían
+# bien porque el \r no molesta al imprimir.
+CONTAINER_IP=$(ssh "${REMOTE_USER}@${REMOTE_HOST}" \
+  "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' devmusiki-db" 2>/dev/null \
+  | tr -d '[:space:]')
+
+if ! printf '%s' "$CONTAINER_IP" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+  echo "[WARN] No se pudo resolver la IP del contenedor (se obtuvo: '${CONTAINER_IP}')."
+  echo "[WARN] Usando ${FALLBACK_IP}."
+  CONTAINER_IP="$FALLBACK_IP"
 fi
 
 echo "[INFO] Opening SSH tunnel for PostgreSQL..."
