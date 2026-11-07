@@ -150,6 +150,8 @@ def arreglar(raiz, publicables, en_draft):
                     hechos.append(f'{rel}: agregué status: draft')
 
                 if nuevo_fm != fm_crudo:
+                    # sacar relaciones puede dejar líneas en blanco sueltas
+                    nuevo_fm = re.sub(r'\n\s*\n', '\n', nuevo_fm)
                     texto = '---\n' + nuevo_fm.rstrip('\n') + '\n---\n' + cuerpo
 
             # 3. wikilinks colgados en el cuerpo → texto plano
