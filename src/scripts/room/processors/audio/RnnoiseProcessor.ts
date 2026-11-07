@@ -1,5 +1,16 @@
 import type { TrackProcessor, AudioProcessorOptions } from 'livekit-client';
-import { Rnnoise, DenoiseState } from '@shiguredo/rnnoise-wasm';
+import type { Rnnoise, DenoiseState } from '@shiguredo/rnnoise-wasm';
+// El paquete es un único archivo de 4,8 MB (wasm en base64). Importado como
+// módulo pasaba por toda la cadena de transformación de Vite y un filtro regex
+// sobre ese texto desbordaba la pila del build de forma intermitente. Con ?url
+// se copia tal cual como asset y se carga en el navegador sólo cuando se usa.
+import rnnoiseModuleUrl from '@shiguredo/rnnoise-wasm?url';
+
+type RnnoiseModule = typeof import('@shiguredo/rnnoise-wasm');
+const loadRnnoise = async (): Promise<Rnnoise> => {
+  const mod = await import(/* @vite-ignore */ rnnoiseModuleUrl) as RnnoiseModule;
+  return mod.Rnnoise.load();
+};
 
 export class RnnoiseLivekitProcessor implements TrackProcessor<any> {
   readonly name = 'rnnoise';
@@ -17,7 +28,7 @@ export class RnnoiseLivekitProcessor implements TrackProcessor<any> {
     
     // Load RNNoise WASM
     if (!this.rnnoiseInstance) {
-      this.rnnoiseInstance = await Rnnoise.load();
+      this.rnnoiseInstance = await loadRnnoise();
     }
     this.denoiseState = this.rnnoiseInstance.createDenoiseState();
 

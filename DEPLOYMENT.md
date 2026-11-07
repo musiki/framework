@@ -78,7 +78,10 @@ ssh zz@46.225.154.68 "bash -lc 'cd /opt/musiki/framework && git fetch origin && 
 
 ## Problema conocido
 
-Desde el 2026-10-18 el build falla seguido con `Maximum call stack size exceeded` en
-`@shiguredo/rnnoise-wasm` (rollup, `commonjs--resolver`). Es intermitente y no se cura con más
-pila: falla igual con `--stack-size=32768`. Cuando falla, producción sigue con la build anterior.
-Reintentar con `./scripts/vps/deploy-framework.sh`.
+Entre el 2026-10-18 y el 2026-11-07 el build fallaba seguido con `Maximum call stack size
+exceeded` en `@shiguredo/rnnoise-wasm` (rollup, `commonjs--resolver`). El stack apuntaba a un
+filtro regex de un hook de Vite (`pattern.test(code)`) corriendo sobre los 4,8 MB de ese archivo
+(wasm en base64); por eso `--stack-size` no lo curaba. Desde entonces `RnnoiseProcessor.ts` lo
+importa con `?url`: se copia tal cual como asset y no pasa por la cadena de transformación.
+Si un paquete similar (un solo .js enorme) vuelve a romper el build, mismo remedio.
+Cuando el build falla, producción sigue con la build anterior.
