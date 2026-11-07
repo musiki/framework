@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   groupByChapter, computeNewOrders, noteSlugToRelPath, slugify, escHtml,
   isGlobalChapter, chapterSortKey, chapterClassNames, chapterRendersAsTree, virtualChaptersFor,
+  ROOT_CHAPTER, CHAPTER_CONVENTION,
 } from './notes-sidebar-utils.mjs';
 
 describe('groupByChapter', () => {
@@ -18,12 +19,19 @@ describe('groupByChapter', () => {
     assert.equal(groups[1].notes[0].slug, 'cursos/s1/b.md'); // Ch1 sorted: b(1) before a(2)
   });
 
-  test('notes without chapter go to (sin capítulo)', () => {
+  test('notes without chapter go to the root group, first, with no invented name', () => {
     const notes = [
-      { slug: 'x', title: 'X', chapter: '', order: 0, type: 'lesson', status: 'draft', filePath: '' },
+      { slug: 'a', title: 'A', chapter: '10 Uno', order: 0, type: 'lesson', status: 'draft', filePath: '' },
+      { slug: 'x', title: 'X', chapter: '', order: 5, type: 'lesson', status: 'draft', filePath: '' },
     ];
     const groups = groupByChapter(notes);
-    assert.equal(groups[0].name, '(sin capítulo)');
+    assert.equal(groups[0].name, ROOT_CHAPTER);
+    assert.equal(ROOT_CHAPTER, '');
+    assert.equal(groups[0].notes[0].slug, 'x');
+  });
+
+  test('virtual chapters declare no placeholder note', () => {
+    for (const v of CHAPTER_CONVENTION.virtual) assert.equal('placeholder' in v, false);
   });
 
   test('respects new order of notes across chapters to sort chapters', () => {

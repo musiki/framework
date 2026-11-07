@@ -30,15 +30,12 @@ export const CHAPTER_CONVENTION = {
   virtual: [
     {
       match: 'RECURSOS', name: '80 RECURSOS', order: 80, courses: null,
-      placeholder: { slug: 'recursos-info', title: 'Recursos Info' },
     },
     {
       match: 'AMIGX', name: '85 AMIGX CRÍTICX', order: 85, courses: ['s123'],
-      placeholder: null,
     },
     {
       match: 'NOTAS', name: '90 NOTAS', order: 90, courses: null,
-      placeholder: { slug: 'notas-info', title: 'Notas Info' },
     },
   ],
   /** Capítulos que se dibujan como árbol jerárquico en vez de lista plana. */
@@ -89,6 +86,7 @@ export function chapterRendersAsTree(name) {
 
 /** Clave de orden de un capítulo. Una sola implementación, usada en los dos sitios. */
 export function chapterSortKey(name, notes) {
+  if (name === ROOT_CHAPTER) return -Infinity;
   const prefix = chapterNumber(name);
   const virtual = virtualChapterFor(name);
   const esDeSistema =
@@ -101,10 +99,16 @@ export function chapterSortKey(name, notes) {
   return virtual ? virtual.order : 9999;
 }
 
+/**
+ * Grupo de las notas sin capítulo. No lleva nombre ni carpeta: se dibuja en la
+ * raíz de la sidebar, antes que los capítulos, como en el vault.
+ */
+export const ROOT_CHAPTER = '';
+
 export function groupByChapter(notes) {
   const map = new Map();
   for (const note of notes) {
-    const ch = note.chapter || '(sin capítulo)';
+    const ch = note.chapter || ROOT_CHAPTER;
     if (!map.has(ch)) map.set(ch, []);
     map.get(ch).push(note);
   }

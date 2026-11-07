@@ -4,6 +4,7 @@ export type ChapterGroup = { name: string; notes: NoteListItem[] };
 
 import {
   CHAPTER_CONVENTION,
+  ROOT_CHAPTER,
   chapterClassNames,
   chapterNumber,
   chapterRendersAsTree,
@@ -25,6 +26,7 @@ const chapterUpper = (name: string) => String(name || '').toUpperCase();
 // cubrían la que no corría. Se reexportan para no romper a quien las importe.
 export {
   CHAPTER_CONVENTION,
+  ROOT_CHAPTER,
   chapterClassNames,
   chapterNumber,
   chapterRendersAsTree,
@@ -476,24 +478,10 @@ export function renderNotesSidebar(
 
         let globalOrder = 0;
         for (const g of reorderedGroups) {
-          if (g.notes.length === 0) {
-            // Un capítulo virtual vacío no puede guardar su orden sin al menos una
-            // nota, así que se crea la de relleno que declara la convención.
-            const virtual = CHAPTER_CONVENTION.virtual.find(
-              (v) => chapterUpper(g.name).includes(v.match),
-            );
-            if (virtual?.placeholder) {
-              const { slug, title } = virtual.placeholder;
-              try {
-                await createNote(courseId, {
-                  slug, title, type: 'info',
-                  chapter: g.name, status: 'draft', order: globalOrder,
-                });
-              } catch (e) {
-                console.warn('[notes-sidebar] dummy note creation failed:', e);
-              }
-            }
-          } else {
+          // Un capítulo virtual vacío no necesita guardar orden: chapterSortKey lo
+          // ubica por su prefijo. Antes se creaba una nota de relleno para eso, y
+          // aparecía en el vault como nota fantasma.
+          if (g.notes.length > 0) {
             for (const note of g.notes) {
               if (note.slug.startsWith('public/')) {
                 continue;
@@ -1014,7 +1002,13 @@ export function renderNotesSidebar(
     } else {
       details.appendChild(ul);
     }
-    chapterEl.appendChild(details);
+    if (group.name === ROOT_CHAPTER) {
+      // Las notas sin capítulo cuelgan de la raíz, sin carpeta ni título.
+      chapterEl.classList.add('chapter--root');
+      chapterEl.appendChild(ul);
+    } else {
+      chapterEl.appendChild(details);
+    }
     newChapterEls.push(chapterEl);
     newChapterEls.push(makeChapterDropLine(group.name));
   }
