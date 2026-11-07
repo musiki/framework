@@ -584,6 +584,11 @@ export function renderNotesSidebar(
   for (const group of groups) {
     const chapterEl = document.createElement('div');
     chapterEl.className = ['chapter', ...chapterClassNames(group.name)].join(' ');
+    // El header y el final del loop arman UI propia de cada capítulo de sistema.
+    const nameUpper = chapterUpper(group.name);
+    const isRecursos = nameUpper.includes('RECURSOS');
+    const isAmigxCriticx = nameUpper.includes('AMIGX');
+    const isNotas = nameUpper.includes('NOTAS');
 
     const details = document.createElement('details');
     details.className = 'chapter-details';
