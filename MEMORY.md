@@ -1,5 +1,14 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-07 deploy-unico-cohortes-toc> <br>
+Sesión de estabilización (commits `2e1d8d0`..`365ce3c`):
+- **Sidebar**: restauradas variables borradas por error en `8bc74dd` (ReferenceError dejaba el árbol vacío). Las notas sin capítulo van a la raíz (`ROOT_CHAPTER = ''`), sin carpeta sin nombre ni notas placeholder.
+- **Contenido**: `slug:` en el frontmatter de `cursos/` saca la nota del curso (el glob loader lo usa como id); `validar-notas.py` lo marca error y `--arreglar` lo quita. También es error enlazar desde una nota visible a una de `public/` sin `status: public` (esas rutas redirigen a `/cursos`). En s123 se publicaron las 53 notas de conceptos enlazadas desde «Temas de seminarios».
+- **TOC**: `[...slug].astro` arma el índice y hace scroll sobre el panel activo de Dockview (`musiki:active-note`, nuevo `musiki:workspace-toggle`), no sobre la página de fondo oculta.
+- **Deploy**: un solo camino, el CI self-hosted (`deploy-framework-local.sh`), que ahora corre migraciones. `scripts/vps-update.sh` borrado; `deploy-framework.sh` sólo dispara el workflow. Ver `DEPLOYMENT.md`. `db-migrate.sh --dry-run` aplicaba de verdad: corregido (`27f4d30`).
+- **Admin / cohortes**: panel lateral `src/components/dashboard/AdminCohortSidebar.astro` (materia → cohorte, filtro de la tabla, ficha con estadísticas, «+ cohorte»). Lógica pura en `src/lib/cohorts/admin-cohorts.mjs` (14 tests). Verificado en producción: conteos y ficha coinciden con la base.
+- Abierto: el build falla de forma intermitente desde 2026-10-18 con `Maximum call stack size exceeded` en `@shiguredo/rnnoise-wasm` (no es el tamaño de stack). La cohorte de `agentic-music` es huérfana (la materia ya no está en el contenido; sólo 1 docente inscripto).
+
 <2026-10-29 amigx-criticx-s123> <br>
 Servicio de **Amigx Críticx** para Seminarios (`s123`), implementado y simplificado sobre `10f29d1`:
 - Tres vistas en la sección `85 AMIGX CRÍTICX` del sidebar izquierdo (`src/pages/[...slug].astro` y `src/scripts/course/sidebar/notes-sidebar.ts`) y en las pestañas del portal (`src/components/course/AmigxCriticxPortal.astro`): `/amigxcriticx` (Formulario), `/amigxcriticx/devoluciones` (Devoluciones) y `/amigxcriticx/dashboard` (`AM Dashboard`, exclusivo para docentes con redirección de no-docentes a `/amigxcriticx`).
