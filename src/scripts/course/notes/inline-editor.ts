@@ -126,13 +126,7 @@ function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: strin
           <form id="nie-yaml-form" style="display:contents;">
             <label style="display:flex;gap:.25rem;align-items:center;">
               Tipo
-              <select id="fm-type" style="${inputStyle}">
-                <option value="lesson">lesson</option>
-                <option value="eval">eval</option>
-                <option value="assignment">assignment</option>
-                <option value="info">info</option>
-                <option value="public-note">public-note</option>
-              </select>
+              <select id="fm-type" style="${inputStyle}"><!-- opciones desde note-metadata-schema --></select>
             </label>
             <label style="display:flex;gap:.25rem;align-items:center;">
               Capítulo
@@ -141,11 +135,7 @@ function buildLayout(mountEl: HTMLElement, _courseId: string, _courseName: strin
             </label>
             <label style="display:flex;gap:.25rem;align-items:center;">
               Estado
-              <select id="fm-status" style="${inputStyle}">
-                <option value="draft">draft</option>
-                <option value="published">published</option>
-                <option value="archived">archived</option>
-              </select>
+              <select id="fm-status" style="${inputStyle}"><!-- opciones desde note-metadata-schema --></select>
             </label>
             <label style="display:flex;gap:.25rem;align-items:center;">
               Orden
@@ -259,9 +249,11 @@ async function saveCurrentNote(
     const fmData: FrontmatterData = {
       ...currentFmData,
       title,
-      type: yamlFields.type || 'lesson',
+      // Si el control viniera vacío, se conserva lo que la nota ya tenía. El
+      // default literal degradaba cualquier tipo desconocido a lesson.
+      type: yamlFields.type || currentFmData.type || 'lesson',
       chapter: yamlFields.chapter || '',
-      status: yamlFields.status || 'draft',
+      status: yamlFields.status || currentFmData.status || 'draft',
       order: yamlFields.order ?? 0,
       theme: yamlFields.theme || '',
     };

@@ -1,4 +1,25 @@
 import type { NoteListItem } from './types';
+import { NOTE_TYPES, NOTE_STATUSES, optionsFor } from './note-metadata-schema.mjs';
+
+/**
+ * Carga las opciones de un <select> desde el esquema, incluyendo siempre el valor
+ * actual de la nota aunque el esquema no lo conozca.
+ *
+ * Sin esto, asignar `select.value = 'concept'` a un select que sólo ofrece
+ * lesson/eval/assignment/info deja el control vacío, y al guardar la nota se
+ * degradaba a `lesson`. Lo mismo pasaba con `status: public` → `draft`.
+ */
+function fillSelect(el: HTMLSelectElement, opciones: string[], actual: string) {
+  const lista = optionsFor({ options: opciones }, actual);
+  el.innerHTML = '';
+  for (const valor of lista) {
+    const opt = document.createElement('option');
+    opt.value = valor;
+    opt.textContent = valor;
+    el.appendChild(opt);
+  }
+  el.value = actual || lista[0] || '';
+}
 
 export type FrontmatterData = {
   title: string;
@@ -107,18 +128,19 @@ export function populateYamlStrip(notes: NoteListItem[], data: FrontmatterData, 
     }
   }
 
+  // El tema sale de lo que usan las otras notas, más el de esta por si es nuevo.
   const themes = [...new Set(notes.map(n => n.theme).filter(Boolean) as string[])].sort();
   themeEl.innerHTML = '<option value="">—</option>';
-  for (const th of themes) {
+  for (const th of optionsFor({ options: themes }, String(data.theme || ''))) {
     const opt = document.createElement('option');
     opt.value = th;
     opt.textContent = th;
     themeEl.appendChild(opt);
   }
 
-  typeEl.value = data.type;
+  fillSelect(typeEl, NOTE_TYPES, String(data.type || ''));
+  fillSelect(statusEl, NOTE_STATUSES, String(data.status || ''));
   chapterEl.value = data.chapter || '';
-  statusEl.value = data.status;
   orderEl.value = String(data.order);
   themeEl.value = data.theme || '';
 }
