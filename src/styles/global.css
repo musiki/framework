@@ -2787,50 +2787,94 @@ pre[class*="lang-bibtex"] .musiki-code-comment {
   }
 }
 
-/* ── Propiedades de la nota en edición (pod Info, frontmatter-pod.ts) ── */
-.note-fm-host:empty { display: none; }
-.note-fm-pod { display: grid; gap: 0.55rem; font-size: 0.8rem; }
-.note-fm-pod .page-info-properties-title {
-  margin: 0;
-  font-size: 0.86rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--c-fg-dim);
-}
-.note-fm-pod-badge {
-  margin-left: 0.35rem;
+/* ── Propiedades editables de la nota en edición (frontmatter-pod.ts).
+   Mismas filas que la vista de lectura del pod Info; los controles se ven
+   como texto hasta que se pasa el mouse o se enfocan, como en Obsidian. ── */
+.note-fm-badge {
+  margin-left: 0.4rem;
   font-size: 0.68rem;
   letter-spacing: 0.04em;
   text-transform: none;
   color: var(--accent);
 }
-.note-fm-fields fieldset {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
-  gap: 0.45rem 0.6rem;
-  margin: 0;
+.note-fm-editor { display: grid; gap: 0.5rem; }
+.note-fm-editor.is-locked .note-fm-props { opacity: 0.5; }
+.note-fm-row { position: relative; align-items: center; }
+.note-fm-row dd { display: flex; align-items: center; min-width: 0; }
+.note-fm-row dd > input:not([type='checkbox']),
+.note-fm-row dd > select,
+.note-fm-key-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 0 -0.3rem;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-fg);
+  font: inherit;
+  font-size: 0.82rem;
+}
+.note-fm-key-input { margin: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.78rem; }
+.note-fm-row dd > select { appearance: none; cursor: pointer; }
+.note-fm-row dd > input:not([type='checkbox']):hover,
+.note-fm-row dd > select:hover,
+.note-fm-key-input:hover { border-color: var(--c-border); }
+.note-fm-row dd > input:not([type='checkbox']):focus,
+.note-fm-row dd > select:focus,
+.note-fm-key-input:focus { outline: none; border-color: var(--accent); background: var(--c-bg); }
+.note-fm-row dd > input[type='checkbox'] { margin: 0; accent-color: var(--accent); }
+.note-fm-complex { color: var(--c-fg-dim); font-size: 0.75rem; font-style: italic; }
+.note-fm-chips { align-items: center; }
+.note-fm-chips .page-info-prop-chip { display: inline-flex; align-items: center; gap: 0.2rem; }
+.note-fm-chip-remove,
+.note-fm-remove {
   padding: 0;
   border: 0;
-  min-width: 0;
+  background: none;
+  color: var(--c-fg-dim);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
 }
-.note-fm-fields fieldset:disabled { opacity: 0.5; }
-.note-fm-fields label,
-.note-fm-yaml-label { display: grid; gap: 0.15rem; color: var(--c-fg-dim); font-size: 0.72rem; }
-.note-fm-fields input,
-.note-fm-fields select {
-  min-width: 0;
-  font: inherit;
-  font-size: 0.8rem;
-  padding: 0.2rem 0.35rem;
-  border: 1px solid var(--c-border);
-  border-radius: 4px;
-  background: var(--c-bg);
+.note-fm-chip-remove:hover,
+.note-fm-remove:hover { color: var(--c-danger, #c0392b); }
+.note-fm-chip-input {
+  flex: 1 1 4rem;
+  min-width: 4rem;
+  padding: 0.05rem 0.2rem;
+  border: 0;
+  background: transparent;
   color: var(--c-fg);
+  font: inherit;
+  font-size: 0.75rem;
 }
+.note-fm-chip-input:focus { outline: none; }
+.note-fm-remove {
+  position: absolute;
+  right: -0.9rem;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.note-fm-row:hover .note-fm-remove,
+.note-fm-remove:focus-visible { opacity: 1; }
+.note-fm-add {
+  justify-self: start;
+  padding: 0.1rem 0;
+  border: 0;
+  background: none;
+  color: var(--c-fg-dim);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.note-fm-add:hover { color: var(--accent); }
+.note-fm-add:disabled { opacity: 0.4; cursor: default; }
+.note-fm-yaml-label { margin-top: 0.3rem; color: var(--c-fg-dim); font-size: 0.72rem; }
 .note-fm-yaml {
   width: 100%;
   min-height: 8rem;
-  height: 16rem;
+  height: 14rem;
   max-height: 80vh;
   resize: vertical;
   box-sizing: border-box;
@@ -2903,3 +2947,181 @@ pre[class*="lang-bibtex"] .musiki-code-comment {
 .bib-copy-btn:focus-visible::after,
 .bib-copy-btn.is-copied::after,
 .bib-copy-btn.is-error::after { opacity: 1; transition-delay: 0ms; }
+
+/* ── Pod Info: propiedades e historial de la página ([...slug].astro).
+   Global porque applyPageInfo y el editor de propiedades arman estas filas
+   por JS; con CSS scopeado quedaban sin estilo. ── */
+.page-info-meta {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 0.35rem 0.7rem;
+  margin: 0;
+}
+
+.page-info-meta dt {
+  font-size: 0.78rem;
+  color: var(--c-fg-dim);
+}
+
+.page-info-meta dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.page-info-meta a,
+.page-info-history-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.page-info-history-link:hover,
+.page-info-meta a:hover {
+  text-decoration: underline;
+}
+
+.page-info-properties {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.page-info-properties-title {
+  margin: 0;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-fg-dim);
+}
+
+.page-info-props {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.page-info-prop-row {
+  display: grid;
+  grid-template-columns: minmax(0, 7rem) minmax(0, 1fr);
+  gap: 0.35rem 0.7rem;
+  align-items: baseline;
+}
+
+.page-info-prop-row dt {
+  font-size: 0.78rem;
+  color: var(--c-fg-dim);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.page-info-prop-row dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+  font-size: 0.82rem;
+}
+
+.page-info-prop-row dd code {
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.page-info-prop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.page-info-prop-chip {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--c-border);
+  background: color-mix(in srgb, var(--c-bg) 88%, var(--c-bg-mute) 12%);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-decoration: none;
+  color: var(--accent);
+}
+
+.page-info-prop-chip.is-static {
+  color: var(--c-fg-dim);
+}
+
+.page-info-prop-chip:not(.is-static):hover {
+  border-color: var(--accent);
+}
+
+/* Header without kicker/title: just the close button, right-aligned. */
+.page-info-sidebar-header--bare {
+  display: flex;
+  justify-content: flex-end;
+  background: transparent;
+  border-bottom: none;
+  padding: 0;
+  margin: 0 0 0.2rem 0;
+}
+
+/* "Historial" reuses the Propiedades look; folded by default via <details>. */
+details.page-info-history > summary.page-info-properties-title {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+details.page-info-history > summary::-webkit-details-marker { display: none; }
+details.page-info-history > summary::before {
+  content: "▸";
+  font-size: 0.7em;
+  color: var(--c-fg-dim);
+  transition: transform 0.15s ease;
+}
+details.page-info-history[open] > summary::before { transform: rotate(90deg); }
+
+.page-info-history-list {
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0;
+  margin: 0.5rem 0 0 0;
+}
+
+/* One line per commit: author · date, with GitHub icons on the right. */
+.page-info-history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.page-info-history-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.page-info-history-author { font-weight: 600; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.page-info-history-sep { color: var(--c-fg-dim); }
+.page-info-history-date { color: var(--c-fg-dim); flex: 0 0 auto; }
+
+.page-info-history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+}
+.page-info-gh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--c-fg-dim);
+  text-decoration: none;
+  border-radius: 4px;
+  padding: 0.1rem;
+}
+.page-info-gh-link:hover { color: var(--accent); }
+.page-info-gh-link code { font-size: 0.72rem; }
