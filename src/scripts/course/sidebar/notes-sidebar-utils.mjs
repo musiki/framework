@@ -5,6 +5,8 @@
 // pasaban en verde mientras el runtime usaba otra versión. Ahora es la única
 // fuente y el .ts importa de acá, como ya hace publish.ts con los .mjs de lilypond.
 
+import { noteRelPathKey } from '../../../lib/course/note-path.mjs';
+
 /**
  * Convención de capítulos.
  *
@@ -140,10 +142,7 @@ export function computeNewOrders(notesInChapter, draggedSlug, insertAfterSlug) {
 }
 
 export function noteSlugToRelPath(slug, courseId) {
-  const relPath = slug.replace(`cursos/${courseId}/`, '').replace(/\.md$/, '');
-  return relPath.split('/').map(seg =>
-    seg.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-').toLowerCase()
-  ).join('/');
+  return noteRelPathKey(slug.replace(`cursos/${courseId}/`, ''));
 }
 
 export function slugify(title) {

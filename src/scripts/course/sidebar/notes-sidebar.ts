@@ -307,7 +307,7 @@ export function renderNotesSidebar(
 
         const noteStatus = String(note.status || '').trim().toLowerCase();
         if (canManage && noteStatus === 'draft') {
-          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--draft"><span class="lesson-status-blob" aria-hidden="true"></span>DRAFT</span>';
+          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--draft" title="Borrador: no lo ven los estudiantes" aria-label="Borrador">D</span>';
         } else if (canManage && noteStatus === 'private') {
           trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--private"><span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE</span>';
         }
@@ -837,7 +837,7 @@ export function renderNotesSidebar(
 
         const noteStatus = String(note.status || '').trim().toLowerCase();
         if (canManage && noteStatus === 'draft') {
-          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--draft"><span class="lesson-status-blob" aria-hidden="true"></span>DRAFT</span>';
+          trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--draft" title="Borrador: no lo ven los estudiantes" aria-label="Borrador">D</span>';
         } else if (canManage && noteStatus === 'private') {
           trailingSpan.innerHTML = '<span class="lesson-status-badge lesson-status-badge--private"><span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE</span>';
         }
