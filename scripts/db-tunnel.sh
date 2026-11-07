@@ -1,7 +1,21 @@
 #!/usr/bin/env bash
 
 # Musiki DB SSH Tunnel Helper
-# Use this script to connect your local environment to the remote PostgreSQL database on the Hetzner VPS.
+#
+# DEPRECADO para migraciones. Usar ./scripts/db-migrate.sh, que corre allá donde
+# la base es local.
+#
+# Este túnel viene de cuando se desarrollaba local contra la base remota. Hoy ese
+# escenario casi no se da, y el túnel agrega un punto de falla difícil de leer: un
+# forward de SSH acepta conexiones locales aunque el otro extremo esté caído, así
+# que parece funcionar y el error aparece después, en psql, hablando de otra cosa.
+#
+# Sigue acá porque sirve para inspeccionar la base a mano con un cliente gráfico.
+# Si lo usás y psql se desconecta apenas conecta, el contenedor cambió de IP: el
+# fallback 172.18.0.2 ya no vale.
+#
+# Nota: la contraseña que imprime está en texto plano en este archivo y en el
+# historial de git. Conviene rotarla y moverla a .env.
 
 REMOTE_USER="zz"
 REMOTE_HOST="46.225.154.68"

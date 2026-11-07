@@ -1,90 +1,37 @@
 #!/usr/bin/env bash
 #
-# Corre una migración contra la base remota, abriendo y cerrando el túnel solo.
+# Corre las migraciones en el VPS, desde tu máquina. Sin túnel.
 #
-#   ./scripts/db-migrate.sh postgres-patches/migrations/20261107120000_cohorts.sql
-#   ./scripts/db-migrate.sh --dry-run postgres-patches/migrations/...sql
+#   ./scripts/db-migrate.sh --status     # qué falta aplicar
+#   ./scripts/db-migrate.sh --dry-run    # aplica y revierte, para validar
+#   ./scripts/db-migrate.sh --baseline   # marca lo viejo como aplicado
+#   ./scripts/db-migrate.sh              # aplica lo pendiente
 #
-# Existe porque el camino manual tiene tres trampas:
-#   · db-tunnel.sh se queda en primer plano, así que el psql de la línea siguiente
-#     nunca llega a correr
-#   · DATABASE_URL vive en .env y no está exportada en la shell, así que psql se
-#     va al socket local y falla con un error que no dice nada del túnel
-#   · si el túnel tarda en levantar, psql corre antes de tiempo
+# El trabajo real lo hace scripts/vps/db-migrate.sh, que corre allá, donde la
+# base es local. Acá sólo se hace ssh y se pasa el argumento.
 #
-# El archivo .sql tiene que traer su propio BEGIN/COMMIT.
+# Por qué ya no hay túnel: venía de cuando se desarrollaba local contra la base
+# remota. Hoy el camino local → github → vps es directo, y el túnel sólo
+# agregaba un punto de falla difícil de leer. Un forward de SSH acepta
+# conexiones locales aunque el otro extremo esté caído, así que cualquier
+# chequeo de puerto daba verde y el error aparecía después, en psql, hablando de
+# cosas que no eran.
+#
+# Asume que el VPS ya tiene la rama que querés migrar. Si acabás de pushear,
+# corré primero el deploy.
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+REMOTE_USER="${VPS_USER:-zz}"
+REMOTE_HOST="${VPS_HOST:-46.225.154.68}"
+REMOTE_PATH="${VPS_PATH:-/opt/musiki/framework}"
 
-DRY_RUN=0
-if [ "${1:-}" = "--dry-run" ]; then
-  DRY_RUN=1
-  shift
-fi
+ARG="${1:-}"
+case "$ARG" in
+  ""|--status|--dry-run|--baseline) ;;
+  *) echo "Uso: $0 [--status|--dry-run|--baseline]" >&2; exit 1 ;;
+esac
 
-MIGRATION="${1:-}"
-if [ -z "$MIGRATION" ] || [ ! -f "$MIGRATION" ]; then
-  echo "Uso: $0 [--dry-run] <archivo.sql>" >&2
-  exit 1
-fi
-
-command -v psql >/dev/null || { echo "[ERROR] psql no está instalado." >&2; exit 1; }
-
-# La URL sale de .env, pero apuntada al puerto local del túnel.
-if [ ! -f .env ]; then
-  echo "[ERROR] No hay .env con DATABASE_URL." >&2
-  exit 1
-fi
-DB_URL=$(grep -E '^DATABASE_URL=' .env | head -1 | cut -d= -f2- | tr -d '"'"'"'' | tr -d '[:space:]')
-if [ -z "$DB_URL" ]; then
-  echo "[ERROR] No encontré DATABASE_URL en .env." >&2
-  exit 1
-fi
-
-LOCAL_PORT=$(printf '%s' "$DB_URL" | sed -nE 's#.*:([0-9]+)/[^/]*$#\1#p')
-LOCAL_PORT="${LOCAL_PORT:-5433}"
-
-TUNNEL_PID=""
-cleanup() {
-  if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
-    echo "[INFO] Cerrando el túnel."
-    kill "$TUNNEL_PID" 2>/dev/null || true
-  fi
-}
-trap cleanup EXIT
-
-# Si el puerto ya responde, alguien dejó el túnel abierto: se reutiliza.
-if nc -z localhost "$LOCAL_PORT" 2>/dev/null; then
-  echo "[INFO] El túnel ya está abierto en localhost:${LOCAL_PORT}."
-else
-  echo "[INFO] Abriendo el túnel en segundo plano..."
-  ./scripts/db-tunnel.sh >/tmp/musiki-db-tunnel.log 2>&1 &
-  TUNNEL_PID=$!
-  for _ in $(seq 1 30); do
-    nc -z localhost "$LOCAL_PORT" 2>/dev/null && break
-    sleep 0.5
-  done
-  if ! nc -z localhost "$LOCAL_PORT" 2>/dev/null; then
-    echo "[ERROR] El túnel no levantó. Log en /tmp/musiki-db-tunnel.log:" >&2
-    tail -5 /tmp/musiki-db-tunnel.log >&2 || true
-    exit 1
-  fi
-  echo "[INFO] Túnel listo."
-fi
-
-echo "[INFO] Base: $(printf '%s' "$DB_URL" | sed -E 's#//[^@]*@#//***@#')"
-echo "[INFO] Migración: ${MIGRATION}"
-
-if [ "$DRY_RUN" = "1" ]; then
-  # Se corre dentro de una transacción que se revierte: valida la sintaxis y los
-  # permisos sin dejar nada escrito.
-  echo "[INFO] Ensayo: se aplica y se revierte."
-  psql "$DB_URL" -v ON_ERROR_STOP=1 --single-transaction \
-    -c 'BEGIN;' -f "$MIGRATION" -c 'ROLLBACK;' \
-    && echo "[OK] La migración corre limpia. No se escribió nada."
-else
-  psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$MIGRATION" \
-    && echo "[OK] Migración aplicada."
-fi
+echo "[INFO] ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
+exec ssh -t "${REMOTE_USER}@${REMOTE_HOST}" \
+  "cd '${REMOTE_PATH}' && ./scripts/vps/db-migrate.sh ${ARG}"

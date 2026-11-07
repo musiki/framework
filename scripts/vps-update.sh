@@ -45,11 +45,26 @@ if [ ! -d node_modules ] || [ package-lock.json -nt node_modules/.package-lock.j
   npm ci --ignore-scripts
 fi
 
-# ── 5. Build ─────────────────────────────────────────────────────────────────
+# ── 5. Migraciones pendientes ────────────────────────────────────────────────
+# Antes del build: si el esquema no está al día, la app arranca contra una base
+# que no tiene las columnas que el código espera. Hasta ahora las migraciones se
+# corrían a mano por un túnel y no había registro de cuáles estaban aplicadas.
+#
+# SKIP_MIGRATIONS=1 para saltearlas en un deploy de emergencia.
+if [ "${SKIP_MIGRATIONS:-0}" = "1" ]; then
+  echo "--> Migraciones salteadas (SKIP_MIGRATIONS=1)."
+elif [ -x ./scripts/vps/db-migrate.sh ]; then
+  echo "--> Aplicando migraciones pendientes..."
+  ./scripts/vps/db-migrate.sh
+else
+  echo "--> scripts/vps/db-migrate.sh no está, se omite."
+fi
+
+# ── 6. Build ─────────────────────────────────────────────────────────────────
 echo "--> Building..."
 npm run build
 
-# ── 6. Restart ───────────────────────────────────────────────────────────────
+# ── 7. Restart ───────────────────────────────────────────────────────────────
 echo "--> Restarting app..."
 docker restart devmusiki-app
 

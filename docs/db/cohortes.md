@@ -71,17 +71,40 @@ Como el índice parcial impide dos activas, el endpoint baja la anterior antes d
 insertar la nueva. Si algo falla en el medio, repone la anterior para no dejar la
 materia sin cohorte activa.
 
+## Cómo se aplica
+
+Las migraciones corren en el VPS, donde la base es local. Desde tu máquina:
+
+```bash
+./scripts/db-migrate.sh --status     # qué falta
+./scripts/db-migrate.sh --baseline   # sólo la primera vez, ver abajo
+./scripts/db-migrate.sh --dry-run    # aplica y revierte, para validar
+./scripts/db-migrate.sh              # aplica
+```
+
+La primera vez hace falta `--baseline`. El repo trae 37 migraciones que ya se
+aplicaron a mano antes de que existiera la tabla `SchemaMigration`, y volver a
+correrlas sería, en el mejor caso, un error. `--baseline` las marca como aplicadas
+sin ejecutarlas; de ahí en más sólo corre lo nuevo. El script se niega a avanzar
+solo si detecta ese escenario, así que no hay forma de pisarlo por distracción.
+
+Desde este commit, `vps-update.sh` aplica las pendientes antes del build. Si el
+esquema no está al día, la app arrancaría contra una base sin las columnas que el
+código espera.
+
 ## Lo que falta probar contra una base real
 
 Lo escrito acá se verificó leyendo el esquema del dump y con tests de la lógica pura
 (13 casos en `src/lib/cohorts/cohort-labels.test.mjs`). **No se probó contra Postgres**,
 porque esta sesión no tenía base. Antes de usarlo en producción conviene:
 
-1. correr la migración sobre una copia del dump y comprobar el backfill
-2. crear una cohorte de prueba en una materia de juguete y ver que el staff se copia
-3. forzar un error después del `UPDATE ... isActive = false` y verificar que repone
+1. `--dry-run` y comprobar que corre limpia
+2. aplicar, y verificar el backfill:
+   `SELECT COUNT(*) FROM "Enrollment" WHERE "cohortId" IS NULL;` tiene que dar 0
+3. crear una cohorte de prueba en una materia de juguete y ver que el staff se copia
+4. forzar un error después del `UPDATE ... isActive = false` y verificar que repone
 
-El paso 3 es el único camino del endpoint que no tiene red de contención automática.
+El paso 4 es el único camino del endpoint que no tiene red de contención automática.
 
 ## Lo que viene
 
