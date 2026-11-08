@@ -6,6 +6,9 @@
 - **Temas**: un solo eje por persona, `localStorage['musiki.appearance']` (claro, oscuro, invulne, invulne-oscuro, dracula, lyt), aplicado en `BaseHead` y de nuevo en `astro:after-swap`: el ClientRouter reemplazaba los atributos de `<html>` y algunas notas quedaban con otro tema. Sin elección propia manda el tema global del admin. Selector «Aa» en el ribbon; ribbon, sidebars y lectura con el mismo `--c-bg`.
 - **Graph**: click abre la nota en el workspace, Ctrl/Cmd+click en split a la derecha, Shift+click pliega la rama.
 - **LilyPond**: el servicio corre 2.26.0, que no define `\sffz` ni `\sfff`; `withLegacyDynamics` (lilypond-support.mjs) las define si la partitura las usa.
+- **Pipeline de contenido**: los repos de materia avisaban a `www.musiki.org.ar`, que responde 308; curl no seguía el redirect y el paso quedaba en verde sin avisar. Ahora van a `musiki.org.ar` y exigen el 202 (s123, i1, i2 pusheados; cym commiteable cuando se pusheen sus 3 commits pendientes).
+- **Content Bus**: no se recarga a sí mismo al final del deploy (pm2 treekill mataba al deploy y la cola de avisos); recarga las demás apps de a una (`reload --only` no acepta listas). Estado y cola en `/tmp/musiki-content-bus-<port>.json`: si se corta un pipeline, al arrancar lo vuelve a correr. Lógica en `scripts/vps/content-bus-queue.mjs`.
+- **Beacon** (logo del header): muestra materia y commit, «Publicando s123 @ 69ebdfa · fase» / «Publicado … · hora · framework #…» (`src/lib/site/sync-beacon.mjs`).
 
 <2026-11-07 deploy-unico-cohortes-toc> <br>
 Sesión de estabilización (commits `2e1d8d0`..`365ce3c`):

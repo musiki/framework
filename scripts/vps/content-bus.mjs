@@ -1,6 +1,18 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
 import { spawn, spawnSync } from 'node:child_process';
 import readline from 'node:readline';
+import {
+  mergePending,
+  normalizeBranchName,
+  normalizeCommitSha,
+  normalizeRepoSlug,
+  reloadCommandFor,
+  sourcesOf,
+} from './content-bus-queue.mjs';
 
 const PORT = process.env.CONTENT_BUS_PORT || 4322;
 const SECRET = process.env.CONTENT_BUS_SECRET || 'musiki-local-secret';
@@ -12,23 +24,25 @@ const CONTENT_SOURCE_STRATEGY = (
   'remote-only'
 ).trim() || 'remote-only';
 const CONTENT_BUS_INSTALL_COMMAND = (process.env.CONTENT_BUS_INSTALL_COMMAND || '').trim();
-const normalizeBranchName = (value) => String(value || '').trim().replace(/^refs\/heads\//, '');
-const normalizeRepoSlug = (value) => {
-  const text = String(value || '').trim();
-  if (!text) return '';
-  if (text.startsWith('git@github.com:')) {
-    return text.slice('git@github.com:'.length).replace(/\.git$/i, '').toLowerCase();
+
+// Estado y cola en disco. El bus se reinicia cuando el CI deploya el framework
+// (y si se cae); en memoria se perdían el último resultado que muestra el
+// beacon y los avisos que habían llegado mientras corría un pipeline.
+const STATE_FILE = process.env.CONTENT_BUS_STATE_FILE
+  || path.join(os.tmpdir(), `musiki-content-bus-${PORT}.json`);
+
+// El deploy no recarga al bus: con treekill, pm2 mataba al deploy en plena
+// recarga y con él la cola. hem ya trae su propio VPS_RELOAD_COMMAND.
+const RELOAD_COMMAND = (() => {
+  if (process.env.VPS_RELOAD_COMMAND) return process.env.VPS_RELOAD_COMMAND;
+  try {
+    const { apps } = createRequire(import.meta.url)(path.resolve('ecosystem.config.cjs'));
+    return reloadCommandFor(apps) || undefined;
+  } catch (error) {
+    console.error('[Content Bus] No pude leer ecosystem.config.cjs para armar la recarga:', error);
+    return undefined;
   }
-  return text
-    .replace(/^https?:\/\/github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .replace(/^\/+/, '')
-    .toLowerCase();
-};
-const normalizeCommitSha = (value) => {
-  const text = String(value || '').trim();
-  return /^[0-9a-f]{7,40}$/i.test(text) ? text : '';
-};
+})();
 
 const getFrameworkCommit = () => {
   try {
@@ -38,7 +52,8 @@ const getFrameworkCommit = () => {
   }
 };
 
-// In-memory status for the beacon
+// Estado para el beacon. `sources` es lo que está corriendo (o lo último que
+// corrió) y `lastDeployed` lo último que llegó a producción.
 let status = {
   state: 'idle', // idle, running, ok, error, unknown
   title: 'Content Bus Idle',
@@ -51,13 +66,41 @@ let status = {
   sourceRepo: null,
   sourceSha: null,
   sourceRef: null,
+  sources: [],
+  lastDeployed: null,
   lastError: null,
   mode: 'content-bus'
 };
 
 let isRunning = false;
-let rerunRequested = false;
-let pendingPayload = null;
+let pending = [];
+let running = null;
+
+const saveState = () => {
+  try {
+    const tmp = `${STATE_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ status, running, pending }));
+    fs.renameSync(tmp, STATE_FILE);
+  } catch (error) {
+    console.error('[Content Bus] No pude guardar el estado:', error);
+  }
+};
+
+const loadState = () => {
+  try {
+    if (!fs.existsSync(STATE_FILE)) return [];
+    const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    status = { ...status, ...(saved.status || {}), frameworkCommit: getFrameworkCommit(), mode: 'content-bus' };
+    const interrupted = Array.isArray(saved.running) ? saved.running : [];
+    if (interrupted.length) {
+      console.warn(`[Content Bus] Un pipeline quedó cortado (${sourcesOf(interrupted).map((s) => s.course).join(', ')}); se vuelve a correr.`);
+    }
+    return mergePending(interrupted, Array.isArray(saved.pending) ? saved.pending : []);
+  } catch (error) {
+    console.error('[Content Bus] No pude leer el estado guardado:', error);
+    return [];
+  }
+};
 
 const updateStatus = (patch = {}) => {
   status = {
@@ -65,6 +108,7 @@ const updateStatus = (patch = {}) => {
     ...patch,
     fetchedAt: new Date().toISOString(),
   };
+  saveState();
 };
 
 const formatRepoLabel = (repo) => {
@@ -84,35 +128,50 @@ const readDeployPhase = (line) => {
   };
 };
 
-async function runPipeline(payload) {
+const enqueue = (payload) => {
+  pending = mergePending(pending, [payload]);
+  saveState();
   if (isRunning) {
-    rerunRequested = true;
-    pendingPayload = payload;
     console.log('[Content Bus] Pipeline already running. Rerun queued.');
     return;
   }
+  void runPipeline();
+};
+
+async function runPipeline() {
+  if (isRunning || !pending.length) return;
+
+  // Una corrida trae todos los repos; el último aviso fija su commit exacto.
+  const batch = pending;
+  pending = [];
+  running = batch;
+  const payload = batch.at(-1);
+  const sources = sourcesOf(batch);
+  const label = sources.map((s) => s.course).filter(Boolean).join(', ') || formatRepoLabel(payload?.source_repo);
 
   isRunning = true;
   updateStatus({
     state: 'running',
     phase: 'queued',
-    title: `Syncing ${formatRepoLabel(payload?.source_repo)}...`,
+    title: `Syncing ${label}...`,
     sourceRepo: payload?.source_repo || null,
     sourceSha: payload?.source_sha || null,
     sourceRef: payload?.source_ref || null,
+    sources,
     createdAt: new Date().toISOString(),
     updatedAt: null,
     lastError: null,
   });
 
   try {
-    console.log(`[Content Bus] Starting pipeline for ${payload?.source_repo || 'unknown'}...`);
+    console.log(`[Content Bus] Starting pipeline for ${label}...`);
 
     await runCommand(DEPLOY_COMMAND, {
       CONTENT_SOURCE_STRATEGY,
       VPS_CONTENT_SOURCE_STRATEGY: CONTENT_SOURCE_STRATEGY,
       VPS_INSTALL_COMMAND: CONTENT_BUS_INSTALL_COMMAND,
       VPS_SKIP_FRAMEWORK_RESET: process.env.VPS_SKIP_FRAMEWORK_RESET || '0',
+      ...(RELOAD_COMMAND ? { VPS_RELOAD_COMMAND: RELOAD_COMMAND } : {}),
       CONTENT_SOURCE_TARGET_REPO: normalizeRepoSlug(payload?.source_repo),
       CONTENT_SOURCE_TARGET_BRANCH: normalizeBranchName(payload?.source_ref),
       CONTENT_SOURCE_TARGET_SHA: normalizeCommitSha(payload?.source_sha),
@@ -124,10 +183,12 @@ async function runPipeline(payload) {
       });
     });
 
+    const finishedAt = new Date().toISOString();
     updateStatus({
       state: 'ok',
       phase: 'done',
-      title: `Content deployed · ${formatRepoLabel(payload?.source_repo)}`,
+      title: `Content deployed · ${label}`,
+      lastDeployed: { sources, at: finishedAt },
     });
     console.log(`[Content Bus] Pipeline finished successfully.`);
   } catch (error) {
@@ -139,17 +200,16 @@ async function runPipeline(payload) {
     });
     console.error(`[Content Bus] Pipeline failed:`, error);
   } finally {
+    isRunning = false;
+    running = null;
     updateStatus({
       updatedAt: new Date().toISOString(),
+      frameworkCommit: getFrameworkCommit(),
     });
-    isRunning = false;
 
-    if (rerunRequested) {
-      rerunRequested = false;
-      const nextPayload = pendingPayload;
-      pendingPayload = null;
+    if (pending.length) {
       // Small delay to prevent tight loops
-      setTimeout(() => runPipeline(nextPayload), 1000);
+      setTimeout(() => void runPipeline(), 1000);
     }
   }
 }
@@ -255,7 +315,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(202, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'Accepted, pipeline started' }));
 
-      runPipeline(payload);
+      enqueue(payload);
     });
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -263,7 +323,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+pending = loadState();
+
 server.listen(PORT, () => {
   const maskedSecret = SECRET.length > 4 ? `${SECRET.slice(0, 2)}****${SECRET.slice(-2)}` : '****';
   console.log(`[Content Bus] Listening on port ${PORT} (secret: ${maskedSecret})`);
+  if (pending.length) setTimeout(() => void runPipeline(), 1000);
 });
