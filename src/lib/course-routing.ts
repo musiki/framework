@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { CollectionEntry } from 'astro:content';
 import matter from 'gray-matter';
 import { getCourseFrontmatterId } from './course-metadata';
+import { noteRelPathKey } from './course/note-path.mjs';
 
 type CourseEntry = CollectionEntry<'cursos'>;
 
@@ -162,6 +163,10 @@ export type CourseLessonPathIndex = {
   entryByLegacyPath: Map<string, CourseEntry>;
   entryByShortPath: Map<string, CourseEntry>;
   entryByAliasPath: Map<string, CourseEntry>;
+  // La ruta del archivo como la escribe la sidebar (noteRelPathKey). Sin esto,
+  // /i1/03-organologia/instrumentalidad no encontraba 03-organología/… y
+  // redirigía a la portada del curso.
+  entryBySidebarPath: Map<string, CourseEntry>;
   pathByEntryId: Map<string, string>;
 };
 
@@ -174,6 +179,7 @@ export const buildCourseLessonPathIndex = (
   const entryByLegacyPath = new Map<string, CourseEntry>();
   const entryByShortPath = new Map<string, CourseEntry>();
   const entryByAliasPath = new Map<string, CourseEntry>();
+  const entryBySidebarPath = new Map<string, CourseEntry>();
   const pathByEntryId = new Map<string, string>();
 
   const baseSlugCounts = new Map<string, number>();
@@ -199,6 +205,8 @@ export const buildCourseLessonPathIndex = (
     const legacyPath = getCourseEntryLegacyPath(lesson, canonicalCourseId);
     if (legacyPath) {
       entryByLegacyPath.set(legacyPath, lesson);
+      const sidebarPath = noteRelPathKey(legacyPath);
+      if (sidebarPath && !entryBySidebarPath.has(sidebarPath)) entryBySidebarPath.set(sidebarPath, lesson);
     }
 
     const baseSlug = baseSlugByEntryId.get(lesson.id) || getLessonBaseSlug(lesson);
@@ -237,6 +245,7 @@ export const buildCourseLessonPathIndex = (
     entryByLegacyPath,
     entryByShortPath,
     entryByAliasPath,
+    entryBySidebarPath,
     pathByEntryId,
   };
 };
@@ -271,6 +280,15 @@ export const findLessonByCoursePath = (
     return {
       entry: byAlias,
       shortPath: pathIndex.pathByEntryId.get(byAlias.id) || normalizedRequestedPath,
+      isLegacyPath: true,
+    };
+  }
+
+  const bySidebar = pathIndex.entryBySidebarPath.get(noteRelPathKey(normalizedRequestedPath));
+  if (bySidebar) {
+    return {
+      entry: bySidebar,
+      shortPath: pathIndex.pathByEntryId.get(bySidebar.id) || normalizedRequestedPath,
       isLegacyPath: true,
     };
   }

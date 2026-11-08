@@ -303,7 +303,7 @@ const lessonPathIndex = canonicalCourseIdToUse ? buildCourseLessonPathIndex(
   canonicalCourseIdToUse,
   courseData,
   allLessons,
-) : { coursePathSegment: '', entryByLegacyPath: new Map(), entryByShortPath: new Map(), entryByAliasPath: new Map(), pathByEntryId: new Map() };
+) : { coursePathSegment: '', entryByLegacyPath: new Map(), entryByShortPath: new Map(), entryByAliasPath: new Map(), entryBySidebarPath: new Map(), pathByEntryId: new Map() };
 
 const requestedLessonPath = parts.slice(1).join('/');
 const preAuthLessonMatch =
@@ -872,10 +872,18 @@ const contentTranslationAvailableLanguages = getAvailableContentTranslationLangu
 const assignmentLikeTypes = new Set(['assignment', 'eval']);
 const isAssignment = assignmentLikeTypes.has(currentEntryType);
 const isLessonPage = parts.length > 1 && !isCourseForumPage;
+const isCourseOverviewPage = parts.length === 1 && !isServingPublicFallback && Boolean(canonicalCourseIdToUse);
 const currentEntryStatus = String(currentEntry.data.status || '').trim().toLowerCase();
 if (isLessonPage && !isRecursosEditorPage && !isAmigxCriticxPage && !canManageLiveInteractions && currentEntryStatus !== 'published' && currentEntryStatus !== 'public') {
+  // Un borrador puede estar anunciado en la guía de estudio: en vez de caer en la
+  // portada sin explicación, la portada abre el aviso "nota en preparación".
+  if (currentEntryStatus === 'draft') {
+    const pendingTitle = String(currentEntry.data.title || '').trim() || 'Esta nota';
+    return Astro.redirect(`${courseHref}?en-preparacion=${encodeURIComponent(pendingTitle)}`);
+  }
   return Astro.redirect(courseHref);
 }
+const pendingNoteTitle = parts.length === 1 ? String(Astro.url.searchParams.get('en-preparacion') || '').trim().slice(0, 200) : '';
 const lessonDescription =
   String(currentEntry.data.summary || currentEntry.data.description || '').trim() ||
   String(courseIndex?.data?.summary || courseIndex?.data?.description || '').trim();
@@ -1244,7 +1252,7 @@ function renderLessonsTreeHTML(
         const iconStyle = ic.color ? ` style="color: ${ic.color}"` : '';
 
         const badgeDraft = (canManageLiveInteractions && lessonStatus === 'draft')
-          ? `<span class="lesson-status-badge lesson-status-badge--draft"><span class="lesson-status-blob" aria-hidden="true"></span>DRAFT</span>`
+          ? `<span class="lesson-status-badge lesson-status-badge--draft" title="Borrador: no lo ven los estudiantes" aria-label="Borrador">D</span>`
           : '';
         const badgePrivate = (canManageLiveInteractions && lessonStatus === 'private')
           ? `<span class="lesson-status-badge lesson-status-badge--private"><span class="lesson-status-blob" aria-hidden="true"></span>PRIVATE</span>`
@@ -2437,14 +2445,18 @@ function renderLessonsTreeHTML(
         flex: 0 0 auto;
       }
 
+      /* Borrador: un círculo con la D, no una píldora con la palabra. */
       :global(.lesson-status-badge--draft) {
         color: #b45309;
         background: rgba(245, 158, 11, 0.15);
-      }
-
-      :global(.lesson-status-badge--draft .lesson-status-blob) {
-        background: #f59e0b;
-        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+        box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.45);
+        width: 1.35em;
+        height: 1.35em;
+        padding: 0;
+        justify-content: center;
+        letter-spacing: 0;
+        font-size: 0.58rem;
+        margin-left: 0.35em;
       }
 
       :global(.lesson-status-badge--private) {
@@ -5148,9 +5160,7 @@ function renderLessonsTreeHTML(
                               <span class="lesson-type">📝</span>
                             )}
                             {canManageLiveInteractions && lessonStatus === 'draft' && (
-                              <span class="lesson-status-badge lesson-status-badge--draft">
-                                <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
-                              </span>
+                              <span class="lesson-status-badge lesson-status-badge--draft" title="Borrador: no lo ven los estudiantes" aria-label="Borrador">D</span>
                             )}
                             {canManageLiveInteractions && lessonStatus === 'private' && (
                               <span class="lesson-status-badge lesson-status-badge--private">
@@ -5540,9 +5550,7 @@ function renderLessonsTreeHTML(
                                     <span class="lesson-type">📝</span>
                                   )}
                                   {canManageLiveInteractions && lessonStatus === 'draft' && (
-                                    <span class="lesson-status-badge lesson-status-badge--draft">
-                                      <span class="lesson-status-blob" aria-hidden="true"></span>DRAFT
-                                    </span>
+                                    <span class="lesson-status-badge lesson-status-badge--draft" title="Borrador: no lo ven los estudiantes" aria-label="Borrador">D</span>
                                   )}
                                   {canManageLiveInteractions && lessonStatus === 'private' && (
                                     <span class="lesson-status-badge lesson-status-badge--private">
@@ -5572,16 +5580,19 @@ function renderLessonsTreeHTML(
           })
         )}
 
-        {!isAmigxCriticxPage && !isRecursosEditorPage && (isLessonPage || (isPublicWikiPage && !session)) && (
+        {!isAmigxCriticxPage && !isRecursosEditorPage && (isLessonPage || isCourseOverviewPage || (isPublicWikiPage && !session)) && (
           <>
-            <div class="chapter class-toc" id="class-toc" hidden>
+            {/* En la portada del curso el TOC sólo sirve para la nota abierta en el
+                workspace: sin esto, quien entraba por /curso y abría notas desde la
+                sidebar no tenía TOC. */}
+            <div class="chapter class-toc" id="class-toc" data-workspace-only={!isLessonPage && isCourseOverviewPage ? 'true' : undefined} hidden>
               <details id="class-toc-details" data-start-folded={isPublicWikiPage && !session ? 'true' : 'false'}>
                 <summary class="chapter-title">Contenido</summary>
                 <ul id="class-toc-list" class="lesson-list class-toc-list"></ul>
               </details>
             </div>
 
-            <div class="chapter page-progress" id="page-progress" hidden>
+            {!isCourseOverviewPage && <div class="chapter page-progress" id="page-progress" hidden>
               <div class="chapter-title">Progreso</div>
               <div class="progress-meter" id="mcc-progress-meter" hidden>
                 <div class="progress-meter-header">
@@ -5593,12 +5604,22 @@ function renderLessonsTreeHTML(
                 </div>
               </div>
               <ul class="lesson-list progress-list" id="page-progress-list"></ul>
-            </div>
+            </div>}
           </>
         )}
 
       </aside>
 
+      {/* Fuera del artículo: .content-area > :first-child le pisa el margin y el
+          modal quedaba pegado arriba. Como modal vive en el top layer. */}
+        {pendingNoteTitle && (
+          <dialog class="note-pending-dialog" id="note-pending-dialog" aria-labelledby="note-pending-title">
+            <p class="note-pending-kicker"><span class="lesson-status-badge lesson-status-badge--draft" aria-hidden="true">D</span> Nota en preparación</p>
+            <h2 id="note-pending-title">{pendingNoteTitle}</h2>
+            <p>Esta nota todavía se está escribiendo. Va a aparecer en la barra lateral cuando se publique.</p>
+            <form method="dialog"><button type="submit" class="note-pending-close" autofocus>Entendido</button></form>
+          </dialog>
+        )}
       <!-- Main Content -->
       <article class="content-area" id="cnw-root" transition:name="course-content" transition:animate="fade">
         {isLessonPage && currentEntryStatus === 'draft' && (
@@ -6156,6 +6177,22 @@ function renderLessonsTreeHTML(
         win.__musikiStrudelBlocksBootBound = true;
         document.addEventListener('astro:page-load', bootStrudelBlocks);
       }
+    </script>
+    <script>
+      // Aviso de "nota en preparación": el server redirige acá a quien sigue un
+      // link a un borrador. Al cerrarlo se saca el parámetro, para que recargar
+      // o compartir la URL no lo vuelva a abrir.
+      function openPendingNoteDialog() {
+        const dialog = document.getElementById('note-pending-dialog');
+        if (!(dialog instanceof HTMLDialogElement) || dialog.open) return;
+        dialog.addEventListener('close', () => {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('en-preparacion');
+          window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+        }, { once: true });
+        dialog.showModal();
+      }
+      document.addEventListener('astro:page-load', openPendingNoteDialog);
     </script>
     {canManageLiveInteractions && (
       <script>
@@ -12062,13 +12099,31 @@ function renderLessonsTreeHTML(
         return true;
       }
 
+      // El TOC se cuelga del item de la nota activa, y la sidebar de notas
+      // reemplaza sus items cuando se refresca: con getElementById el TOC
+      // desaparecía para siempre. Se guarda la referencia y su lugar original.
+      let classTocRoot = null;
+      let classTocHome = null;
+      function getClassTocRoot() {
+        if (!classTocRoot) {
+          classTocRoot = document.getElementById('class-toc');
+          if (classTocRoot) classTocHome = { parent: classTocRoot.parentElement, next: classTocRoot.nextElementSibling };
+        }
+        return classTocRoot;
+      }
+
       function buildClassToc() {
-        const tocRoot = document.getElementById('class-toc');
-        const tocDetails = document.getElementById('class-toc-details');
-        const tocList = document.getElementById('class-toc-list');
+        const tocRoot = getClassTocRoot();
+        const tocDetails = tocRoot?.querySelector('#class-toc-details');
+        const tocList = tocRoot?.querySelector('#class-toc-list');
         const contentArea = document.querySelector('.content-area');
 
         if (!tocRoot || !tocDetails || !tocList || !contentArea) return;
+        if (tocRoot.dataset.workspaceOnly === 'true' && !contentArea.classList.contains('is-dockview-active')) {
+          tocRoot.hidden = true;
+          tocList.innerHTML = '';
+          return;
+        }
         if (contentArea.querySelector('[data-ac-portal]')) {
           tocRoot.hidden = true;
           tocList.innerHTML = '';
@@ -12152,12 +12207,15 @@ function renderLessonsTreeHTML(
       }
 
       function injectInlineToc() {
-        const tocRoot = document.getElementById('class-toc');
+        const tocRoot = getClassTocRoot();
         if (!tocRoot) return;
         const activeLink = getCurrentLessonLink();
         const activeItem = activeLink ? activeLink.closest('.lesson-item') : null;
         if (!activeItem || activeItem.closest('.chapter--amigxcriticx')) {
           tocRoot.classList.remove('class-toc--inline');
+          if (!tocRoot.isConnected && classTocHome?.parent?.isConnected) {
+            classTocHome.parent.insertBefore(tocRoot, classTocHome.next?.isConnected ? classTocHome.next : null);
+          }
           return;
         }
         if (tocRoot.parentElement !== activeItem) {
@@ -15881,6 +15939,8 @@ a[node] -->|edge| b[hub]
         const rebuildTocSoon = () => window.requestAnimationFrame(() => buildClassToc());
         window.addEventListener('musiki:active-note', rebuildTocSoon);
         window.addEventListener('musiki:workspace-toggle', rebuildTocSoon);
+        // La sidebar de notas reemplaza sus items al refrescarse y se lleva el TOC.
+        window.addEventListener('musiki:recursos-sidebar-mounted', rebuildTocSoon);
         applyCourseProgressToSidebar();
         void applyServerProgress();
         updateCourseProgress();
