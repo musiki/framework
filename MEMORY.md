@@ -1,5 +1,12 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-08 astro7-temas-graph-lily> <br>
+- **Astro 7** en producción (merge `72206eb`): `markdown.processor: unified()`, `compressHTML: true`, jsdom estático en svg-sanitize, sin @astrojs/db.
+- **Links dentro de notas**: navegar a otra página del curso ya no restaura los paneles de Dockview encima (`data-lesson-page` en el layout root; `dockview-workspace.ts`).
+- **Temas**: un solo eje por persona, `localStorage['musiki.appearance']` (claro, oscuro, invulne, invulne-oscuro, dracula, lyt), aplicado en `BaseHead` y de nuevo en `astro:after-swap`: el ClientRouter reemplazaba los atributos de `<html>` y algunas notas quedaban con otro tema. Sin elección propia manda el tema global del admin. Selector «Aa» en el ribbon; ribbon, sidebars y lectura con el mismo `--c-bg`.
+- **Graph**: click abre la nota en el workspace, Ctrl/Cmd+click en split a la derecha, Shift+click pliega la rama.
+- **LilyPond**: el servicio corre 2.26.0, que no define `\sffz` ni `\sfff`; `withLegacyDynamics` (lilypond-support.mjs) las define si la partitura las usa.
+
 <2026-11-07 deploy-unico-cohortes-toc> <br>
 Sesión de estabilización (commits `2e1d8d0`..`365ce3c`):
 - **Sidebar**: restauradas variables borradas por error en `8bc74dd` (ReferenceError dejaba el árbol vacío). Las notas sin capítulo van a la raíz (`ROOT_CHAPTER = ''`), sin carpeta sin nombre ni notas placeholder.

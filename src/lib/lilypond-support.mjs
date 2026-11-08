@@ -100,8 +100,27 @@ function buildEnglishCompatibilitySource(source) {
   return normalizedSource.replace(ENGLISH_LANGUAGE_DIRECTIVE_RE, '$1nederlands$2');
 }
 
+// Dinámicas que versiones anteriores del renderer aceptaban y LilyPond 2.26
+// (el del lilypond-service) no define: \sffz y \sfff dan "unknown command" y
+// la partitura entera falla. Se definen sólo si la partitura las usa y no las
+// define ella misma.
+const LEGACY_DYNAMICS = ['sffz', 'sfff'];
+
+export function withLegacyDynamics(source) {
+  const text = String(source || '');
+  const missing = LEGACY_DYNAMICS.filter((name) =>
+    new RegExp(`\\\\${name}(?![A-Za-z])`).test(text)
+    && !new RegExp(`(^|\\n)\\s*${name}\\s*=`).test(text));
+  if (missing.length === 0) return text;
+  const defs = missing.map((name) => `${name} = #(make-dynamic-script "${name}")`).join('\n');
+  const version = /^[ \t]*\\version[^\n]*\n?/m.exec(text);
+  if (!version) return `${defs}\n${text}`;
+  const at = version.index + version[0].length;
+  return `${text.slice(0, at)}${version[0].endsWith('\n') ? '' : '\n'}${defs}\n${text.slice(at)}`;
+}
+
 export function buildLocalLilypondSourceAttempts(source) {
-  const primarySource = ensurePlayableLilypondSource(source);
+  const primarySource = ensurePlayableLilypondSource(withLegacyDynamics(source));
   const attempts = [primarySource];
   const compatibilitySource = buildEnglishCompatibilitySource(primarySource);
   if (compatibilitySource && compatibilitySource !== primarySource) {
