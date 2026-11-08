@@ -1018,7 +1018,11 @@ export function initDockviewWorkspace(
   const previousCourseId = _activeContainer?.dataset.cnwCourseId ?? '';
   const entryType = container.querySelector<HTMLElement>('[data-class-content]')?.dataset.entryType ?? '';
   const isDedicatedPortalView = entryType === 'amigx-criticx' || entryType === 'recursos-editor';
-  const slugsToRestore = (!isDedicatedPortalView && _activeWorkspace && previousCourseId === courseId)
+  // Un link dentro de una nota navega a otra página del curso: si se restauraban
+  // los paneles, el workspace tapaba la nota nueva y parecía que el click no
+  // hacía nada. Al llegar a una página de nota se muestra esa página.
+  const arrivedAtLessonPage = document.querySelector<HTMLElement>('[data-course-layout-root]')?.dataset.lessonPage === 'true';
+  const slugsToRestore = (!isDedicatedPortalView && !arrivedAtLessonPage && _activeWorkspace && previousCourseId === courseId)
     ? [...panelStates.values()].map(s => s.slug)
     : [];
 
