@@ -852,24 +852,20 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
         }
       })
       .onNodeClick((node, event) => {
-        // Shift+Click: open the note (or tag page).
+        // Click abre la nota; Ctrl/Cmd+click la abre a la derecha, en split.
+        // Shift+click pliega o despliega la rama (antes era el click simple, y
+        // por eso hacer click en una nota no la abría).
         if (event.shiftKey) {
-          if (node.type === 'document') {
-            window.location.href = '/' + (node.canonicalSlug || node.id);
-          } else if (node.type === 'tag') {
-            const tag = node.id.replace('tag:', '');
-            window.location.href = '/' + encodeURIComponent(tag);
-          }
+          const toggled = node.type === 'document' && toggleNodeBranch(node.id);
+          if (!toggled) graphInstance.centerAt(node.x, node.y, 800);
           return;
         }
-        // Plain click: open/close this node's branch if it has children;
-        // otherwise just center on it.
-        const toggled = node.type === 'document' && toggleNodeBranch(node.id);
-        if (!toggled) {
-          graphInstance.centerAt(node.x, node.y, 800);
+        if (node.type === 'tag') {
+          window.location.href = '/' + encodeURIComponent(node.id.replace('tag:', ''));
+          return;
         }
+        if (node.type === 'document') openGraphNode(node, event.ctrlKey || event.metaKey);
       });
-    
     updateLegend(data);
     updateFilterButton();
 
@@ -934,6 +930,32 @@ const isLoggedIn = Boolean((Astro.locals as any)?.session?.user);
     graphInstance.graphData(data);
     updateLegend(data);
     updateFilterButton();
+  }
+
+  // Abre la nota del nodo en el workspace del curso si se puede (las del curso
+  // actual y las públicas); si no, navega. Mismo formato de slug que usa la
+  // sidebar: `cursos/<curso>/<ruta>.md` para docentes y el canonicalSlug para
+  // las notas públicas.
+  function openGraphNode(node, split) {
+    const ws = window.__cnwWorkspace;
+    const layoutRoot = document.querySelector('[data-course-layout-root]');
+    const courseId = layoutRoot?.dataset.liveCourseId || '';
+    const canManage = layoutRoot?.dataset.canManageLiveInteractions === 'true';
+    const id = String(node.id || '');
+    let wsSlug = '';
+    if (node.isPublic && node.canonicalSlug) wsSlug = node.canonicalSlug;
+    else if (canManage && courseId && id.startsWith(`cursos/${courseId}/`)) wsSlug = `${id}.md`;
+
+    if (ws && wsSlug) {
+      void setModalOpen(false, 'local');
+      ws.openNote(wsSlug, 'preview', split);
+      return;
+    }
+    const href = node.course && !node.isPublic
+      ? `/${node.course}/${node.canonicalSlug || id.split('/').pop()}`
+      : '/' + (node.canonicalSlug || id);
+    if (split) window.open(href, '_blank', 'noopener');
+    else window.location.href = href;
   }
 
   // Center on current page
