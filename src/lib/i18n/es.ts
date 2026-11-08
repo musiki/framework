@@ -277,6 +277,7 @@ export const es: Dict = {
     activitySoon: 'Actividad (próximamente)',
     changeTheme: 'Cambiar tema',
     changeThemeTitle: 'Cambiar tema claro/oscuro',
+    chooseTheme: 'Elegir tema',
     infoMetadata: 'Info y metadatos',
     infoTitle: 'Info (⌘/Ctrl + i)',
     progressPath: 'Progreso del recorrido',

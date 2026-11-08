@@ -276,6 +276,7 @@ export const en = {
     activitySoon: 'Activity (coming soon)',
     changeTheme: 'Change theme',
     changeThemeTitle: 'Switch light/dark theme',
+    chooseTheme: 'Choose theme',
     infoMetadata: 'Info and metadata',
     infoTitle: 'Info (⌘/Ctrl + i)',
     progressPath: 'Path progress',

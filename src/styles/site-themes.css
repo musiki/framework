@@ -94,6 +94,65 @@ html.dark[data-musiki-theme='invulne'] {
   color-scheme: dark;
 }
 
+/* Dracula: la paleta pública de draculatheme.com. Siempre oscuro. */
+/* .dark en el selector: si no, :root.dark (Catppuccin) le gana. */
+html.dark[data-musiki-theme='dracula'] {
+  --c-bg: #282a36;
+  --c-bg-surface: #21222c;
+  --c-bg-alt: #343746;
+  --c-bg-mute: #2f3140;
+  --c-fg: #f8f8f2;
+  --c-subtle: #d8d8e2;
+  --c-fg-dim: #b0b3cc;
+  --c-fg-subtle: #8a8fb0;
+  --c-link: #bd93f9;
+  --c-border: #44475a;
+  --accent: #ff79c6;
+  --accent-dark: #ff92d0;
+  --bullet-2: #8be9fd;
+  --bullet-3: #ffb86c;
+  --invulne-nav-active: #f8f8f2;
+  --invulne-nav-rail: #bd93f9;
+  --invulne-nav-signal: #ff79c6;
+  color-scheme: dark;
+}
+
+/* LYT: papel cálido, tinta gris azulada y un solo acento verde azulado. */
+html[data-musiki-theme='lyt'] {
+  --c-bg: #f7f6f2;
+  --c-bg-surface: #fbfaf7;
+  --c-bg-alt: #ebe9e2;
+  --c-bg-mute: #f0eee8;
+  --c-fg: #2c2f33;
+  --c-subtle: #4b4f56;
+  --c-fg-dim: #686c73;
+  --c-fg-subtle: #8a8d92;
+  --c-link: #2e7686;
+  --c-border: #dcd9cf;
+  --accent: #2e7686;
+  --accent-dark: #225a66;
+  --bullet-2: #2e7686;
+  --bullet-3: #b8792f;
+  --invulne-nav-active: #225a66;
+  --invulne-nav-rail: #2e7686;
+  --invulne-nav-signal: #b8792f;
+  color-scheme: light;
+}
+
+/* Un solo color de fondo para ribbon, sidebars y lectura: las zonas se separan
+   con una línea, no con tintes distintos que no combinaban entre sí. */
+html[data-musiki-theme] .course-container,
+html[data-musiki-theme] .ribbon,
+html[data-musiki-theme] .sidebar {
+  background: var(--c-bg);
+}
+html[data-musiki-theme] .sidebar--left {
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--c-border) 70%, transparent);
+}
+html[data-musiki-theme] .sidebar--right {
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--c-border) 70%, transparent);
+}
+
 html[data-musiki-theme] body {
   background: var(--c-bg);
   color: var(--c-fg);
@@ -223,9 +282,7 @@ html[data-musiki-theme] .course-container {
 html[data-musiki-theme] .sidebar--left {
   --course-sidebar-pad-x: 1rem;
   font-family: var(--font-interface);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--c-fg) 2.5%, transparent), transparent 9rem),
-    color-mix(in srgb, var(--c-fg) 3%, var(--c-bg));
+  background: var(--c-bg);
 }
 
 html[data-musiki-theme] .sidebar--left .chapter {

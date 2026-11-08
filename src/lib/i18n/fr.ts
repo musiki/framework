@@ -64,6 +64,7 @@ export const fr: DeepPartial<Omit<Dict, 'mm'>> = {
     activitySoon: 'Activité (bientôt disponible)',
     changeTheme: 'Changer le thème',
     changeThemeTitle: 'Changer le thème clair/sombre',
+    chooseTheme: 'Choisir le thème',
     infoMetadata: 'Infos et métadonnées',
     infoTitle: 'Infos (⌘/Ctrl + i)',
     progressPath: 'Progression du parcours',

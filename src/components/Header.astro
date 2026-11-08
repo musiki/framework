@@ -456,12 +456,16 @@ const withActiveCourse = (href: string) => {
 			return false;
 		};
 
+		// Claro ↔ oscuro dentro de la familia del tema elegido (BaseHead).
 		const handleThemeToggleClick = () => {
-			const element = document.documentElement;
-			element.classList.toggle('dark');
-			const isDark = element.classList.contains('dark');
-			element.dataset.theme = isDark ? 'dark' : 'light';
-			localStorage.setItem('theme', isDark ? 'dark' : 'light');
+			const api = (window as unknown as { musikiAppearance?: { get: () => string; set: (id: string) => void } }).musikiAppearance;
+			if (!api) return;
+			const pairs: Record<string, string> = {
+				claro: 'oscuro', oscuro: 'claro',
+				invulne: 'invulne-oscuro', 'invulne-oscuro': 'invulne',
+				lyt: 'dracula', dracula: 'lyt',
+			};
+			api.set(pairs[api.get()] || 'oscuro');
 		};
 
 		const themeButton = document.getElementById('theme-toggle');

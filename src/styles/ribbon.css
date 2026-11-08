@@ -1,7 +1,7 @@
 /* ── Ribbon variables ──────────────────────────────────────────────────── */
 :root {
   --ribbon-width: 44px;
-  --ribbon-bg: color-mix(in srgb, var(--c-bg) 97%, var(--c-fg) 3%);
+  --ribbon-bg: var(--c-bg);
   --ribbon-border: var(--c-border);
   --ribbon-item-size: 32px;
   --ribbon-bottom-height: 52px; /* mobile */
