@@ -395,26 +395,27 @@ hr {
 }
 
 .dark body {
-  background: #1e1e2e !important;
-  color: #cdd6f4;
+  /* Del tema activo: con colores fijos de Catppuccin, Dracula asomaba con otro fondo. */
+  background: var(--c-bg) !important;
+  color: var(--c-fg);
 }
 
 .dark header {
-  background: #181825 !important;
-  border-bottom: 1px solid #313244;
+  background: var(--c-bg) !important;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .dark nav {
-  background: #181825;
+  background: var(--c-bg);
 }
 
 .dark .card {
-  background: #181825;
-  border-color: #313244;
+  background: var(--c-bg-surface, var(--c-bg));
+  border-color: var(--c-border);
 }
 
 .dark main {
-  color: #cdd6f4;
+  color: var(--c-fg);
 }
 
 .dark h1,
@@ -431,15 +432,15 @@ hr {
 }
 
 .dark code {
-  background-color: #313244;
-  color: #a6e3a1;
+  background-color: var(--c-bg-mute);
+  color: var(--c-code, #a6e3a1);
   border-radius: 3px;
   padding: 0 3px;
 }
 
 .dark pre {
-  background-color: #181825;
-  border: 1px solid #313244;
+  background-color: var(--c-bg-surface, var(--c-bg));
+  border: 1px solid var(--c-border);
 }
 
 .dark .astro-code > code {
@@ -449,12 +450,12 @@ hr {
 }
 
 .dark blockquote {
-  border-left-color: #cba6f7;
-  color: #a6adc8;
+  border-left-color: var(--accent, #cba6f7);
+  color: var(--c-subtle);
 }
 
 .dark hr {
-  border-top-color: #313244;
+  border-top-color: var(--c-border);
 }
 
 .sr-only {
