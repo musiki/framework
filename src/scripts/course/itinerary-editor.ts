@@ -27,6 +27,9 @@ const STOP_MIME = 'text/x-musiki-itinerary-stop';
 const CHIP_MIME = 'text/x-musiki-itinerary-chip';
 const SAVE_DELAY_MS = 600;
 
+/** Lo que edita el docente, al momento: el Recorrido del pod lo dibuja al lado. */
+export const ITINERARY_DRAFT_EVENT = 'musiki:itinerary-draft';
+
 const kindOf = (id: string) => ITINERARY_KINDS.find((k) => k.id === id) ?? ITINERARY_KINDS[2];
 
 export function mountItineraryEditor(root: HTMLElement, courseId: string): () => void {
@@ -57,6 +60,15 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
   const setStatus = (text: string, tone: '' | 'error' = '') => {
     status.textContent = text;
     status.dataset.tone = tone;
+  };
+
+  const noteOf = (slug: string) => notes.find((n) => slugKey(n.slug, courseId) === slugKey(slug, courseId));
+  const noteKindOf = (slug: string) => kindForNoteType(noteOf(slug)?.type) || 'concepto';
+
+  const publishDraft = () => {
+    window.dispatchEvent(new CustomEvent(ITINERARY_DRAFT_EVENT, {
+      detail: { courseId, cohortId: cohort?.id || '', stops: stops.map((stop) => ({ ...stop, notes: [...stop.notes] })) },
+    }));
   };
 
   const titleOf = (slug: string) =>
@@ -122,6 +134,7 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
 
   // ── Guardado
   function scheduleSave() {
+    publishDraft();
     window.clearTimeout(saveTimer);
     setStatus('Sin guardar…');
     saveTimer = window.setTimeout(() => void save(), SAVE_DELAY_MS);
@@ -270,12 +283,18 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     for (const slug of stop.notes) {
       const chip = document.createElement('li');
       chip.className = 'cpp-it-chip';
+      const noteKind = noteKindOf(slug);
+      chip.dataset.kind = noteKind;
       chip.draggable = true;
       chip.title = slug;
       chip.addEventListener('dragstart', (e) => {
         e.dataTransfer?.setData(CHIP_MIME, JSON.stringify({ slug, from: stop.id }));
         if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
       });
+      const glyph = document.createElement('i');
+      glyph.className = 'cpp-it-chip-kind';
+      glyph.textContent = kindOf(noteKind).icon;
+      glyph.title = kindOf(noteKind).label;
       const label = document.createElement('span');
       label.textContent = titleOf(slug);
       const x = document.createElement('button');
@@ -286,7 +305,7 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
         stop.notes = stop.notes.filter((s) => s !== slug);
         commit();
       });
-      chip.append(label, x);
+      chip.append(glyph, label, x);
       chips.appendChild(chip);
     }
     if (!stop.notes.length) {
@@ -352,6 +371,7 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
       li.addEventListener('click', () => addNote(note));
       const icon = document.createElement('span');
       icon.className = 'cpp-it-res-kind';
+      icon.dataset.kind = kindForNoteType(note.type) || 'concepto';
       icon.textContent = kindOf(kindForNoteType(note.type)).icon;
       const label = document.createElement('span');
       label.textContent = note.title;
@@ -371,6 +391,7 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     }
     markSelected();
     renderReservoir();
+    publishDraft();
   }
 
   // ── Controles

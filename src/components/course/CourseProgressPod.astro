@@ -455,6 +455,18 @@ const clientStrings = JSON.stringify({
   .cpp-icon-btn[hidden] { display: none; }
   .cpp-icon-btn:hover,
   .cpp-icon-btn[aria-pressed='true'] { border-color: var(--cpp-accent); color: var(--cpp-accent); }
+  /* Maximizado con el editor de itinerario a la vista (docentes): editor y
+     Recorrido lado a lado, para ver la estructura mientras se arma. */
+  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > * { grid-column: 1 / -1; }
+  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > .cpp-header { grid-row: 1; }
+  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > .cpp-hot { grid-row: 2; }
+  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > #cpp-itinerary { grid-column: 1; grid-row: 3; }
+  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > .cpp-route { grid-column: 2; grid-row: 3; position: sticky; top: 5rem; }
   /* Progreso a pantalla completa (la sidebar derecha maximizada): el Connectoma crece. */
   .course-container[data-right-maximized='true'] .cpp-graph { height: 62vh; }
   /* Recorrido: la parada actual con acento, el resto en muted. */
@@ -463,14 +475,22 @@ const clientStrings = JSON.stringify({
   .cpp-stop[data-state='upcoming'],
   .cpp-stop[data-state='done'] { opacity: 0.45; }
   .cpp-stop:hover { opacity: 0.9; }
-  .cpp-disc { fill: var(--c-bg); stroke: var(--cpp-line); stroke-width: 4; }
+  .cpp-disc { fill: var(--c-bg); stroke: none; }
   .cpp-disc.is-done { fill: color-mix(in srgb, var(--cpp-accent) 14%, var(--c-bg)); }
-  .cpp-arc { fill: none; stroke: var(--cpp-accent); stroke-width: 4; stroke-linecap: round; }
+  /* Gajos del aro: sin leer = línea, leído = tinta tenue, completo = tinta, evaluado = acento. */
+  .cpp-slice { fill: none; stroke: var(--cpp-line); stroke-width: 5; stroke-linecap: butt; }
+  .cpp-slice.is-read { stroke: color-mix(in srgb, var(--c-fg) 38%, transparent); }
+  .cpp-slice.is-done { stroke: color-mix(in srgb, var(--c-fg) 80%, transparent); }
+  .cpp-slice.is-eval { stroke: var(--cpp-accent); }
+  .cpp-path-link:hover .cpp-slice { stroke-width: 7; }
   .cpp-kind { fill: currentColor; font-size: 15px; opacity: 0.8; }
   .cpp-stop[data-state='current'] .cpp-kind,
   .cpp-stop[data-state='current'] .cpp-stop-lab { fill: var(--cpp-accent); opacity: 1; }
   .cpp-stop-lab { font-weight: 600; }
-  .cpp-ring.cpp-dot { fill: var(--c-bg); }
+  /* El kind de la parada también se ve en el círculo. */
+  .cpp-stop--clase .cpp-disc { fill: color-mix(in srgb, var(--c-fg) 9%, var(--c-bg)); }
+  .cpp-stop--assignment .cpp-kind { fill: var(--cpp-gold); opacity: 1; }
+  .cpp-stop--output .cpp-disc { fill: color-mix(in srgb, var(--cpp-gold) 14%, var(--c-bg)); }
   .cpp-legend {
     display: flex;
     flex-wrap: wrap;
@@ -520,7 +540,7 @@ const clientStrings = JSON.stringify({
   import { pendingFromPod, publishPending } from '../../lib/course/progress-pending.mjs';
   import { summarizeActiveNote } from '../../lib/course/active-note-progress.mjs';
   import { ITINERARY_KINDS } from '../../lib/itinerary/itinerary.mjs';
-  import { resolveRoute, visibleStopIndexes } from '../../lib/itinerary/route-position.mjs';
+  import { resolveRoute, sliceItems, visibleStopIndexes } from '../../lib/itinerary/route-position.mjs';
   import { createConnectome, type Connectome } from '../../scripts/course/progress-connectome';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -531,8 +551,7 @@ const clientStrings = JSON.stringify({
   const CX = VIEW_W / 2;
   const ZIGZAG = [0, 52, 0, -52];
   const CR = 24;
-  const ORBIT = 37;
-  const ROW_H = 124;
+  const ROW_H = 118;
   const TOP = 48;
 
   const REQ_LABEL: Record<string, string> = {
@@ -553,6 +572,7 @@ const clientStrings = JSON.stringify({
   let connectome: Connectome | null = null;
   let itinerary: { stops: any[] } | null = null;
   const ROUTE_FOLD_KEY = 'musiki:progress-route-folded';
+  let draftFor = '';
   let lastCourse = '';
   let lastData: any = null;
   let activeSlug = '';
@@ -711,20 +731,22 @@ const clientStrings = JSON.stringify({
     return link;
   }
 
-  function appendNoteDot(parent: SVGElement, concept: any, x: number, y: number) {
-    const state = stateOf(concept);
-    const link = noteLink(concept, String(concept.name || concept.slug || 'Nota'));
-    const r = 4.6;
-    if (state >= 3) link.appendChild(svgEl('rect', { x: String(x - r), y: String(y - r), width: String(r * 2), height: String(r * 2), transform: `rotate(45 ${x} ${y})`, class: 'cpp-eval' }));
-    else if (state === 2) link.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(r), class: 'cpp-solid' }));
-    else {
-      if (state === 1) link.appendChild(svgEl('path', { d: `M ${x} ${y - r} a ${r} ${r} 0 0 1 0 ${r * 2} Z`, class: 'cpp-half' }));
-      link.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(r), class: 'cpp-ring cpp-dot' }));
-    }
-    parent.appendChild(link);
+  type RouteStop = { stop: any; items: any[]; state: string };
+
+  // Un gajo del aro: el arco entre dos ángulos, con un hueco a cada lado.
+  function arcPath(x: number, y: number, r: number, from: number, to: number): string {
+    const gap = 0.16;
+    const a0 = from + gap / 2;
+    const a1 = to - gap / 2;
+    const p0 = [x + r * Math.cos(a0), y + r * Math.sin(a0)];
+    const p1 = [x + r * Math.cos(a1), y + r * Math.sin(a1)];
+    return `M ${p0[0]} ${p0[1]} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${p1[0]} ${p1[1]}`;
   }
 
-  type RouteStop = { stop: any; items: any[]; state: string };
+  const sliceClass = (concept: any) => {
+    const state = stateOf(concept);
+    return state >= 3 ? 'cpp-slice is-eval' : state === 2 ? 'cpp-slice is-done' : state === 1 ? 'cpp-slice is-read' : 'cpp-slice';
+  };
 
   function renderCircles(host: HTMLElement, chapterLabel: string, stops: RouteStop[]) {
     const section = document.createElement('section');
@@ -735,36 +757,35 @@ const clientStrings = JSON.stringify({
       heading.textContent = chapterLabel;
       section.appendChild(heading);
     }
-    const height = TOP + (stops.length - 1) * ROW_H + ORBIT + 46;
+    const height = TOP + (stops.length - 1) * ROW_H + CR + 52;
     const svg = svgEl('svg', { viewBox: `0 0 ${VIEW_W} ${height}` });
     const centers = stops.map((_, i) => ({ x: CX + ZIGZAG[i % ZIGZAG.length], y: TOP + i * ROW_H }));
+    const allConcepts = lastData?.concepts || [];
+    const allEdges = lastData?.edges || [];
+    const slicesOf = stops.map(({ items }) => sliceItems(items, allConcepts, allEdges) as any[]);
     centers.slice(0, -1).forEach((from, i) => {
       const to = centers[i + 1];
-      const done = stops[i].items.length > 0 && stops[i].items.every((item) => stateOf(item) >= 2);
+      const done = slicesOf[i].length > 0 && slicesOf[i].every((item) => stateOf(item) >= 2);
       svg.appendChild(svgEl('path', {
-        d: `M ${from.x} ${from.y + ORBIT + 8} C ${from.x} ${from.y + ROW_H / 2}, ${to.x} ${to.y - ROW_H / 2}, ${to.x} ${to.y - ORBIT - 8}`,
+        d: `M ${from.x} ${from.y + CR + 40} C ${from.x} ${from.y + ROW_H / 2 + 20}, ${to.x} ${to.y - ROW_H / 2 + 10}, ${to.x} ${to.y - CR - 10}`,
         class: `cpp-conn${done ? ' done' : ''}`,
       }));
     });
-    stops.forEach(({ stop, items, state }, i) => {
+    stops.forEach(({ stop, state }, i) => {
       const { x, y } = centers[i];
-      const group = svgEl('g', { class: 'cpp-stop', 'data-state': state });
-      const real = items.filter((item) => !item.placeholder);
-      const doneCount = items.filter((item) => stateOf(item) >= 2).length;
-      const pct = items.length ? Math.round((100 * doneCount) / items.length) : 0;
+      const slices = slicesOf[i];
+      const group = svgEl('g', { class: `cpp-stop cpp-stop--${stop.kind || 'concepto'}`, 'data-state': state });
+      const real = slices.filter((item) => !item.placeholder);
+      const complete = slices.length > 0 && slices.every((item) => stateOf(item) >= 2);
       const next = real.find((item) => stateOf(item) < 2) || real[0];
       const label = String(stop.title || '');
       const circle = next ? noteLink(next, label) : svgEl('g', {});
-      if (state === 'current') circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR + 6), class: 'cpp-halo cpp-next' }));
-      circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR), class: pct === 100 ? 'cpp-disc is-done' : 'cpp-disc' }));
-      circle.appendChild(svgEl('circle', {
-        cx: String(x), cy: String(y), r: String(CR), pathLength: '100',
-        'stroke-dasharray': `${pct} 100`, transform: `rotate(-90 ${x} ${y})`, class: 'cpp-arc',
-      }));
+      if (state === 'current') circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR + 8), class: 'cpp-halo cpp-next' }));
+      circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR - 4), class: complete ? 'cpp-disc is-done' : 'cpp-disc' }));
       const icon = svgEl('text', { x: String(x), y: String(y), 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'cpp-kind' });
       icon.textContent = KIND_ICON.get(stop.kind) || '◆';
       circle.appendChild(icon);
-      const text = svgEl('text', { x: String(x), y: String(y + ORBIT + 20), 'text-anchor': 'middle', class: 'cpp-lab cpp-stop-lab' });
+      const text = svgEl('text', { x: String(x), y: String(y + CR + 20), 'text-anchor': 'middle', class: 'cpp-lab cpp-stop-lab' });
       labelLines(label).forEach((line, index) => {
         const span = svgEl('tspan', { x: String(x), dy: index ? '1.15em' : '0' });
         span.textContent = line;
@@ -772,11 +793,20 @@ const clientStrings = JSON.stringify({
       });
       circle.appendChild(text);
       group.appendChild(circle);
-      // Las notas de la parada alrededor del aro, empezando arriba.
-      items.forEach((item, k) => {
-        const angle = -Math.PI / 2 + (2 * Math.PI * k) / Math.max(items.length, 1);
-        appendNoteDot(group, item, x + ORBIT * Math.cos(angle), y + ORBIT * Math.sin(angle));
-      });
+      // El aro en gajos, uno por nota (o por hija de la nota): cada gajo abre la suya.
+      if (slices.length <= 1) {
+        const ring = slices[0] && !slices[0].placeholder ? noteLink(slices[0], String(slices[0].name || label)) : svgEl('g', {});
+        ring.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR), class: slices[0] ? sliceClass(slices[0]) : 'cpp-slice' }));
+        group.appendChild(ring);
+      } else {
+        const step = (2 * Math.PI) / slices.length;
+        slices.forEach((item, k) => {
+          const from = -Math.PI / 2 + k * step;
+          const link = item.placeholder ? svgEl('g', {}) : noteLink(item, String(item.name || item.slug || 'Nota'));
+          link.appendChild(svgEl('path', { d: arcPath(x, y, CR, from, from + step), class: sliceClass(item) }));
+          group.appendChild(link);
+        });
+      }
       svg.appendChild(group);
     });
     section.appendChild(svg);
@@ -812,6 +842,14 @@ const clientStrings = JSON.stringify({
     }
     appendProject(host, project);
   }
+
+  // El docente edita el itinerario: el Recorrido dibuja el borrador al momento.
+  window.addEventListener('musiki:itinerary-draft', ((event: CustomEvent<{ courseId?: string; stops?: any[] }>) => {
+    if (event.detail?.courseId !== courseId()) return;
+    draftFor = courseId();
+    itinerary = { stops: Array.isArray(event.detail.stops) ? event.detail.stops : [] };
+    if (lastData) renderPath(lastData.concepts || [], lastData.project || {});
+  }) as EventListener);
 
   el('cpp-route-fold')?.addEventListener('click', () => {
     try { localStorage.setItem(ROUTE_FOLD_KEY, routeFolded() ? '0' : '1'); } catch { /* sin storage queda desplegado */ }
@@ -995,7 +1033,8 @@ const clientStrings = JSON.stringify({
       publishPending(cid, pendingFromPod(data));
       renderRubric(data.rubric || {}, data.required || {}, data.project || {});
       renderHotNote();
-      itinerary = await loadItinerary(cid);
+      // Si el editor de itinerario está abierto, manda su borrador (el de la cohorte elegida).
+      if (draftFor !== cid) itinerary = await loadItinerary(cid);
       renderPath(concepts, data.project || {});
       renderConnectome(concepts, edges);
       updateActiveUnit();

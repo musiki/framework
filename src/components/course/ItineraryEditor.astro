@@ -207,4 +207,14 @@
   .cpp-it-res-item:hover { background: color-mix(in srgb, var(--cpp-accent, var(--c-accent)) 8%, transparent); }
   .cpp-it-res-item span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cpp-it-res-kind { color: var(--c-fg-dim); text-align: center; }
+  /* Tipo de nota a la vista: concepto (pastilla), clase (llena), protocolo
+     (punteado), assignment (dorado), output (doble). */
+  .cpp-it-chip-kind { font-style: normal; font-size: 0.6rem; opacity: 0.75; }
+  .cpp-it-chip[data-kind='concepto'] { border-radius: 999px; }
+  .cpp-it-chip[data-kind='clase'] { border-radius: 3px; border-color: var(--c-fg); background: color-mix(in srgb, var(--c-fg) 10%, var(--c-bg)); font-weight: 600; }
+  .cpp-it-chip[data-kind='protocolo'] { border-radius: 3px; border-style: dashed; }
+  .cpp-it-chip[data-kind='assignment'] { border-radius: 3px; border-color: var(--cpp-gold, #b8892b); color: var(--cpp-gold, #b8892b); }
+  .cpp-it-chip[data-kind='output'] { border-radius: 3px; border-style: double; border-width: 3px; }
+  .cpp-it-res-kind[data-kind='clase'] { color: var(--c-fg); }
+  .cpp-it-res-kind[data-kind='assignment'] { color: var(--cpp-gold, #b8892b); }
 </style>

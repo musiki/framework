@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { conceptState, noteKey, resolveRoute, visibleStopIndexes } from './route-position.mjs';
+import { conceptState, noteKey, resolveRoute, sliceItems, visibleStopIndexes } from './route-position.mjs';
 
 test('noteKey compara slugs de cualquier forma por su última parte', () => {
   assert.equal(noteKey('public/11-sesgos/sesgo-de-confirmacion'), 'sesgo-de-confirmacion');
@@ -67,4 +67,22 @@ test('visibleStopIndexes: plegado muestra la actual y sus vecinas', () => {
   assert.deepEqual(visibleStopIndexes(5, 2, true), [1, 2, 3]);
   assert.deepEqual(visibleStopIndexes(5, 0, true), [0, 1]);
   assert.deepEqual(visibleStopIndexes(5, -1, true), [0, 1, 2, 3, 4]);
+});
+
+test('sliceItems: una parada de una nota se parte en sus hypo', () => {
+  const all = [
+    { id: 'clase' },
+    { id: 'a' },
+    { id: 'b' },
+    { id: 'c' },
+  ];
+  const edges = [
+    { source: 'clase', target: 'a', type: 'rel', relType: 'hypo' },
+    { source: 'b', target: 'clase', type: 'rel', relType: 'hyper' },
+    { source: 'clase', target: 'c', type: 'rel', relType: 'connect' },
+    { source: 'clase', target: 'c', type: 'link' },
+  ];
+  assert.deepEqual(sliceItems([all[0]], all, edges).map((c) => c.id), ['a', 'b']);
+  assert.deepEqual(sliceItems([all[2]], all, edges).map((c) => c.id), ['b']);
+  assert.deepEqual(sliceItems([all[1], all[2]], all, edges).map((c) => c.id), ['a', 'b']);
 });

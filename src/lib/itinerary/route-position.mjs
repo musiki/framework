@@ -80,3 +80,23 @@ export function visibleStopIndexes(total, currentIndex, folded) {
   if (!folded || currentIndex < 0) return all;
   return all.filter((i) => Math.abs(i - currentIndex) <= 1);
 }
+
+/**
+ * Los gajos del aro de una parada (como los de un círculo de Duolingo): sus
+ * notas. Una parada de una sola nota que tiene hijas por `hypo:` (o notas que
+ * la declaran `hyper:`) se parte en esas hijas: una clase con sus conceptos.
+ */
+export function sliceItems(items, concepts, edges) {
+  if (!Array.isArray(items) || items.length !== 1 || items[0]?.placeholder) return items || [];
+  const parentId = items[0].id;
+  const byId = new Map((concepts || []).map((c) => [c.id, c]));
+  const childIds = [];
+  for (const edge of edges || []) {
+    if (edge?.type !== 'rel') continue;
+    const child = edge.relType === 'hypo' && edge.source === parentId
+      ? edge.target
+      : (edge.relType === 'hyper' && edge.target === parentId ? edge.source : null);
+    if (child && child !== parentId && byId.has(child) && !childIds.includes(child)) childIds.push(child);
+  }
+  return childIds.length ? childIds.map((id) => byId.get(id)) : items;
+}
