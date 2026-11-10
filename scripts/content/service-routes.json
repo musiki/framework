@@ -3,6 +3,7 @@
   "services": [
     {
       "id": "amigxcriticx",
+      "label": "amigx críticx",
       "courseId": "s123",
       "slugs": ["amigxcriticx", "amigx-criticx", "amigo-critico", "85-amigx-criticx"],
       "views": ["devoluciones", "dashboard"],

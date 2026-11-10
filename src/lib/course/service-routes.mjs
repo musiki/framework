@@ -6,7 +6,7 @@ import config from '../../../scripts/content/service-routes.json' with { type: '
 
 export const FOLDED_CONCEPT_ANCHOR = 'concepto';
 
-/** @typedef {{ id: string, courseId: string, slugs: string[], views: string[], conceptSlug?: string }} ServiceRoute */
+/** @typedef {{ id: string, label?: string, courseId: string, slugs: string[], views: string[], conceptSlug?: string }} ServiceRoute */
 
 /** @type {ServiceRoute[]} */
 export const SERVICE_ROUTES = config.services;

@@ -397,6 +397,15 @@ const isAmigxCriticxDevolucionesPage =
 const isAmigxCriticxDashboardPage =
   isAmigxCriticxPage &&
   (amigxServiceMatch?.view === 'dashboard' || Astro.url.searchParams.get('view') === 'dashboard');
+// Sin sesión, la URL de un servicio que comparte slug con una nota pública
+// muestra la nota (modo lector público). Quien llega con el link del servicio
+// tiene que poder ingresar y volver acá.
+const serviceLoginMatch = !session
+  ? (topLevelServiceMatch || (parts.length > 1 ? matchServiceRoute(normalizeContentSlug(parts.slice(1).join('/')), parts[0]) : null))
+  : null;
+const serviceLoginHref = serviceLoginMatch
+  ? `/login?redirect=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`
+  : '';
 const FoldedConceptContent = isAmigxCriticxPage && foldedConceptEntry && !isAmigxCriticxDevolucionesPage && !isAmigxCriticxDashboardPage
   ? (await render(foldedConceptEntry)).Content
   : null;
@@ -5628,6 +5637,12 @@ function renderLessonsTreeHTML(
           </div>
         )}
 
+      {serviceLoginHref && (
+        <aside class="service-login-notice">
+          <span>Esta dirección es también el servicio <strong>{serviceLoginMatch?.service.label || serviceLoginMatch?.service.id}</strong> de {serviceLoginMatch?.service.courseId}.</span>
+          <a class="service-login-notice-link" href={serviceLoginHref}>Ingresar para usarlo</a>
+        </aside>
+      )}
       <div class="class-content" data-class-content data-entry-type={isRecursosEditorPage ? 'recursos-editor' : isAmigxCriticxPage ? 'amigx-criticx' : currentEntryType}>
         {isRecursosEditorPage ? (
           <RecursosEditor
