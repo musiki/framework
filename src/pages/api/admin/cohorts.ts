@@ -88,6 +88,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   );
   const cohorteAnterior = Array.isArray(activas) && activas[0] ? (activas[0] as any).id : null;
 
+  // Si la copia de docentes falla, la cohorte recién creada se borra antes de
+  // reponer la anterior: con la nueva activa, el índice parcial no deja.
+  let creadaId: unknown = null;
   try {
     // El índice parcial impide dos activas por materia, así que primero se baja
     // la anterior y recién después se inserta la nueva.
@@ -109,12 +112,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const cohorte = Array.isArray(creada) ? (creada[0] as any) : null;
     if (!cohorte?.id) throw new Error('La cohorte no devolvió id.');
+    creadaId = cohorte.id;
 
     let docentesCopiados = 0;
     if (copyTeachers && cohorteAnterior) {
       const { data: copiadas, error: errorCopia } = await query(
         `INSERT INTO "Enrollment" ("userId", "courseId", "roleInCourse", "cohortId")
-         SELECT DISTINCT e."userId", e."courseId", e."roleInCourse", $1
+         SELECT DISTINCT e."userId", e."courseId", e."roleInCourse", $1::bigint
            FROM "Enrollment" e
           WHERE e."cohortId" = $2
             AND e."roleInCourse" IS DISTINCT FROM 'student'
@@ -134,8 +138,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   } catch (error: any) {
     console.error('[cohorts] create failed:', error);
-    // Si algo falló después de desactivar la anterior, la materia queda sin
-    // cohorte activa. Se repone para no dejarla en un estado raro.
+    // Si algo falló a mitad de camino, se deshace: fuera la cohorte nueva (sin
+    // inscriptos todavía) y de vuelta activa la anterior.
+    if (creadaId) {
+      await query(`DELETE FROM "Cohort" WHERE "id" = $1`, [creadaId]).catch((e) =>
+        console.error('[cohorts] rollback delete failed:', e));
+    }
     if (activate && cohorteAnterior) {
       await query(`UPDATE "Cohort" SET "isActive" = true WHERE "id" = $1`, [cohorteAnterior])
         .catch(() => {});

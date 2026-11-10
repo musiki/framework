@@ -1,5 +1,11 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-10 dashboard-tema-cohortes> <br>
+- **Dashboard**: fuera el «Tema global» (SiteThemeSwitch borrado; el default de sitio que ya fijó el admin sigue respetándose vía `/api/site/theme`).
+- **Sol del Header = sol del Ribbon**: mismo ícono y mismo menú de temas, ahora en `src/lib/theme-menu.ts` (`bindThemeMenuButton(btn, 'side' | 'below')`), estilos `.theme-menu*` en `global.css`. Se fue el toggle claro↔oscuro por pares.
+- **Handsontable con el tema**: `ht-theme-main.css` fija `color-scheme: light` y su propia paleta, por eso quedaban fondos/filas/cabeceras sin teñir. En `global.css`, `html [class*='ht-theme-main']` mapea `--ht-*` base a `--c-*` y `color-scheme` sigue a `html.dark`.
+- **Nueva cohorte** (`/api/admin/cohorts`): `INSERT … SELECT …, $1` daba «column "cohortId" is of type bigint but expression is of type text» → `$1::bigint`. El rollback no funcionaba (reactivar la anterior con la nueva activa choca con el índice parcial); ahora borra la nueva primero.
+
 <2026-11-10 itinerario-ramas-ayuda> <br>
 - **Ramas en el itinerario**: kinds de estructura `bifurcacion` (⑂) y `union` (⑃), sin notas; las paradas de en medio llevan `branch` A–F (`normalizeStops` valida: sin anidar, cerradas). Sólo visual: el estudiante puede seguir una o varias ramas; la parada actual nunca es un ⑂/⑃. El editor tiene «+ ⑂» (crea ⑂, rama A, rama B, ⑃) y la letra de rama con click; quitar un ⑂ se lleva su ⑃. El Recorrido dibuja las ramas en columnas paralelas (`routeBlocks`).
 - **Editor**: cada nota con la forma de su kind; maximizado, editor y Recorrido lado a lado con el borrador al momento (`musiki:itinerary-draft`). Aro de cada parada en gajos; una parada de una nota se parte en sus `hypo:`.

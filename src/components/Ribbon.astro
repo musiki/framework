@@ -559,52 +559,6 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     pointer-events: none;
   }
   .ribbon-pending-dot[hidden] { display: none; }
-  .ribbon-theme-menu {
-    position: fixed;
-    z-index: 1000;
-    min-width: 11rem;
-    padding: 0.3rem;
-    border: 1px solid var(--c-border);
-    border-radius: 8px;
-    background: var(--c-bg);
-    color: var(--c-fg);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
-    font-family: var(--font-interface, inherit);
-  }
-  .ribbon-theme-menu[hidden] { display: none; }
-  .ribbon-theme-option {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    width: 100%;
-    padding: 0.38rem 0.5rem;
-    border: 0;
-    border-radius: 5px;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: 0.82rem;
-    text-align: left;
-    cursor: pointer;
-  }
-  .ribbon-theme-option:hover,
-  .ribbon-theme-option:focus-visible { background: color-mix(in srgb, var(--c-fg) 8%, transparent); outline: none; }
-  .ribbon-theme-option[aria-checked='true'] { color: var(--accent, var(--c-link)); }
-  .ribbon-theme-option[aria-checked='true']::after { content: '✓'; margin-left: auto; font-size: 0.75rem; }
-  /* Muestra: fondo y acento de cada tema, fijos para que se vean desde cualquiera. */
-  .ribbon-theme-swatch {
-    width: 0.95rem;
-    height: 0.95rem;
-    border-radius: 50%;
-    flex: 0 0 auto;
-    box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
-  }
-  .ribbon-theme-swatch[data-swatch='claro'] { background: linear-gradient(135deg, #ffffff 55%, #0b6cff 55%); }
-  .ribbon-theme-swatch[data-swatch='oscuro'] { background: linear-gradient(135deg, #1e1e2e 55%, #89b4fa 55%); }
-  .ribbon-theme-swatch[data-swatch='invulne'] { background: linear-gradient(135deg, #f8f5ee 55%, #315f73 55%); }
-  .ribbon-theme-swatch[data-swatch='invulne-oscuro'] { background: linear-gradient(135deg, #1a1b18 55%, #8bbdcc 55%); }
-  .ribbon-theme-swatch[data-swatch='dracula'] { background: linear-gradient(135deg, #282a36 55%, #ff79c6 55%); }
-  .ribbon-theme-swatch[data-swatch='lyt'] { background: linear-gradient(135deg, #f7f6f2 55%, #2e7686 55%); }
   /* Mobile body padding so content isn't hidden under bottom bar */
   @media (max-width: 500px) {
     body { padding-bottom: calc(var(--ribbon-mobile-clearance, 64px) + 8px) !important; }
@@ -671,81 +625,12 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
 
 <script>
   import { loadPending, pendingLabel, PENDING_EVENT } from '../lib/course/progress-pending.mjs';
-
-  type AppearanceApi = {
-    themes: { id: string; label: string; dark: boolean }[];
-    get: () => string;
-    set: (id: string) => void;
-  };
-  const appearance = () => (window as unknown as { musikiAppearance?: AppearanceApi }).musikiAppearance;
-
-  let themeMenu: HTMLElement | null = null;
-  const closeThemeMenu = () => {
-    if (!themeMenu) return;
-    themeMenu.hidden = true;
-    document.getElementById('ribbon-theme-toggle')?.setAttribute('aria-expanded', 'false');
-  };
-  const toggleThemeMenu = (anchor: HTMLElement) => {
-    const api = appearance();
-    if (!api) return;
-    if (themeMenu && !themeMenu.hidden) { closeThemeMenu(); return; }
-    if (!themeMenu || !themeMenu.isConnected) {
-      themeMenu = document.createElement('div');
-      themeMenu.className = 'ribbon-theme-menu';
-      themeMenu.setAttribute('role', 'menu');
-      themeMenu.addEventListener('click', (event) => {
-        const option = (event.target as Element).closest<HTMLElement>('[data-appearance]');
-        if (!option) return;
-        api.set(option.dataset.appearance || '');
-        closeThemeMenu();
-      });
-      document.body.appendChild(themeMenu);
-    }
-    const active = api.get();
-    themeMenu.replaceChildren(...api.themes.map((theme) => {
-      const option = document.createElement('button');
-      option.type = 'button';
-      option.className = 'ribbon-theme-option';
-      option.setAttribute('role', 'menuitemradio');
-      option.setAttribute('aria-checked', theme.id === active ? 'true' : 'false');
-      option.dataset.appearance = theme.id;
-      const swatch = document.createElement('span');
-      swatch.className = 'ribbon-theme-swatch';
-      swatch.dataset.swatch = theme.id;
-      option.append(swatch, document.createTextNode(theme.label));
-      return option;
-    }));
-    themeMenu.hidden = false;
-    anchor.setAttribute('aria-expanded', 'true');
-    // Al costado del ribbon en desktop; arriba de la barra inferior en mobile.
-    const rect = anchor.getBoundingClientRect();
-    const menuRect = themeMenu.getBoundingClientRect();
-    const mobile = rect.top > window.innerHeight - 120;
-    const left = mobile ? Math.min(rect.left, window.innerWidth - menuRect.width - 8) : rect.right + 6;
-    const top = mobile ? rect.top - menuRect.height - 6 : Math.min(rect.top, window.innerHeight - menuRect.height - 8);
-    themeMenu.style.left = `${Math.max(8, left)}px`;
-    themeMenu.style.top = `${Math.max(8, top)}px`;
-    themeMenu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
-  };
-  document.addEventListener('click', (event) => {
-    if (themeMenu && !themeMenu.hidden && !themeMenu.contains(event.target as Node)) closeThemeMenu();
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeThemeMenu();
-  });
-  document.addEventListener('astro:before-swap', closeThemeMenu);
+  import { bindThemeMenuButton } from '../lib/theme-menu';
 
   const setupRibbon = () => {
     // Tema: el botón abre la lista; la lógica vive en window.musikiAppearance
     // (BaseHead), que también la reaplica después de cada navegación.
-    const themeBtn = document.getElementById('ribbon-theme-toggle');
-    if (themeBtn && !themeBtn.dataset.bound) {
-      themeBtn.dataset.bound = 'true';
-      themeBtn.addEventListener('click', (event) => {
-        event.stopPropagation();
-        toggleThemeMenu(themeBtn);
-      });
-    }
+    bindThemeMenuButton(document.getElementById('ribbon-theme-toggle'), 'side');
 
     // Search: dispatch to document (Search.astro listens on document, not window)
     const searchBtn = document.getElementById('ribbon-search-btn');

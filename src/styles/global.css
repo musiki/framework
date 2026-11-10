@@ -3219,3 +3219,77 @@ details.page-info-history[open] > summary::before { transform: rotate(90deg); }
 
 /* Raíz del árbol del curso: las notas sin capítulo van sin carpeta ni título. */
 .sidebar--left .chapter--root > .chapter-details > .chapter-title { display: none; }
+
+/* Menú de temas: lo abren el sol del Ribbon y el del Header (src/lib/theme-menu.ts). */
+.theme-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  font-family: var(--font-interface, inherit);
+}
+.theme-menu[hidden] { display: none; }
+.theme-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.38rem 0.5rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+.theme-menu-option:hover,
+.theme-menu-option:focus-visible { background: color-mix(in srgb, var(--c-fg) 8%, transparent); outline: none; }
+.theme-menu-option[aria-checked='true'] { color: var(--accent, var(--c-link)); }
+.theme-menu-option[aria-checked='true']::after { content: '✓'; margin-left: auto; font-size: 0.75rem; }
+/* Muestra: fondo y acento de cada tema, fijos para que se vean desde cualquiera. */
+.theme-menu-swatch {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
+}
+.theme-menu-swatch[data-swatch='claro'] { background: linear-gradient(135deg, #ffffff 55%, #0b6cff 55%); }
+.theme-menu-swatch[data-swatch='oscuro'] { background: linear-gradient(135deg, #1e1e2e 55%, #89b4fa 55%); }
+.theme-menu-swatch[data-swatch='invulne'] { background: linear-gradient(135deg, #f8f5ee 55%, #315f73 55%); }
+.theme-menu-swatch[data-swatch='invulne-oscuro'] { background: linear-gradient(135deg, #1a1b18 55%, #8bbdcc 55%); }
+.theme-menu-swatch[data-swatch='dracula'] { background: linear-gradient(135deg, #282a36 55%, #ff79c6 55%); }
+.theme-menu-swatch[data-swatch='lyt'] { background: linear-gradient(135deg, #f7f6f2 55%, #2e7686 55%); }
+
+/* Handsontable (dashboard, admin): ht-theme-main fija color-scheme: light y su
+   propia paleta, así que con temas oscuros o cálidos quedaban fondos, filas y
+   cabeceras sin teñir. Sus colores base pasan a ser los tokens del tema activo. */
+html [class*='ht-theme-main'] {
+  color-scheme: light;
+  --ht-background-color: var(--c-bg);
+  --ht-background-secondary-color: var(--c-bg-mute);
+  --ht-foreground-color: var(--c-fg);
+  --ht-foreground-secondary-color: var(--c-fg-dim);
+  --ht-border-color: var(--c-border);
+  --ht-accent-color: var(--c-link);
+  --ht-disabled-color: var(--c-fg-subtle);
+  --ht-placeholder-color: var(--c-fg-subtle);
+  --ht-read-only-color: var(--c-fg-dim);
+  --ht-link-color: var(--c-link);
+  --ht-cell-selection-background-color: var(--c-link);
+  --ht-cell-editor-foreground-color: var(--c-fg);
+  --ht-header-highlighted-background-color: color-mix(in srgb, var(--c-link) 14%, var(--c-bg-mute));
+  --ht-header-highlighted-foreground-color: var(--c-fg);
+  --ht-header-row-highlighted-background-color: color-mix(in srgb, var(--c-link) 14%, var(--c-bg-mute));
+  --ht-header-row-highlighted-foreground-color: var(--c-fg);
+  --ht-menu-item-hover-color: var(--c-fg);
+  --ht-scrollbar-thumb-color: var(--c-fg-subtle);
+}
+html.dark [class*='ht-theme-main'] { color-scheme: dark; }
