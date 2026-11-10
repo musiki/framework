@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ITINERARY_KINDS,
+  moveNoteTo,
+  moveStopTo,
   MAX_STOPS,
   kindForNoteType,
   normalizeStops,
@@ -91,4 +93,25 @@ test('normalizeStops: bifurcaciones con ramas, sin anidar y cerradas', () => {
   assert.equal(normalizeStops([{ title: 'a', kind: 'bifurcacion' }]).ok, false);
   assert.equal(normalizeStops([{ title: 'a', kind: 'union' }]).ok, false);
   assert.equal(normalizeStops([{ title: 'a', kind: 'bifurcacion' }, { title: 'b', kind: 'bifurcacion' }]).ok, false);
+});
+
+test('moveStopTo: antes, después y al final', () => {
+  const s = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const ids = (list) => list.map((x) => x.id).join('');
+  assert.equal(ids(moveStopTo(s, 'c', 'a')), 'cab');
+  assert.equal(ids(moveStopTo(s, 'a', 'b', true)), 'bac');
+  assert.equal(ids(moveStopTo(s, 'a', 'c', true)), 'bca');
+  assert.equal(ids(moveStopTo(s, 'a', '')), 'bca');
+  assert.equal(ids(moveStopTo(s, 'b', 'b')), 'abc');
+  assert.equal(ids(s), 'abc');
+});
+
+test('moveNoteTo: reordena dentro de la parada y entre paradas', () => {
+  const s = [{ id: '1', notes: ['x', 'y', 'z'] }, { id: '2', notes: ['w'] }];
+  assert.deepEqual(moveNoteTo(s, 'z', '1', '1', 'x')[0].notes, ['z', 'x', 'y']);
+  assert.deepEqual(moveNoteTo(s, 'x', '1', '1')[0].notes, ['y', 'z', 'x']);
+  const across = moveNoteTo(s, 'y', '1', '2', 'w');
+  assert.deepEqual(across.map((st) => st.notes), [['x', 'z'], ['y', 'w']]);
+  assert.deepEqual(moveNoteTo(s, 'w', '', '1', 'y').map((st) => st.notes), [['x', 'w', 'y', 'z'], ['w']]);
+  assert.deepEqual(s[0].notes, ['x', 'y', 'z']);
 });

@@ -7,6 +7,8 @@ import {
   ITINERARY_KINDS,
   STRUCTURE_KINDS,
   isStructural,
+  moveNoteTo as moveNote,
+  moveStopTo,
   kindForNoteType,
   reservoirOf,
   slugKey,
@@ -206,23 +208,21 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     commit();
   }
 
-  function moveNoteTo(slug: string, fromStopId: string, toStopId: string) {
-    const to = stops.find((s) => s.id === toStopId);
-    if (!to) return;
-    const from = stops.find((s) => s.id === fromStopId);
-    if (from && from !== to) from.notes = from.notes.filter((s) => s !== slug);
-    if (!to.notes.some((s) => slugKey(s, courseId) === slugKey(slug, courseId))) to.notes.push(slug);
+  function moveNoteTo(slug: string, fromStopId: string, toStopId: string, beforeSlug = '') {
+    stops = moveNote(stops, slug, fromStopId, toStopId, beforeSlug, courseId) as Stop[];
     commit();
   }
 
-  function moveStop(stopId: string, beforeId: string) {
-    const from = stops.findIndex((s) => s.id === stopId);
-    if (from < 0 || stopId === beforeId) return;
-    const [stop] = stops.splice(from, 1);
-    const to = beforeId ? stops.findIndex((s) => s.id === beforeId) : -1;
-    stops.splice(to < 0 ? stops.length : to, 0, stop);
+  function moveStop(stopId: string, targetId: string, after = false) {
+    stops = moveStopTo(stops, stopId, targetId, after) as Stop[];
     commit();
   }
+
+  const dropAfter = (e: DragEvent, el: HTMLElement) => {
+    const box = el.getBoundingClientRect();
+    return e.clientY > box.top + box.height / 2;
+  };
+  const clearDropMarks = () => list.querySelectorAll('.is-drop-before, .is-drop-after, .is-drop').forEach((n) => n.classList.remove('is-drop-before', 'is-drop-after', 'is-drop'));
 
   const noteFromSlug = (slug: string): NoteRef =>
     notes.find((n) => slugKey(n.slug, courseId) === slugKey(slug, courseId))
@@ -238,6 +238,17 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     li.dataset.stopId = stop.id;
     li.dataset.kind = stop.kind;
     li.classList.toggle('is-selected', stop.id === selectedId);
+    // Toda la parada se arrastra, salvo cuando se escribe o se aprieta un botón.
+    li.addEventListener('pointerdown', (e) => {
+      li.draggable = !(e.target as HTMLElement).closest('input, button, .cpp-it-chip');
+    });
+    li.addEventListener('dragstart', (e) => {
+      if (e.target !== li) return;
+      e.dataTransfer?.setData(STOP_MIME, stop.id);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+      li.classList.add('is-dragging');
+    });
+    li.addEventListener('dragend', () => { li.classList.remove('is-dragging'); clearDropMarks(); });
 
     const head = document.createElement('div');
     head.className = 'cpp-it-stop-head';
@@ -321,16 +332,19 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     if (structural) {
       li.append(head);
       li.addEventListener('dragover', (e) => {
-        if (e.dataTransfer?.types.includes(STOP_MIME)) { e.preventDefault(); li.classList.add('is-drop'); }
+        if (!e.dataTransfer?.types.includes(STOP_MIME)) return;
+        e.preventDefault();
+        clearDropMarks();
+        li.classList.add(dropAfter(e, li) ? 'is-drop-after' : 'is-drop-before');
       });
-      li.addEventListener('dragleave', () => li.classList.remove('is-drop'));
+      li.addEventListener('dragleave', () => li.classList.remove('is-drop-before', 'is-drop-after'));
       li.addEventListener('drop', (e) => {
-        li.classList.remove('is-drop');
         const stopId = e.dataTransfer?.getData(STOP_MIME);
+        clearDropMarks();
         if (!stopId) return;
         e.preventDefault();
         e.stopPropagation();
-        moveStop(stopId, stop.id);
+        moveStop(stopId, stop.id, dropAfter(e, li));
       });
       return li;
     }
@@ -362,6 +376,31 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
         stop.notes = stop.notes.filter((s) => s !== slug);
         commit();
       });
+      chip.addEventListener('dragstart', (e) => e.stopPropagation());
+      chip.addEventListener('dragover', (e) => {
+        const types = e.dataTransfer?.types ?? [];
+        if (!types.includes(CHIP_MIME) && !types.includes(NOTE_MIME)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearDropMarks();
+        chip.classList.add('is-drop-before');
+      });
+      chip.addEventListener('dragleave', () => chip.classList.remove('is-drop-before'));
+      chip.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        clearDropMarks();
+        if (!dt) return;
+        const moved = dt.getData(CHIP_MIME);
+        const fromTree = dt.getData(NOTE_MIME).trim();
+        if (!moved && !fromTree) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (moved) {
+          try { const { slug: other, from } = JSON.parse(moved); moveNoteTo(other, from, stop.id, slug); } catch { /* payload ajeno */ }
+        } else {
+          moveNoteTo(fromTree, '', stop.id, slug);
+        }
+      });
       chip.append(glyph, label, x);
       chips.appendChild(chip);
     }
@@ -383,20 +422,24 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     // u otra parada que se reordena (cae antes de ésta).
     li.addEventListener('dragover', (e) => {
       const types = e.dataTransfer?.types ?? [];
-      if (types.includes(NOTE_MIME) || types.includes(CHIP_MIME) || types.includes(STOP_MIME)) {
-        e.preventDefault();
-        li.classList.add('is-drop');
-      }
+      if (!types.includes(NOTE_MIME) && !types.includes(CHIP_MIME) && !types.includes(STOP_MIME)) return;
+      e.preventDefault();
+      clearDropMarks();
+      // Una parada cae antes o después según la mitad; una nota cae adentro.
+      if (types.includes(STOP_MIME)) li.classList.add(dropAfter(e, li) ? 'is-drop-after' : 'is-drop-before');
+      else li.classList.add('is-drop');
     });
-    li.addEventListener('dragleave', () => li.classList.remove('is-drop'));
+    li.addEventListener('dragleave', (e) => {
+      if (!li.contains(e.relatedTarget as Node)) li.classList.remove('is-drop', 'is-drop-before', 'is-drop-after');
+    });
     li.addEventListener('drop', (e) => {
-      li.classList.remove('is-drop');
+      clearDropMarks();
       const dt = e.dataTransfer;
       if (!dt) return;
       e.preventDefault();
       e.stopPropagation();
       const stopId = dt.getData(STOP_MIME);
-      if (stopId) { moveStop(stopId, stop.id); return; }
+      if (stopId) { moveStop(stopId, stop.id, dropAfter(e, li)); return; }
       const chip = dt.getData(CHIP_MIME);
       if (chip) {
         try { const { slug, from } = JSON.parse(chip); moveNoteTo(slug, from, stop.id); } catch { /* payload ajeno */ }

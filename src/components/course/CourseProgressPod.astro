@@ -167,7 +167,7 @@ const clientStrings = JSON.stringify({
         <h4>Recorrido</h4>
         <p>Es el itinerario que arma la cátedra para tu cohorte. Cada <strong>círculo</strong> es una parada; el aro está partido en <strong>gajos</strong>, uno por nota, y cada gajo se llena a medida que la leés, la completás o la evaluás. Si la parada es una sola nota (una clase), los gajos son los conceptos que esa nota declara en <code>hypo:</code>.</p>
         <p>La parada actual va resaltada; el resto queda tenue. Las <strong>secciones</strong> son los capítulos de la materia (<code>chapter:</code> de la nota, o su carpeta).</p>
-        <p>Kinds: ◆ concepto · ≡ protocolo · ● clase · ▲ assignment · ■ output.</p>
+        <p>Kinds: ◆ concepto · ≡ protocolo · ● clase · ▲ assignment · ■ output. La <strong>clase</strong> (disco lleno) es la que hay que asistir; el resto es trabajo propio, asincrónico.</p>
         <h4>Ramas</h4>
         <p>⑂ abre una <strong>bifurcación</strong>: caminos alternativos (temas, soluciones) que se pueden recorrer en cualquier orden, uno o varios. ⑃ es la <strong>vuelta al tronco</strong>. Es una guía visual: ninguna rama cierra las otras.</p>
         <h4>Connectoma</h4>
@@ -533,7 +533,10 @@ const clientStrings = JSON.stringify({
   .cpp-marker-lab { font-style: italic; }
   .cpp-branch-lab { font-weight: 700; opacity: 0.55; }
   /* El kind de la parada también se ve en el círculo. */
-  .cpp-stop--clase .cpp-disc { fill: color-mix(in srgb, var(--c-fg) 9%, var(--c-bg)); }
+  /* Clase: la que hay que asistir, disco lleno; el trabajo asincrónico queda hueco. */
+  .cpp-stop--clase .cpp-disc { fill: var(--c-fg); }
+  .cpp-stop--clase .cpp-kind { fill: var(--c-bg); opacity: 1; }
+  .cpp-stop--clase[data-state='current'] .cpp-kind { fill: var(--c-bg); }
   .cpp-stop--assignment .cpp-kind { fill: var(--cpp-gold); opacity: 1; }
   .cpp-stop--output .cpp-disc { fill: color-mix(in srgb, var(--cpp-gold) 14%, var(--c-bg)); }
   .cpp-legend {

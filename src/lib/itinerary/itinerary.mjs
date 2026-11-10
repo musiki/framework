@@ -141,3 +141,33 @@ export function stopFromNote(note) {
     notes: note?.slug ? [cleanSlug(note.slug)] : [],
   };
 }
+
+/**
+ * Reordenar (editor): devuelven una lista nueva y no tocan la recibida.
+ * `moveStopTo`: la parada `stopId` antes o después de `targetId` ('' = al final).
+ */
+export function moveStopTo(stops, stopId, targetId, after = false) {
+  const list = [...(stops || [])];
+  const from = list.findIndex((s) => s.id === stopId);
+  if (from < 0 || stopId === targetId) return list;
+  const [stop] = list.splice(from, 1);
+  const to = targetId ? list.findIndex((s) => s.id === targetId) : -1;
+  list.splice(to < 0 ? list.length : to + (after ? 1 : 0), 0, stop);
+  return list;
+}
+
+/** La nota `slug` a la parada `toStopId`, antes de `beforeSlug` o al final; sale de `fromStopId`. */
+export function moveNoteTo(stops, slug, fromStopId, toStopId, beforeSlug = '', courseId = '') {
+  if (!(stops || []).some((s) => s.id === toStopId) || slug === beforeSlug) return [...(stops || [])];
+  const key = slugKey(slug, courseId);
+  return stops.map((stop) => {
+    let notes = stop.notes;
+    if (stop.id === fromStopId || stop.id === toStopId) notes = notes.filter((s) => slugKey(s, courseId) !== key);
+    if (stop.id === toStopId) {
+      const at = beforeSlug ? notes.indexOf(beforeSlug) : -1;
+      notes = [...notes];
+      notes.splice(at < 0 ? notes.length : at, 0, slug);
+    }
+    return notes === stop.notes ? stop : { ...stop, notes };
+  });
+}

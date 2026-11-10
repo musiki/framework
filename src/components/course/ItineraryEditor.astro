@@ -129,6 +129,23 @@
   .cpp-it-stop[data-kind='assignment'] { --it-kind: var(--c-danger, #b42318); }
   .cpp-it-stop[data-kind='output'] { --it-kind: var(--c-success, #2e7d4f); }
   .cpp-it-stop.is-selected { box-shadow: 0 0 0 1px var(--cpp-accent, var(--c-accent)); }
+  /* El contador global de <ol> le ponía un ① a cada parada: el número ya está en la cabecera. */
+  .cpp-it-stops > li::before { content: none; display: none; }
+  .cpp-it-stop { position: relative; cursor: grab; }
+  .cpp-it-stop.is-drop-before::after,
+  .cpp-it-stop.is-drop-after::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--cpp-accent, var(--c-accent));
+  }
+  .cpp-it-stop.is-drop-before::after { top: -0.24rem; }
+  .cpp-it-stop.is-drop-after::after { bottom: -0.24rem; }
+  .cpp-it-chip { cursor: grab; }
+  .cpp-it-chip.is-drop-before { box-shadow: -3px 0 0 var(--cpp-accent, var(--c-accent)); }
   .cpp-it-stop.is-drop { background: color-mix(in srgb, var(--cpp-accent, var(--c-accent)) 8%, var(--c-bg)); }
   .cpp-it-stop.is-dragging { opacity: 0.45; }
   /* Bifurcación y vuelta al tronco: una línea, sin notas. Las ramas, sangradas. */
