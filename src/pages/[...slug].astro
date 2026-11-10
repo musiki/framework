@@ -2751,87 +2751,6 @@ function renderLessonsTreeHTML(
         padding-left: 3rem;
       }
 
-      .page-progress[hidden] {
-        display: none;
-      }
-
-      .progress-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-      }
-
-      .progress-meter {
-        margin-bottom: 0.75rem;
-        padding: 0.55rem 0.6rem;
-        border: 1px solid var(--c-border);
-        border-radius: 8px;
-        background: var(--c-bg-mute);
-      }
-
-      .progress-meter[hidden] {
-        display: none;
-      }
-
-      .progress-meter-header {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 0.5rem;
-        font-size: 0.78rem;
-        margin-bottom: 0.45rem;
-      }
-
-      .progress-meter-header strong {
-        font-size: 0.84rem;
-      }
-
-      .progress-track {
-        width: 100%;
-        height: 0.45rem;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--c-border) 45%, transparent);
-        overflow: hidden;
-      }
-
-      .progress-fill {
-        width: 0%;
-        height: 100%;
-        background: linear-gradient(90deg, #14823a, #35b95f);
-        transition: width 220ms ease;
-      }
-
-      .progress-item {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        padding: 0.45rem 0.5rem;
-        border-radius: 6px;
-        background: var(--c-bg-mute);
-        font-size: 0.82rem;
-      }
-
-      .progress-dot {
-        width: 1rem;
-        height: 1rem;
-        border-radius: 999px;
-        border: 1px solid var(--c-border);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.7rem;
-        color: transparent;
-      }
-
-      .progress-item.is-complete .progress-dot {
-        background: #1f8f45;
-        border-color: #1f8f45;
-        color: #fff;
-      }
-
-      .progress-label {
-        line-height: 1.35;
-      }
 
       .content-area {
         border: none;
@@ -5598,19 +5517,6 @@ function renderLessonsTreeHTML(
               </details>
             </div>
 
-            {!isCourseOverviewPage && <div class="chapter page-progress" id="page-progress" hidden>
-              <div class="chapter-title">Progreso</div>
-              <div class="progress-meter" id="mcc-progress-meter" hidden>
-                <div class="progress-meter-header">
-                  <span>Lectura (MCC)</span>
-                  <strong id="mcc-progress-percent">0%</strong>
-                </div>
-                <div class="progress-track" aria-hidden="true">
-                  <div class="progress-fill" id="mcc-progress-fill"></div>
-                </div>
-              </div>
-              <ul class="lesson-list progress-list" id="page-progress-list"></ul>
-            </div>}
           </>
         )}
 
@@ -6893,6 +6799,7 @@ function renderLessonsTreeHTML(
       </div>
 
       <script>
+      import { applyTreeFoldState, rememberTreeFold } from '../scripts/course/sidebar/tree-fold-state.mjs';
 
       declare global {
         interface Window {
@@ -7523,6 +7430,11 @@ function renderLessonsTreeHTML(
 
         syncLayoutState();
 
+        // El árbol arranca plegado: abierto sólo lo que cada persona dejó abierto
+        // (localStorage, por materia) y el camino a la nota que está leyendo.
+        const treeCourseId = String(root.dataset.liveCourseId || '').trim();
+        if (leftSidebar instanceof HTMLElement) applyTreeFoldState(leftSidebar, treeCourseId);
+
         const foldAllBtn = document.getElementById('sidebar-fold-all-btn');
         if (foldAllBtn instanceof HTMLButtonElement) {
           const getSidebarDetails = () =>
@@ -7539,6 +7451,7 @@ function renderLessonsTreeHTML(
             const details = getSidebarDetails();
             const anyOpen = details.some((d) => (d as HTMLDetailsElement).open);
             details.forEach((d) => { (d as HTMLDetailsElement).open = !anyOpen; });
+            if (leftSidebar instanceof HTMLElement) rememberTreeFold(leftSidebar, treeCourseId);
             syncFoldBtn();
           };
 
@@ -7825,54 +7738,12 @@ function renderLessonsTreeHTML(
         renderPageProgress();
       }
 
+      // El estado de las evaluaciones hidratadas (la página y los paneles de
+      // Dockview) lo muestra el pod Progreso, en «En esta nota», filtrado por la
+      // nota activa. Acá sólo se publica.
       function renderPageProgress() {
-        const container = document.getElementById('page-progress');
-        const list = document.getElementById('page-progress-list');
-        const meter = document.getElementById('mcc-progress-meter');
-        const meterFill = document.getElementById('mcc-progress-fill');
-        const meterPercent = document.getElementById('mcc-progress-percent');
-        if (!container || !list) return;
-
-        const entries = Array.from(progressByEvalId.entries());
-        if (entries.length === 0) {
-          container.hidden = true;
-          return;
-        }
-
-        container.hidden = false;
-        list.innerHTML = '';
-
-        const mccEntries = entries.filter(([, item]) => item.type === 'mcc');
-        if (meter && meterFill && meterPercent) {
-          if (mccEntries.length === 0) {
-            meter.hidden = true;
-          } else {
-            const completedCount = mccEntries.filter(([, item]) => item.complete).length;
-            const percent = Math.round((completedCount / mccEntries.length) * 100);
-            meter.hidden = false;
-            meterFill.style.width = `${percent}%`;
-            meterPercent.textContent = `${percent}%`;
-          }
-        }
-
-        entries.forEach(([evalId, item]) => {
-          const li = document.createElement('li');
-          li.className = 'progress-item';
-          if (item.complete) li.classList.add('is-complete');
-          li.dataset.evalId = evalId;
-
-          const dot = document.createElement('span');
-          dot.className = 'progress-dot';
-          dot.textContent = item.complete ? '✓' : '•';
-
-          const label = document.createElement('span');
-          label.className = 'progress-label';
-          label.textContent = item.label;
-
-          li.appendChild(dot);
-          li.appendChild(label);
-          list.appendChild(li);
-        });
+        window.__musikiEvalProgress = Array.from(progressByEvalId, ([id, item]) => ({ id, ...item }));
+        window.dispatchEvent(new CustomEvent('musiki:eval-progress'));
       }
 
       // `scope` es el elemento de la evaluación. Una nota plegada dentro de un

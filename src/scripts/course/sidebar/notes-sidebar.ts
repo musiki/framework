@@ -49,6 +49,7 @@ export {
 
 
 import { listNotes, getNote, saveNote, createNote, deleteNote, moveNote } from '../../notes-editor/api';
+import { applyTreeFoldState } from './tree-fold-state.mjs';
 import { parseFrontmatter, serializeFrontmatter } from '../../notes-editor/yaml-strip';
 
 // ── Context menu ──────────────────────────────────────────────────────────
@@ -207,15 +208,6 @@ export function renderNotesSidebar(
       document.getElementById('notas-sidebar-tree-container')?.appendChild(currentNotasTree);
     }
   }
-
-  // Preserve collapsed chapters across re-renders
-  const closedNames = new Set<string>();
-  container.querySelectorAll<HTMLDetailsElement>('details.chapter-details').forEach(d => {
-    if (!d.open) {
-      const name = d.querySelector('.chapter-title-text')?.textContent?.trim();
-      if (name) closedNames.add(name);
-    }
-  });
 
   const groups = groupByChapter(notes);
 
@@ -580,7 +572,8 @@ export function renderNotesSidebar(
 
     const details = document.createElement('details');
     details.className = 'chapter-details';
-    details.open = true;
+    // Plegado: applyTreeFoldState abre lo que la persona dejó abierto y la nota activa.
+    details.open = false;
 
     const summary = document.createElement('summary');
     summary.className = 'chapter-title';
@@ -1013,18 +1006,9 @@ export function renderNotesSidebar(
     newChapterEls.push(makeChapterDropLine(group.name));
   }
 
-  // Restore collapsed state on new elements before inserting into DOM
-  if (closedNames.size > 0) {
-    for (const el of newChapterEls) {
-      el.querySelectorAll<HTMLDetailsElement>('details.chapter-details').forEach(d => {
-        const name = d.querySelector('.chapter-title-text')?.textContent?.trim();
-        if (name && closedNames.has(name)) d.open = false;
-      });
-    }
-  }
-
   // Atomic swap — no blank flash between teardown and rebuild
   container.replaceChildren(...newChapterEls);
+  applyTreeFoldState(container, courseId);
   window.dispatchEvent(new CustomEvent('musiki:recursos-sidebar-mounted'));
 }
 
@@ -1275,7 +1259,11 @@ export function initNotesSidebar(
     });
 
     if (activeLink) {
-      activeLink.closest('details')?.setAttribute('open', '');
+      // Con el árbol plegado, abrir todo el camino hasta la nota, no sólo la carpeta.
+      const found = activeLink as HTMLAnchorElement;
+      for (let d = found.closest('details'); d; d = d.parentElement?.closest('details') ?? null) {
+        d.setAttribute('open', '');
+      }
       window.requestAnimationFrame(() => activeLink?.scrollIntoView({ block: 'nearest' }));
     }
   }, { signal });

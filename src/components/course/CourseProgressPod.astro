@@ -47,6 +47,26 @@ const clientStrings = JSON.stringify({
       </div>
     </header>
 
+    <section class="cpp-hot" id="cpp-hot" aria-labelledby="cpp-hot-title" aria-live="polite">
+      <div class="cpp-block-head">
+        <h3 class="cpp-section-label" id="cpp-hot-title">En esta nota</h3>
+        <span class="cpp-block-note" id="cpp-hot-count"></span>
+      </div>
+      <p class="cpp-hot-note" id="cpp-hot-name"></p>
+      <div class="cpp-hot-reading" id="cpp-hot-reading" hidden>
+        <span>Lectura</span>
+        <span class="bar"><i id="cpp-hot-reading-fill"></i></span>
+        <strong id="cpp-hot-reading-pct">0%</strong>
+      </div>
+      <ul class="cpp-hot-list" id="cpp-hot-list"></ul>
+      <p class="cpp-hot-empty" id="cpp-hot-empty" hidden>Esta nota no tiene evaluaciones.</p>
+      <div class="cpp-block-head cpp-hot-rubric-head">
+        <h4 class="cpp-section-label" id="cpp-rubric-title">Rúbrica-recorrido</h4>
+        <span class="cpp-block-note">resaltado: lo que suma esta nota</span>
+      </div>
+      <div class="cpp-rubric" id="cpp-rubric"></div>
+    </section>
+
     <section class="cpp-daily" id="cpp-daily" aria-labelledby="cpp-daily-title">
       <div class="cpp-daily-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="cpp-daily-copy">
@@ -64,13 +84,6 @@ const clientStrings = JSON.stringify({
       </a>
     </section>
 
-    <section class="cpp-block" aria-labelledby="cpp-rubric-title">
-      <div class="cpp-block-head">
-        <h3 class="cpp-section-label" id="cpp-rubric-title">Rúbrica-recorrido</h3>
-        <span class="cpp-block-note">evidencias mínimas</span>
-      </div>
-      <div class="cpp-rubric" id="cpp-rubric"></div>
-    </section>
 
     <section class="cpp-block cpp-route" aria-labelledby="cpp-route-title">
       <div class="cpp-block-head">
@@ -192,6 +205,54 @@ const clientStrings = JSON.stringify({
     line-height: 1;
   }
   .cpp-close:hover { border-color: var(--cpp-accent); color: var(--cpp-accent); }
+  /* «En esta nota»: la nota activa, separada del mapa por un borde de acento. */
+  .cpp-hot {
+    margin: 0.95rem var(--course-sidebar-pad-x) 0.75rem;
+    padding: 0.85rem 0.9rem 0.9rem;
+    border: 1px solid var(--cpp-line);
+    border-left: 3px solid var(--cpp-accent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--cpp-accent) 6%, var(--c-bg));
+  }
+  .cpp-hot-note {
+    margin: 0.15rem 0 0.55rem;
+    color: var(--c-fg);
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .cpp-hot-note:empty { display: none; }
+  .cpp-hot-reading {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 2.7rem;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.45rem;
+    font-size: 0.72rem;
+    color: var(--c-fg-dim);
+  }
+  .cpp-hot-reading[hidden] { display: none; }
+  .cpp-hot-reading .bar { height: 3px; border-radius: 3px; background: var(--cpp-line); overflow: hidden; }
+  .cpp-hot-reading .bar > i { display: block; width: 0; height: 100%; background: var(--cpp-accent); }
+  .cpp-hot-reading strong { text-align: right; color: var(--c-fg); }
+  .cpp-hot-list { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+  .cpp-hot-item {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr) auto;
+    gap: 0.45rem;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--c-fg);
+  }
+  .cpp-hot-item .mark { color: var(--c-fg-dim); }
+  .cpp-hot-item.is-done .mark { color: var(--cpp-accent); }
+  .cpp-hot-item.is-done .lab { color: var(--c-fg-dim); }
+  .cpp-hot-item .lab { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cpp-hot-item .tag svg { display: block; width: 14px; height: 14px; }
+  .cpp-hot-empty { margin: 0; font-size: 0.78rem; color: var(--c-fg-dim); }
+  .cpp-hot-empty[hidden] { display: none; }
+  .cpp-hot-rubric-head { margin-top: 0.85rem; }
+  .cpp-req:not(.is-touched) { opacity: 0.55; }
+  .cpp-req.is-touched .lab { color: var(--c-fg); font-weight: 600; }
   .cpp-daily {
     position: relative;
     display: grid;
@@ -383,6 +444,7 @@ const clientStrings = JSON.stringify({
 
 <script>
   import * as THREE from 'three';
+  import { summarizeActiveNote } from '../../lib/course/active-note-progress.mjs';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
   const R = 8;
@@ -457,7 +519,11 @@ const clientStrings = JSON.stringify({
     }
   }
 
+  let lastRubric: { rubric: any; required: any; project: any } | null = null;
+  let touchedRubricKeys: string[] = [];
+
   function renderRubric(rubric: any, required: any, project: any) {
+    lastRubric = { rubric, required, project };
     const host = el('cpp-rubric');
     if (!host) return;
     host.replaceChildren();
@@ -468,7 +534,7 @@ const clientStrings = JSON.stringify({
       const need = Number(required?.[key]) || 1;
       const done = have >= need;
       const row = document.createElement('div');
-      row.className = `cpp-req${done ? ' done' : ''}`;
+      row.className = `cpp-req${done ? ' done' : ''}${touchedRubricKeys.includes(key) ? ' is-touched' : ''}`;
       const icon = document.createElement('span');
       icon.className = 'ic';
       icon.innerHTML = REQ_ICON[key];
@@ -675,6 +741,83 @@ const clientStrings = JSON.stringify({
     }
   }
 
+
+  // ── «En esta nota»: las evaluaciones de la nota que se está leyendo. Con
+  // Dockview es el panel activo (data-rendered-slug); si no, la página. El
+  // estado de cada evaluación lo publica [...slug].astro en __musikiEvalProgress.
+  function activeNoteRoot(): HTMLElement | null {
+    if (activeSlug) {
+      const panel = document.querySelector<HTMLElement>(`[data-rendered-slug="${CSS.escape(activeSlug)}"]`);
+      if (panel && panel.getClientRects().length > 0) return panel;
+    }
+    return document.querySelector<HTMLElement>('[data-class-content]');
+  }
+
+  function activeNoteName(): string {
+    const slug = activeSlug
+      || (document.querySelector<HTMLElement>('[data-course-layout-root]')?.dataset.livePageSlug || '');
+    const last = slug.split('/').filter(Boolean).pop() || '';
+    return last.replace(/\.(md|mdx)$/i, '').replace(/[-_]+/g, ' ').trim();
+  }
+
+  function renderHotNote() {
+    const list = el('cpp-hot-list');
+    if (!list) return;
+    const root = activeNoteRoot();
+    const byId = new Map(((window as any).__musikiEvalProgress || []).map((item: any) => [item.id, item]));
+    const items = root
+      ? Array.from(root.querySelectorAll<HTMLElement>('.eval-block-wrapper'))
+          .map((wrapper) => byId.get(wrapper.dataset.evalId || '') || null)
+          .filter(Boolean)
+      : [];
+    const summary = summarizeActiveNote(items as any[]);
+    touchedRubricKeys = summary.rubricKeys;
+
+    const name = el('cpp-hot-name');
+    if (name) name.textContent = activeNoteName();
+    const count = el('cpp-hot-count');
+    if (count) count.textContent = summary.evals.length ? `${summary.done}/${summary.evals.length} hechas` : '';
+    const empty = el('cpp-hot-empty');
+    if (empty) empty.hidden = summary.evals.length > 0;
+
+    const reading = el('cpp-hot-reading');
+    if (reading) {
+      reading.hidden = !summary.reading;
+      if (summary.reading) {
+        const pct = Math.round(100 * summary.reading.done / summary.reading.total);
+        const fill = el('cpp-hot-reading-fill');
+        const label = el('cpp-hot-reading-pct');
+        if (fill) fill.style.width = `${pct}%`;
+        if (label) label.textContent = `${pct}%`;
+      }
+    }
+
+    list.replaceChildren(...summary.evals.filter((e) => e.type !== 'mcc').map((item) => {
+      const li = document.createElement('li');
+      li.className = `cpp-hot-item${item.complete ? ' is-done' : ''}`;
+      const mark = document.createElement('span');
+      mark.className = 'mark';
+      mark.textContent = item.complete ? '✓' : '○';
+      const label = document.createElement('span');
+      label.className = 'lab';
+      label.textContent = item.label;
+      li.append(mark, label);
+      if (item.rubricKey) {
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.innerHTML = REQ_ICON[item.rubricKey] || '';
+        tag.title = `Suma a: ${str(`req.${item.rubricKey}`, REQ_LABEL[item.rubricKey])}`;
+        li.appendChild(tag);
+      }
+      return li;
+    }));
+
+    if (lastRubric) renderRubric(lastRubric.rubric, lastRubric.required, lastRubric.project);
+  }
+
+  window.addEventListener('musiki:eval-progress', () => renderHotNote());
+  document.addEventListener('astro:page-load', () => { activeSlug = ''; renderHotNote(); });
+
   function updateActiveUnit() {
     const subtitle = el('cpp-active-unit');
     if (!subtitle || !lastData) return;
@@ -714,6 +857,7 @@ const clientStrings = JSON.stringify({
       if (percent) percent.textContent = concepts.length ? `${Math.round(100 * completed / concepts.length)}%` : '0%';
       renderDaily(data.daily || {});
       renderRubric(data.rubric || {}, data.required || {}, data.project || {});
+      renderHotNote();
       renderPath(concepts, data.project || {});
       renderBrain(concepts, edges);
       updateActiveUnit();
@@ -727,6 +871,9 @@ const clientStrings = JSON.stringify({
   window.addEventListener('musiki:active-note', ((event: CustomEvent<{ slug?: string }>) => {
     activeSlug = String(event.detail?.slug || '');
     updateActiveUnit();
+    // El panel recién abierto hidrata sus evaluaciones después del evento.
+    renderHotNote();
+    window.setTimeout(renderHotNote, 300);
     if (isOpen() && courseId() !== lastCourse) void load();
   }) as EventListener);
   window.addEventListener('musiki:progress-changed', () => { if (isOpen()) void load(); });

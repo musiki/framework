@@ -1,5 +1,10 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-10 progreso-nota-activa-arbol-plegado> <br>
+- **Progreso · «En esta nota»** (paso A del plan de itinerario, parte 3): el bloque «Progreso» de la sidebar izquierda (`#page-progress`) se armaba una vez por página y no seguía a la nota activa de Dockview. Se sacó; `[...slug].astro` publica el estado de las evaluaciones en `window.__musikiEvalProgress` + evento `musiki:eval-progress`, y el pod Progreso muestra arriba las de la nota activa (panel con `data-rendered-slug` o la página), con la rúbrica debajo y resaltado lo que suma esa nota (`src/lib/course/active-note-progress.mjs`).
+- **Árbol izquierdo plegado por defecto**: `notes-sidebar.ts` creaba todo con `open = true` y sólo recordaba lo cerrado mientras no se recargara. Ahora `tree-fold-state.mjs` pliega todo salvo lo que la persona dejó abierto (localStorage `musiki:tree-open:<materia>`) y el camino a la nota activa; lo usan el árbol docente, el de estudiantes y «plegar todo». Recursos conserva su estado propio.
+- **Decisiones** (plan, sección 18): Obsidian genera conocimiento, musiki ordena la clase; el itinerario vive en la base por cohorte.
+
 <2026-11-08 astro7-temas-graph-lily> <br>
 - **Astro 7** en producción (merge `72206eb`): `markdown.processor: unified()`, `compressHTML: true`, jsdom estático en svg-sanitize, sin @astrojs/db.
 - **Links dentro de notas**: navegar a otra página del curso ya no restaura los paneles de Dockview encima (`data-lesson-page` en el layout root; `dockview-workspace.ts`).

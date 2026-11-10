@@ -430,3 +430,23 @@ izquierda sigue necesitando expresar recorrido.
    del itinerario como paradas de kind Assignment.
 3. **Qué ve el estudiante al principio.** Sólo su posición sobre el itinerario, o
    también el mapa completo (la advertencia sobre Duolingo, sección 3).
+
+## 18. Decisiones tomadas (2026-11-10)
+
+**El principio: Obsidian genera conocimiento, musiki ordena la clase.** Todo lo que es
+acción en clase —agenda, asistencia, calificaciones, y ahora el itinerario— vive en
+musiki, en la base. Obsidian es donde se escribe el contenido. Es el mismo criterio
+que la gradiente de durabilidad (sección 8): lo durable en el repo, lo del día a día
+en la base.
+
+1. **El itinerario vive en la base, por cohorte.** No es un archivo del repo.
+2. **La rúbrica fija pasa a «En esta nota»**, arriba del pod Progreso: cada
+   evaluación de la nota activa muestra a qué requisito suma, y la rúbrica completa
+   queda debajo con esos requisitos resaltados. Trazabilidad de la nota activa sobre
+   el mapa total, sin una superficie aparte de requisitos.
+3. **El estudiante ve el mapa completo, con todo lo que no es su posición en muted.**
+   Un ícono alterna con una vista plegada que muestra sólo el lugar actual y sus
+   vecinos.
+
+Además: **el árbol de la sidebar izquierda arranca plegado** y recuerda, por persona y
+por materia, lo que cada uno dejó abierto (localStorage), más el camino a la nota activa.
