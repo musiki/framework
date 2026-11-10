@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { query } from '../../../lib/db/pool';
 import { buildEvalCatalog } from '../../../lib/eval-catalog';
 import { buildGraphData } from '../../../scripts/build-graph-data.mjs';
+import { chapterForNode } from '../../../lib/course/note-chapter.mjs';
 
 export const prerender = false;
 
@@ -28,27 +29,6 @@ const normSeg = (value: string): string =>
 const C4_LEVEL: Record<string, number> = { 'mini-c': 1, 'little-c': 2, 'pro-c': 3, 'big-c': 4 };
 const NON_ROUTE_NOTE_TYPES = new Set(['latex-template', 'course']);
 const REQUIRED = { proyecto: 1, conexiones: 5, coloquios: 2, estigmergia: 1, aporte: 1 };
-
-function humanizeUnit(value: string): string {
-  const clean = String(value || '')
-    .replace(/^\d+[\s._-]*/, '')
-    .replace(/[-_]+/g, ' ')
-    .trim();
-  return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : 'Recorrido';
-}
-
-function unitForNode(nodeId: string, courseId: string): { id: string; label: string; order: number } {
-  const parts = String(nodeId || '').split('/').filter(Boolean);
-  const courseIndex = parts.findIndex((part) => part === courseId);
-  const relative = courseIndex >= 0 ? parts.slice(courseIndex + 1) : parts;
-  const unitId = relative.length > 1 ? relative[0] : 'recorrido';
-  const orderMatch = unitId.match(/^(\d+)/);
-  return {
-    id: unitId,
-    label: humanizeUnit(unitId),
-    order: orderMatch ? Number(orderMatch[1]) : 999,
-  };
-}
 
 function conceptHref(courseId: string, slug: string): string {
   return `/${encodeURIComponent(courseId)}/${encodeURIComponent(slug)}`;
@@ -96,7 +76,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
     const idSet = new Set(courseNodes.map((n) => n.id));
     const concepts = new Map<string, any>();
     for (const n of courseNodes) {
-      const unit = unitForNode(n.id, courseId);
+      // La unidad es el capítulo del árbol de autor (frontmatter o carpeta).
+      const unit = chapterForNode(n, courseId);
       const slug = n.canonicalSlug || normSeg(n.id);
       concepts.set(n.id, {
         id: n.id,

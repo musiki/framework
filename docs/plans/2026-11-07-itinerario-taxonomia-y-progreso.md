@@ -483,3 +483,16 @@ Limpieza del pod Progreso del estudiante, según lo que se vio con s123:
 
 Falta: que el docente vea el Recorrido como lo ve el estudiante mientras lo edita, y
 probar con un itinerario real (s123 no tiene ninguno todavía).
+
+### 20.1 Círculos y secciones (2026-11-10)
+
+Decidido con Luciano: **círculo = parada del itinerario** y **sección = capítulo del
+árbol de autor**. El Recorrido dibuja cada parada como un círculo (aro = fracción de
+sus notas completadas, ícono del kind al centro, notas alrededor), en zigzag como el
+camino de Duolingo, y corta secciones cuando cambia el capítulo de las paradas (el
+`chapter` del frontmatter, o la carpeta: `src/lib/course/note-chapter.mjs`). No hay
+propiedad `class:` en el YAML: agrupar es decisión de la cursada, vive en musiki.
+
+Pendiente de discusión: hyper/hypo/connect como relaciones semánticas centrales del
+YAML (SKOS broader/narrower/related), separadas del orden de aprendizaje, que es el
+itinerario (y, si hace falta, un `requires:` propio).

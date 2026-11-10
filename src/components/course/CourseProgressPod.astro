@@ -125,6 +125,10 @@ const clientStrings = JSON.stringify({
             <input type="range" id="cpp-depth" min="1" max="5" step="1" value="2" aria-label="Profundidad del Connectoma" />
             <output id="cpp-depth-out" for="cpp-depth">2</output>
           </label>
+          <label class="cpp-depth" title="Separación entre vecinas">
+            ↔
+            <input type="range" id="cpp-spread" min="0" max="100" step="5" value="50" aria-label="Separación entre notas del Connectoma" />
+          </label>
           <button type="button" class="cpp-icon-btn" id="cpp-zoom-out" aria-label="Alejar" title="Alejar">−</button>
           <button type="button" class="cpp-icon-btn" id="cpp-zoom-in" aria-label="Acercar" title="Acercar">+</button>
         </div>
@@ -432,6 +436,7 @@ const clientStrings = JSON.stringify({
   .cpp-graph { position: relative; width: 100%; height: 220px; overflow: hidden; border-radius: 6px; cursor: grab; }
   .cpp-connect-tools { display: flex; align-items: center; gap: 0.25rem; }
   .cpp-depth { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--c-fg-dim); font-size: 0.66rem; }
+  .cpp-connect-tools { flex-wrap: wrap; justify-content: flex-end; }
   .cpp-depth input { width: 4.2rem; accent-color: var(--cpp-accent); }
   .cpp-depth output { min-width: 0.6rem; font-variant-numeric: tabular-nums; }
   .cpp-icon-btn {
@@ -454,12 +459,18 @@ const clientStrings = JSON.stringify({
   .course-container[data-right-maximized='true'] .cpp-graph { height: 62vh; }
   /* Recorrido: la parada actual con acento, el resto en muted. */
   .cpp-route-empty { margin: 0; color: var(--c-fg-dim); font-size: 0.76rem; }
-  .cpp-unit[data-state='upcoming'],
-  .cpp-unit[data-state='done'] { opacity: 0.45; transition: opacity 160ms ease; }
-  .cpp-unit[data-state='upcoming']:hover,
-  .cpp-unit[data-state='done']:hover { opacity: 0.85; }
-  .cpp-unit[data-state='current'] .cpp-unit-label { color: var(--cpp-accent); }
-  .cpp-unit-kind { margin-right: 0.35rem; }
+  .cpp-stop { transition: opacity 160ms ease; }
+  .cpp-stop[data-state='upcoming'],
+  .cpp-stop[data-state='done'] { opacity: 0.45; }
+  .cpp-stop:hover { opacity: 0.9; }
+  .cpp-disc { fill: var(--c-bg); stroke: var(--cpp-line); stroke-width: 4; }
+  .cpp-disc.is-done { fill: color-mix(in srgb, var(--cpp-accent) 14%, var(--c-bg)); }
+  .cpp-arc { fill: none; stroke: var(--cpp-accent); stroke-width: 4; stroke-linecap: round; }
+  .cpp-kind { fill: currentColor; font-size: 15px; opacity: 0.8; }
+  .cpp-stop[data-state='current'] .cpp-kind,
+  .cpp-stop[data-state='current'] .cpp-stop-lab { fill: var(--cpp-accent); opacity: 1; }
+  .cpp-stop-lab { font-weight: 600; }
+  .cpp-ring.cpp-dot { fill: var(--c-bg); }
   .cpp-legend {
     display: flex;
     flex-wrap: wrap;
@@ -513,12 +524,16 @@ const clientStrings = JSON.stringify({
   import { createConnectome, type Connectome } from '../../scripts/course/progress-connectome';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
-  const R = 8;
-  const COLS = 3;
-  const DX = 122;
-  const DY = 84;
-  const X0 = 42;
-  const Y0 = 32;
+  // El Recorrido en círculos (como el camino de Duolingo): cada parada del
+  // itinerario es un círculo con su progreso en el aro y sus notas alrededor;
+  // el capítulo del árbol de autor corta secciones.
+  const VIEW_W = 328;
+  const CX = VIEW_W / 2;
+  const ZIGZAG = [0, 52, 0, -52];
+  const CR = 24;
+  const ORBIT = 37;
+  const ROW_H = 124;
+  const TOP = 48;
 
   const REQ_LABEL: Record<string, string> = {
     proyecto: 'proyecto (obra)',
@@ -624,35 +639,6 @@ const clientStrings = JSON.stringify({
     });
   }
 
-  function appendBadges(svg: SVGElement, concept: any, x: number, y: number) {
-    let bx = x - 14;
-    if (concept.coloquio) {
-      svg.appendChild(svgEl('path', { d: `M ${bx} ${y + R + 3} l 7 4 -7 4 Z`, class: 'cpp-badge' }));
-      bx += 11;
-    }
-    if (concept.peer) {
-      svg.appendChild(svgEl('path', { d: `M ${bx} ${y + R + 10} a 4 4 0 0 1 8 0 M ${bx + 4} ${y + R + 6} a 4 4 0 0 1 8 0`, class: 'cpp-badge-peer' }));
-      bx += 12;
-    }
-    if (concept.aporte) {
-      svg.appendChild(svgEl('path', { d: `M ${bx + 4} ${y + R + 2} l 1 2.6 h 2.6 l -2.1 1.8 .8 2.6 -2.3 -1.6 -2.3 1.6 .8 -2.6 -2.1 -1.8 h 2.6 Z`, class: 'cpp-badge' }));
-    }
-  }
-
-  function appendStateGlyph(parent: SVGElement, concept: any, x: number, y: number, markNext: boolean) {
-    const state = stateOf(concept);
-    if (state === 3) {
-      parent.appendChild(svgEl('rect', { x: String(x - R), y: String(y - R), width: String(R * 2), height: String(R * 2), transform: `rotate(45 ${x} ${y})`, class: 'cpp-eval' }));
-    } else if (state === 2) {
-      parent.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(R), class: 'cpp-solid' }));
-    } else if (state === 1) {
-      parent.appendChild(svgEl('path', { d: `M ${x} ${y - R} a ${R} ${R} 0 0 1 0 ${R * 2} Z`, class: 'cpp-half' }));
-      parent.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(R), class: 'cpp-ring' }));
-    } else {
-      parent.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(R), class: `cpp-ring${markNext ? ' cpp-next' : ''}` }));
-    }
-  }
-
   // El título de la nota bajo el nodo, en hasta dos líneas. Los nombres de
   // archivo sin title llegan con _ y -: se leen mejor como palabras.
   const LABEL_CHARS = 17;
@@ -671,58 +657,6 @@ const clientStrings = JSON.stringify({
     return lines.map((l) => (l.length > LABEL_CHARS ? `${l.slice(0, LABEL_CHARS - 1)}…` : l));
   }
 
-  function renderUnit(host: HTMLElement, label: string, concepts: any[], nextState: { marked: boolean }) {
-    const section = document.createElement('section');
-    section.className = 'cpp-unit';
-    const heading = document.createElement('h4');
-    heading.className = 'cpp-unit-label';
-    heading.textContent = label;
-    section.appendChild(heading);
-    const rows = Math.max(1, Math.ceil(concepts.length / COLS));
-    const height = Math.max(58, Y0 + rows * DY - (DY - 48));
-    const svg = svgEl('svg', { viewBox: `0 0 ${X0 * 2 + (COLS - 1) * DX} ${height}` });
-    const positions = concepts.map((concept, index) => {
-      const row = Math.floor(index / COLS);
-      let col = index % COLS;
-      if (row % 2 === 1) col = COLS - 1 - col;
-      return { x: X0 + col * DX, y: Y0 + row * DY, concept };
-    });
-    positions.slice(0, -1).forEach((point, index) => {
-      const next = positions[index + 1];
-      const mid = (point.x + next.x) / 2;
-      svg.appendChild(svgEl('path', {
-        d: `M ${point.x} ${point.y} C ${mid} ${point.y}, ${mid} ${next.y}, ${next.x} ${next.y}`,
-        class: `cpp-conn${stateOf(point.concept) >= 2 && stateOf(next.concept) >= 1 ? ' done' : ''}`,
-      }));
-    });
-    positions.forEach(({ x, y, concept }) => {
-      if (concept.conns > 0) {
-        svg.appendChild(svgEl('path', { d: `M ${x + R + 5} ${y - R - 2} l -4 5 h 3 l -2 5 6 -7 h -3 Z`, class: 'cpp-ray' }));
-      }
-      const link = svgEl('a', {
-        href: String(concept.href || '#'),
-        class: 'cpp-path-link',
-        'aria-label': String(concept.name || concept.slug || 'Concepto'),
-        'data-course-id': courseId(),
-        'data-lesson-page-slug': String(concept.pageSlug || concept.slug || ''),
-      });
-      const isNext = stateOf(concept) === 0 && !nextState.marked;
-      appendStateGlyph(link, concept, x, y, isNext);
-      if (isNext) nextState.marked = true;
-      const text = svgEl('text', { x: String(x), y: String(y + R + 16), 'text-anchor': 'middle', class: 'cpp-lab' });
-      labelLines(String(concept.name || concept.slug || '')).forEach((line, index) => {
-        const span = svgEl('tspan', { x: String(x), dy: index ? '1.15em' : '0' });
-        span.textContent = line;
-        text.appendChild(span);
-      });
-      link.appendChild(text);
-      svg.appendChild(link);
-      appendBadges(svg, concept, x, y);
-    });
-    section.appendChild(svg);
-    host.appendChild(section);
-  }
-
   function appendProject(host: HTMLElement, project: any) {
     const level = Math.max(0, Math.min(4, Number(project?.c4Level) || 0));
     const section = document.createElement('section');
@@ -730,8 +664,8 @@ const clientStrings = JSON.stringify({
     const heading = document.createElement('h4');
     heading.className = 'cpp-unit-label';
     heading.textContent = 'Obra · 4C';
-    const svg = svgEl('svg', { viewBox: `0 0 ${X0 * 2 + (COLS - 1) * DX} 70` });
-    const cx = X0 + ((COLS - 1) * DX) / 2;
+    const svg = svgEl('svg', { viewBox: `0 0 ${VIEW_W} 70` });
+    const cx = CX;
     const cy = 31;
     for (let ring = level; ring >= 1; ring--) {
       svg.appendChild(svgEl('circle', { cx: String(cx), cy: String(cy), r: String(6 + ring * 7), class: 'cpp-halo', style: `opacity:${0.14 + ring * 0.13}` }));
@@ -763,6 +697,92 @@ const clientStrings = JSON.stringify({
     try { return localStorage.getItem(ROUTE_FOLD_KEY) === '1'; } catch { return false; }
   };
 
+  function noteLink(concept: any, label: string): SVGElement {
+    const link = svgEl('a', {
+      href: String(concept.href || '#'),
+      class: 'cpp-path-link',
+      'aria-label': label,
+      'data-course-id': courseId(),
+      'data-lesson-page-slug': String(concept.pageSlug || concept.slug || ''),
+    });
+    const title = svgEl('title', {});
+    title.textContent = label;
+    link.appendChild(title);
+    return link;
+  }
+
+  function appendNoteDot(parent: SVGElement, concept: any, x: number, y: number) {
+    const state = stateOf(concept);
+    const link = noteLink(concept, String(concept.name || concept.slug || 'Nota'));
+    const r = 4.6;
+    if (state >= 3) link.appendChild(svgEl('rect', { x: String(x - r), y: String(y - r), width: String(r * 2), height: String(r * 2), transform: `rotate(45 ${x} ${y})`, class: 'cpp-eval' }));
+    else if (state === 2) link.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(r), class: 'cpp-solid' }));
+    else {
+      if (state === 1) link.appendChild(svgEl('path', { d: `M ${x} ${y - r} a ${r} ${r} 0 0 1 0 ${r * 2} Z`, class: 'cpp-half' }));
+      link.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(r), class: 'cpp-ring cpp-dot' }));
+    }
+    parent.appendChild(link);
+  }
+
+  type RouteStop = { stop: any; items: any[]; state: string };
+
+  function renderCircles(host: HTMLElement, chapterLabel: string, stops: RouteStop[]) {
+    const section = document.createElement('section');
+    section.className = 'cpp-unit';
+    if (chapterLabel) {
+      const heading = document.createElement('h4');
+      heading.className = 'cpp-unit-label';
+      heading.textContent = chapterLabel;
+      section.appendChild(heading);
+    }
+    const height = TOP + (stops.length - 1) * ROW_H + ORBIT + 46;
+    const svg = svgEl('svg', { viewBox: `0 0 ${VIEW_W} ${height}` });
+    const centers = stops.map((_, i) => ({ x: CX + ZIGZAG[i % ZIGZAG.length], y: TOP + i * ROW_H }));
+    centers.slice(0, -1).forEach((from, i) => {
+      const to = centers[i + 1];
+      const done = stops[i].items.length > 0 && stops[i].items.every((item) => stateOf(item) >= 2);
+      svg.appendChild(svgEl('path', {
+        d: `M ${from.x} ${from.y + ORBIT + 8} C ${from.x} ${from.y + ROW_H / 2}, ${to.x} ${to.y - ROW_H / 2}, ${to.x} ${to.y - ORBIT - 8}`,
+        class: `cpp-conn${done ? ' done' : ''}`,
+      }));
+    });
+    stops.forEach(({ stop, items, state }, i) => {
+      const { x, y } = centers[i];
+      const group = svgEl('g', { class: 'cpp-stop', 'data-state': state });
+      const real = items.filter((item) => !item.placeholder);
+      const doneCount = items.filter((item) => stateOf(item) >= 2).length;
+      const pct = items.length ? Math.round((100 * doneCount) / items.length) : 0;
+      const next = real.find((item) => stateOf(item) < 2) || real[0];
+      const label = String(stop.title || '');
+      const circle = next ? noteLink(next, label) : svgEl('g', {});
+      if (state === 'current') circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR + 6), class: 'cpp-halo cpp-next' }));
+      circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR), class: pct === 100 ? 'cpp-disc is-done' : 'cpp-disc' }));
+      circle.appendChild(svgEl('circle', {
+        cx: String(x), cy: String(y), r: String(CR), pathLength: '100',
+        'stroke-dasharray': `${pct} 100`, transform: `rotate(-90 ${x} ${y})`, class: 'cpp-arc',
+      }));
+      const icon = svgEl('text', { x: String(x), y: String(y), 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'cpp-kind' });
+      icon.textContent = KIND_ICON.get(stop.kind) || '◆';
+      circle.appendChild(icon);
+      const text = svgEl('text', { x: String(x), y: String(y + ORBIT + 20), 'text-anchor': 'middle', class: 'cpp-lab cpp-stop-lab' });
+      labelLines(label).forEach((line, index) => {
+        const span = svgEl('tspan', { x: String(x), dy: index ? '1.15em' : '0' });
+        span.textContent = line;
+        text.appendChild(span);
+      });
+      circle.appendChild(text);
+      group.appendChild(circle);
+      // Las notas de la parada alrededor del aro, empezando arriba.
+      items.forEach((item, k) => {
+        const angle = -Math.PI / 2 + (2 * Math.PI * k) / Math.max(items.length, 1);
+        appendNoteDot(group, item, x + ORBIT * Math.cos(angle), y + ORBIT * Math.sin(angle));
+      });
+      svg.appendChild(group);
+    });
+    section.appendChild(svg);
+    host.appendChild(section);
+  }
+
   function renderPath(concepts: any[], project: any) {
     const host = el('cpp-path');
     if (!host) return;
@@ -778,14 +798,17 @@ const clientStrings = JSON.stringify({
     }
     if (stops.length) {
       const route = resolveRoute(stops, concepts, activeSlug || activeNote().slug);
-      const nextState = { marked: false };
+      // Secciones: paradas seguidas del mismo capítulo (el de su primera nota conocida).
+      const sections: { chapter: string; stops: RouteStop[] }[] = [];
       visibleStopIndexes(route.stops.length, route.currentIndex, folded).forEach((index) => {
-        const { stop, items, state } = route.stops[index];
-        const label = `${KIND_ICON.get(stop.kind) || '◆'} ${stop.title || ''}`.trim();
-        renderUnit(host, label, items, nextState);
-        const unit = host.lastElementChild as HTMLElement | null;
-        if (unit) unit.dataset.state = state;
+        const entry = route.stops[index] as RouteStop;
+        const known = entry.items.find((item) => !item.placeholder);
+        const last = sections[sections.length - 1];
+        const chapter = known ? String(known.unitLabel || '') : (last?.chapter ?? '');
+        if (last && last.chapter === chapter) last.stops.push(entry);
+        else sections.push({ chapter, stops: [entry] });
       });
+      sections.forEach((section) => renderCircles(host, section.chapter, section.stops));
     }
     appendProject(host, project);
   }
@@ -819,6 +842,7 @@ const clientStrings = JSON.stringify({
         if (density) density.textContent = shown < total ? `${shown} de ${total} notas` : `${total} notas`;
       });
       connectome.setDepth(Number((el('cpp-depth') as HTMLInputElement | null)?.value) || 2);
+      connectome.setSpread(Number((el('cpp-spread') as HTMLInputElement | null)?.value ?? 50));
     }
     connectome.update(concepts, edges, activeSlug || activeNote().slug);
   }
@@ -828,6 +852,9 @@ const clientStrings = JSON.stringify({
     const out = el('cpp-depth-out');
     if (out) out.textContent = value;
     connectome?.setDepth(Number(value));
+  });
+  el('cpp-spread')?.addEventListener('input', (event) => {
+    connectome?.setSpread(Number((event.target as HTMLInputElement).value));
   });
   el('cpp-zoom-in')?.addEventListener('click', () => connectome?.zoomBy(1.4));
   el('cpp-zoom-out')?.addEventListener('click', () => connectome?.zoomBy(1 / 1.4));

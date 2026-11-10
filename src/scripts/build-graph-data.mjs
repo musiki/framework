@@ -169,6 +169,8 @@ export function buildGraphData({ publicOnly = false, tenant = null } = {}) {
         status: String(fm.data.status || '').trim().toLowerCase(),
         // El type del frontmatter: el pod Progreso deja afuera lo que no es contenido de la cursada.
         noteType: String(fm.data.type || '').trim().toLowerCase(),
+        // El chapter del frontmatter: el Recorrido de Progreso corta secciones con él.
+        chapter: String(fm.data.chapter || '').trim(),
         canonicalSlug,
         def: fm.data.def ? String(fm.data.def).trim() : '',
         excerpt: makeExcerpt(fm.content),

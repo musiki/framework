@@ -46,6 +46,7 @@ const cssVar = (name: string, fallback: string) =>
 export type Connectome = {
   update: (concepts: Concept[], edges: Edge[], activeSlug: string) => void;
   setDepth: (depth: number) => void;
+  setSpread: (percent: number) => void;
   zoomBy: (factor: number) => void;
   resize: () => void;
   destroy: () => void;
@@ -58,9 +59,14 @@ export function createConnectome(host: HTMLElement, onOpen: (concept: Concept) =
   let activeSlug = '';
   let depth = 2;
   let pendingFit = true;
+  let spread = 0.5;
   // Los nodos sin aristas se alejan con la repulsión; el encuadre los deja de
   // lado para que el grafo conectado no quede como un punto en el medio.
   let linked = new Set<string>();
+  const recenter = () => {
+    const box = graph?.getGraphBbox?.((n: GraphNode) => linked.size === 0 || linked.has(n.id));
+    if (box) graph?.centerAt((box.x[0] + box.x[1]) / 2, (box.y[0] + box.y[1]) / 2, 300);
+  };
   const fit = (ms: number) => graph?.zoomToFit(ms, 18, (n: GraphNode) => linked.size === 0 || linked.has(n.id));
 
   const size = () => ({ w: host.clientWidth || 320, h: host.clientHeight || 220 });
@@ -140,10 +146,30 @@ export function createConnectome(host: HTMLElement, onOpen: (concept: Concept) =
       })
       .onNodeClick((n: GraphNode) => onOpen(n.concept))
       .onEngineStop(() => {
+        // Al estabilizarse siempre recentra; el zoom sólo se ajusta en un dibujo nuevo.
         if (pendingFit) { pendingFit = false; fit(300); }
+        else recenter();
       });
-    graph.d3Force('charge')?.distanceMax?.(160);
+    applyForces();
     return graph;
+  }
+
+  // Separación (como el «link distance» de Obsidian): de 0 a 1 abre la distancia
+  // de los enlaces y la repulsión. La gravedad lleva todo al centro, más fuerte en
+  // vertical para que el grafo no se escape del recuadro, que es apaisado.
+  function applyForces() {
+    if (!graph) return;
+    graph.d3Force('link')?.distance?.(18 + 110 * spread);
+    graph.d3Force('charge')?.strength?.(-(15 + 135 * spread))?.distanceMax?.(120 + 200 * spread);
+    let nodes: GraphNode[] = [];
+    const gravity = (alpha: number) => {
+      for (const n of nodes as Array<GraphNode & { vx?: number; vy?: number }>) {
+        n.vx = (n.vx ?? 0) - (n.x ?? 0) * 0.04 * alpha;
+        n.vy = (n.vy ?? 0) - (n.y ?? 0) * 0.12 * alpha;
+      }
+    };
+    gravity.initialize = (next: GraphNode[]) => { nodes = next; };
+    graph.d3Force('gravity', gravity);
   }
 
   async function redraw() {
@@ -169,6 +195,12 @@ export function createConnectome(host: HTMLElement, onOpen: (concept: Concept) =
     setDepth(next) {
       depth = clampDepth(next);
       void redraw();
+    },
+    setSpread(percent) {
+      spread = Math.min(1, Math.max(0, Number(percent) / 100 || 0));
+      applyForces();
+      pendingFit = true;
+      graph?.d3ReheatSimulation?.();
     },
     zoomBy(factor) {
       if (!graph) return;

@@ -1,5 +1,10 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-10 recorrido-circulos> <br>
+- **Recorrido en círculos**: cada parada del itinerario es un círculo (aro de progreso, ícono del kind, notas alrededor, título debajo), en zigzag; las secciones son el capítulo del árbol de autor (`src/lib/course/note-chapter.mjs`, también arregla «Unidad activa · Public»: `pod.ts` ya no toma la primera carpeta como unidad). `build-graph-data` lleva `chapter`.
+- **Connectoma**: separación 0–100 % (50 por defecto, distancia de enlace + repulsión), gravedad al centro más fuerte en vertical, recentra al estabilizarse; encuadre sobre los nodos conectados; la profundidad no atraviesa notas índice (hubs).
+- **⤢ en la cabecera de Progreso** maximiza toda la sidebar (el mismo mecanismo del Foro).
+
 <2026-11-10 progreso-recorrido-connectoma> <br>
 - **Árbol de estudiantes** (`[...slug].astro`): en la rama de estudiantes `<ul set:html={cond ? html : undefined}>` reemplazaba los hijos por nada en todo capítulo que no fuera CONCEPTOS: por eso FORMA Y ESTRUCTURA y las GENERAL salían vacías (el árbol docente es otro, en el cliente, y no lo mostraba). Además las notas sin capítulo iban a una carpeta `general` en minúscula, que con `chapter: GENERAL` daba dos GENERAL; ahora van a la raíz sin carpeta (`chapter--root`), fuera del plegado.
 - **Ribbon**: Progreso con ícono propio y puntito rojo si hay repasos vencidos (`src/lib/course/progress-pending.mjs`, cache 5 min en sessionStorage, lo refresca el pod al cargar); el «Aa» de temas pasa a un sol.
