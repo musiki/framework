@@ -253,21 +253,23 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     const head = document.createElement('div');
     head.className = 'cpp-it-stop-head';
 
-    const handle = document.createElement('span');
-    handle.className = 'cpp-it-handle';
-    handle.textContent = '⋮⋮';
-    handle.title = 'Arrastrar para reordenar';
-    handle.draggable = true;
-    handle.addEventListener('dragstart', (e) => {
-      e.dataTransfer?.setData(STOP_MIME, stop.id);
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-      li.classList.add('is-dragging');
-    });
-    handle.addEventListener('dragend', () => li.classList.remove('is-dragging'));
-
+    // El número de la parada, en un círculo lleno del color de su kind, es la
+    // manija para arrastrarla.
     const num = document.createElement('span');
     num.className = 'cpp-it-num';
     num.textContent = String(index + 1);
+    num.title = 'Arrastrar para reordenar';
+    num.draggable = true;
+    num.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+      e.dataTransfer?.setData(STOP_MIME, stop.id);
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setDragImage(li, 12, 12);
+      }
+      li.classList.add('is-dragging');
+    });
+    num.addEventListener('dragend', () => { li.classList.remove('is-dragging'); clearDropMarks(); });
 
     const kind = kindOf(stop.kind);
     const kindBtn = document.createElement('button');
@@ -328,7 +330,7 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
       commit();
     });
 
-    head.append(handle, num, kindBtn, ...(inFork ? [branchBtn] : []), title, remove);
+    head.append(num, kindBtn, ...(inFork ? [branchBtn] : []), title, remove);
     if (structural) {
       li.append(head);
       li.addEventListener('dragover', (e) => {
