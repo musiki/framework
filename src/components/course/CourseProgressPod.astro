@@ -508,7 +508,14 @@ const clientStrings = JSON.stringify({
   .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > .cpp-header { grid-row: 1; }
   .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > .cpp-hot { grid-row: 2; }
   .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > #cpp-itinerary { grid-column: 1; grid-row: 3; }
-  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > .cpp-route { grid-column: 2; grid-row: 3; position: sticky; top: 5rem; }
+  /* Sin sticky: flotaba sobre los bloques de abajo. Alto tope y scroll propio. */
+  .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) > .cpp-route {
+    grid-column: 2;
+    grid-row: 3;
+    max-height: calc(100vh - 8rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
   /* Progreso a pantalla completa (la sidebar derecha maximizada): el Connectoma crece. */
   .course-container[data-right-maximized='true'] .cpp-graph { height: 62vh; }
   /* Recorrido: la parada actual con acento, el resto en muted. */
