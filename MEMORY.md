@@ -1,5 +1,10 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-10 itinerario-ramas-ayuda> <br>
+- **Ramas en el itinerario**: kinds de estructura `bifurcacion` (⑂) y `union` (⑃), sin notas; las paradas de en medio llevan `branch` A–F (`normalizeStops` valida: sin anidar, cerradas). Sólo visual: el estudiante puede seguir una o varias ramas; la parada actual nunca es un ⑂/⑃. El editor tiene «+ ⑂» (crea ⑂, rama A, rama B, ⑃) y la letra de rama con click; quitar un ⑂ se lleva su ⑃. El Recorrido dibuja las ramas en columnas paralelas (`routeBlocks`).
+- **Editor**: cada nota con la forma de su kind; maximizado, editor y Recorrido lado a lado con el borrador al momento (`musiki:itinerary-draft`). Aro de cada parada en gajos; una parada de una nota se parte en sus `hypo:`.
+- **«?» en Progreso**: `<dialog>` con cómo se lee (círculos, gajos, secciones, ramas, Connectoma, propiedades YAML).
+
 <2026-11-10 recorrido-circulos> <br>
 - **Recorrido en círculos**: cada parada del itinerario es un círculo (aro de progreso, ícono del kind, notas alrededor, título debajo), en zigzag; las secciones son el capítulo del árbol de autor (`src/lib/course/note-chapter.mjs`, también arregla «Unidad activa · Public»: `pod.ts` ya no toma la primera carpeta como unidad). `build-graph-data` lleva `chapter`.
 - **Connectoma**: separación 0–100 % (50 por defecto, distancia de enlace + repulsión), gravedad al centro más fuerte en vertical, recentra al estabilizarse; encuadre sobre los nodos conectados; la profundidad no atraviesa notas índice (hubs).

@@ -75,3 +75,20 @@ test('stopFromNote toma título y kind de la nota', () => {
   assert.deepEqual(s.notes, ['sesgo-de-confirmacion']);
   assert.equal(stopFromNote({ slug: 'x', type: 'person' }).kind, 'clase');
 });
+
+test('normalizeStops: bifurcaciones con ramas, sin anidar y cerradas', () => {
+  const ok = normalizeStops([
+    { title: 'Elegí', kind: 'bifurcacion', notes: ['x'] },
+    { title: 'A1', kind: 'concepto', notes: [], branch: 'B' },
+    { title: 'A2', kind: 'concepto', notes: [], branch: 'Z' },
+    { title: 'Tronco', kind: 'union' },
+    { title: 'Afuera', kind: 'clase', branch: 'A' },
+  ]);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.stops.map((s) => [s.kind, s.branch, s.notes.length]), [
+    ['bifurcacion', undefined, 0], ['concepto', 'B', 0], ['concepto', 'A', 0], ['union', undefined, 0], ['clase', undefined, 0],
+  ]);
+  assert.equal(normalizeStops([{ title: 'a', kind: 'bifurcacion' }]).ok, false);
+  assert.equal(normalizeStops([{ title: 'a', kind: 'union' }]).ok, false);
+  assert.equal(normalizeStops([{ title: 'a', kind: 'bifurcacion' }, { title: 'b', kind: 'bifurcacion' }]).ok, false);
+});

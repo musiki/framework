@@ -17,6 +17,22 @@ export const ITINERARY_KINDS = [
 
 const KIND_IDS = new Set(ITINERARY_KINDS.map((k) => k.id));
 
+/**
+ * Paradas de estructura, sin notas: una bifurcación abre ramas («elegí tu
+ * camino») y la vuelta al tronco las cierra. Las paradas de en medio llevan
+ * `branch` (A–F). Es sólo visual: nadie queda encerrado en una rama.
+ */
+export const STRUCTURE_KINDS = [
+  { id: 'bifurcacion', label: 'Bifurcación · elegí tu camino', icon: '⑂' },
+  { id: 'union', label: 'Vuelta al tronco', icon: '⑃' },
+];
+const STRUCTURE_IDS = new Set(STRUCTURE_KINDS.map((k) => k.id));
+export const BRANCHES = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+export function isStructural(stop) {
+  return STRUCTURE_IDS.has(stop?.kind);
+}
+
 /** El `type` del frontmatter agrupado en un kind; '' si es recurso de apoyo. */
 const KIND_BY_NOTE_TYPE = {
   concept: 'concepto',
@@ -66,6 +82,7 @@ export function normalizeStops(input) {
 
   const seenIds = new Set();
   const stops = [];
+  let openFork = '';
   for (const [index, raw] of input.entries()) {
     if (!raw || typeof raw !== 'object') return { ok: false, error: `La parada ${index + 1} está vacía.` };
     const title = String(raw.title || '').replace(/\s+/g, ' ').trim();
@@ -74,7 +91,7 @@ export function normalizeStops(input) {
       return { ok: false, error: `El nombre de la parada ${index + 1} pasa de ${MAX_TITLE_LENGTH} caracteres.` };
     }
     const kind = String(raw.kind || '').trim();
-    if (!KIND_IDS.has(kind)) return { ok: false, error: `La parada «${title}» tiene un kind desconocido.` };
+    if (!KIND_IDS.has(kind) && !STRUCTURE_IDS.has(kind)) return { ok: false, error: `La parada «${title}» tiene un kind desconocido.` };
 
     let id = String(raw.id || '').trim();
     if (!/^[a-z0-9_-]{1,40}$/i.test(id) || seenIds.has(id)) id = newStopId();
@@ -88,8 +105,21 @@ export function normalizeStops(input) {
     if (notes.length > MAX_NOTES_PER_STOP) {
       return { ok: false, error: `La parada «${title}» pasa de ${MAX_NOTES_PER_STOP} notas.` };
     }
-    stops.push({ id, title, kind, notes });
+    if (kind === 'bifurcacion') {
+      if (openFork) return { ok: false, error: `«${title}» abre una bifurcación dentro de «${openFork}»: no se anidan.` };
+      openFork = title;
+      stops.push({ id, title, kind, notes: [] });
+    } else if (kind === 'union') {
+      if (!openFork) return { ok: false, error: `«${title}» vuelve al tronco sin una bifurcación antes.` };
+      openFork = '';
+      stops.push({ id, title, kind, notes: [] });
+    } else if (openFork) {
+      stops.push({ id, title, kind, notes, branch: BRANCHES.includes(raw.branch) ? raw.branch : 'A' });
+    } else {
+      stops.push({ id, title, kind, notes });
+    }
   }
+  if (openFork) return { ok: false, error: `La bifurcación «${openFork}» no tiene vuelta al tronco.` };
   return { ok: true, stops };
 }
 

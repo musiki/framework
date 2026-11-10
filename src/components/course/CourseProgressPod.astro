@@ -41,6 +41,14 @@ const clientStrings = JSON.stringify({
         <button
           type="button"
           class="cpp-icon-btn"
+          id="cpp-help-open"
+          aria-haspopup="dialog"
+          aria-label="Cómo se lee Progreso"
+          title="Cómo se lee Progreso"
+        >?</button>
+        <button
+          type="button"
+          class="cpp-icon-btn"
           id="cpp-maximize"
           aria-pressed="false"
           aria-label="Progreso a pantalla completa"
@@ -149,6 +157,25 @@ const clientStrings = JSON.stringify({
     </div>
 
     <p class="cpp-note" id="cpp-note" aria-live="polite"></p>
+
+    <dialog class="cpp-help" id="cpp-help" aria-labelledby="cpp-help-title">
+      <header class="cpp-help-head">
+        <h3 id="cpp-help-title">Cómo se lee Progreso</h3>
+        <button type="button" class="cpp-icon-btn" data-help-close aria-label="Cerrar">×</button>
+      </header>
+      <div class="cpp-help-body">
+        <h4>Recorrido</h4>
+        <p>Es el itinerario que arma la cátedra para tu cohorte. Cada <strong>círculo</strong> es una parada; el aro está partido en <strong>gajos</strong>, uno por nota, y cada gajo se llena a medida que la leés, la completás o la evaluás. Si la parada es una sola nota (una clase), los gajos son los conceptos que esa nota declara en <code>hypo:</code>.</p>
+        <p>La parada actual va resaltada; el resto queda tenue. Las <strong>secciones</strong> son los capítulos de la materia (<code>chapter:</code> de la nota, o su carpeta).</p>
+        <p>Kinds: ◆ concepto · ≡ protocolo · ● clase · ▲ assignment · ■ output.</p>
+        <h4>Ramas</h4>
+        <p>⑂ abre una <strong>bifurcación</strong>: caminos alternativos (temas, soluciones) que se pueden recorrer en cualquier orden, uno o varios. ⑃ es la <strong>vuelta al tronco</strong>. Es una guía visual: ninguna rama cierra las otras.</p>
+        <h4>Connectoma</h4>
+        <p>El mapa de notas de la materia desde la que estás leyendo. <strong>Profundidad</strong> 1 son sus vecinas, 5 el mapa entero; las notas índice no se atraviesan. <strong>↔</strong> separa las notas. Las flechas son <code>hyper:</code>/<code>hypo:</code> (general → particular), el punteado es <code>connect:</code>.</p>
+        <h4>Para quien escribe</h4>
+        <p>En el YAML de cada nota: <code>type:</code> decide su kind, <code>chapter:</code> su sección, <code>hyper:</code>/<code>hypo:</code> dónde se engancha y qué contiene, <code>connect:</code> las relaciones laterales. El orden de la cursada no va en la nota: lo arma la cátedra en el itinerario.</p>
+      </div>
+    </dialog>
   </div>
 </section>
 
@@ -455,6 +482,21 @@ const clientStrings = JSON.stringify({
   .cpp-icon-btn[hidden] { display: none; }
   .cpp-icon-btn:hover,
   .cpp-icon-btn[aria-pressed='true'] { border-color: var(--cpp-accent); color: var(--cpp-accent); }
+  .cpp-help {
+    width: min(34rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 4rem);
+    padding: 0;
+    border: 1px solid var(--c-border);
+    border-radius: 10px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+  .cpp-help::backdrop { background: color-mix(in srgb, var(--c-fg) 28%, transparent); }
+  .cpp-help-head { display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1rem 0.4rem; }
+  .cpp-help-head h3 { margin: 0; font-size: 1rem; }
+  .cpp-help-body { padding: 0 1rem 1rem; font-size: 0.84rem; line-height: 1.5; }
+  .cpp-help-body h4 { margin: 0.9rem 0 0.2rem; color: var(--c-fg-dim); font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .cpp-help-body p { margin: 0.25rem 0; }
   /* Maximizado con el editor de itinerario a la vista (docentes): editor y
      Recorrido lado a lado, para ver la estructura mientras se arma. */
   .course-container[data-right-maximized='true'] .cpp-shell:has(> #cpp-itinerary:not([hidden])) {
@@ -487,6 +529,9 @@ const clientStrings = JSON.stringify({
   .cpp-stop[data-state='current'] .cpp-kind,
   .cpp-stop[data-state='current'] .cpp-stop-lab { fill: var(--cpp-accent); opacity: 1; }
   .cpp-stop-lab { font-weight: 600; }
+  .cpp-marker-disc { fill: var(--c-bg); stroke: var(--c-fg); stroke-width: 1.4; stroke-dasharray: 3 2; }
+  .cpp-marker-lab { font-style: italic; }
+  .cpp-branch-lab { font-weight: 700; opacity: 0.55; }
   /* El kind de la parada también se ve en el círculo. */
   .cpp-stop--clase .cpp-disc { fill: color-mix(in srgb, var(--c-fg) 9%, var(--c-bg)); }
   .cpp-stop--assignment .cpp-kind { fill: var(--cpp-gold); opacity: 1; }
@@ -540,7 +585,7 @@ const clientStrings = JSON.stringify({
   import { pendingFromPod, publishPending } from '../../lib/course/progress-pending.mjs';
   import { summarizeActiveNote } from '../../lib/course/active-note-progress.mjs';
   import { ITINERARY_KINDS } from '../../lib/itinerary/itinerary.mjs';
-  import { resolveRoute, sliceItems, visibleStopIndexes } from '../../lib/itinerary/route-position.mjs';
+  import { resolveRoute, routeBlocks, sliceItems, visibleStopIndexes } from '../../lib/itinerary/route-position.mjs';
   import { createConnectome, type Connectome } from '../../scripts/course/progress-connectome';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -748,7 +793,71 @@ const clientStrings = JSON.stringify({
     return state >= 3 ? 'cpp-slice is-eval' : state === 2 ? 'cpp-slice is-done' : state === 1 ? 'cpp-slice is-read' : 'cpp-slice';
   };
 
-  function renderCircles(host: HTMLElement, chapterLabel: string, stops: RouteStop[]) {
+  type Anchor = { x: number; y: number; done: boolean };
+
+  function connect(svg: SVGElement, from: Anchor[], x: number, y: number) {
+    from.forEach((a) => {
+      const mid = (a.y + y) / 2;
+      svg.appendChild(svgEl('path', { d: `M ${a.x} ${a.y} C ${a.x} ${mid}, ${x} ${mid}, ${x} ${y}`, class: `cpp-conn${a.done ? ' done' : ''}` }));
+    });
+  }
+
+  function drawStop(svg: SVGElement, { stop, items, state }: RouteStop, x: number, y: number): Anchor {
+    const slices = sliceItems(items, lastData?.concepts || [], lastData?.edges || []) as any[];
+    const group = svgEl('g', { class: `cpp-stop cpp-stop--${stop.kind || 'concepto'}`, 'data-state': state });
+    const real = slices.filter((item) => !item.placeholder);
+    const complete = slices.length > 0 && slices.every((item) => stateOf(item) >= 2);
+    const next = real.find((item) => stateOf(item) < 2) || real[0];
+    const label = String(stop.title || '');
+    const circle = next ? noteLink(next, label) : svgEl('g', {});
+    if (state === 'current') circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR + 8), class: 'cpp-halo cpp-next' }));
+    circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR - 4), class: complete ? 'cpp-disc is-done' : 'cpp-disc' }));
+    const icon = svgEl('text', { x: String(x), y: String(y), 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'cpp-kind' });
+    icon.textContent = KIND_ICON.get(stop.kind) || '◆';
+    circle.appendChild(icon);
+    const text = svgEl('text', { x: String(x), y: String(y + CR + 20), 'text-anchor': 'middle', class: 'cpp-lab cpp-stop-lab' });
+    labelLines(label).forEach((line, index) => {
+      const span = svgEl('tspan', { x: String(x), dy: index ? '1.15em' : '0' });
+      span.textContent = line;
+      text.appendChild(span);
+    });
+    circle.appendChild(text);
+    group.appendChild(circle);
+    // El aro en gajos, uno por nota (o por hija de la nota): cada gajo abre la suya.
+    if (slices.length <= 1) {
+      const ring = slices[0] && !slices[0].placeholder ? noteLink(slices[0], String(slices[0].name || label)) : svgEl('g', {});
+      ring.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR), class: slices[0] ? sliceClass(slices[0]) : 'cpp-slice' }));
+      group.appendChild(ring);
+    } else {
+      const step = (2 * Math.PI) / slices.length;
+      slices.forEach((item, k) => {
+        const from = -Math.PI / 2 + k * step;
+        const link = item.placeholder ? svgEl('g', {}) : noteLink(item, String(item.name || item.slug || 'Nota'));
+        link.appendChild(svgEl('path', { d: arcPath(x, y, CR, from, from + step), class: sliceClass(item) }));
+        group.appendChild(link);
+      });
+    }
+    svg.appendChild(group);
+    return { x, y: y + CR + 44, done: complete };
+  }
+
+  // Bifurcación o vuelta al tronco: un nodo chico con su nombre al costado.
+  function drawMarker(svg: SVGElement, stop: any, x: number, y: number) {
+    const group = svgEl('g', { class: 'cpp-marker' });
+    group.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: '11', class: 'cpp-marker-disc' }));
+    const icon = svgEl('text', { x: String(x), y: String(y), 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'cpp-kind' });
+    icon.textContent = stop.kind === 'union' ? '⑃' : '⑂';
+    const text = svgEl('text', { x: String(x + 18), y: String(y), 'dominant-baseline': 'central', class: 'cpp-lab cpp-marker-lab' });
+    text.textContent = String(stop.title || '');
+    group.append(icon, text);
+    svg.appendChild(group);
+  }
+
+  type Block = { type: 'stop'; index: number } | { type: 'fork'; fork: number; union: number; branches: { label: string; indexes: number[] }[] };
+
+  // Una sección: el tronco en zigzag; en una bifurcación, las ramas en columnas
+  // paralelas que salen del ⑂ y vuelven al ⑃.
+  function renderSection(host: HTMLElement, chapterLabel: string, blocks: Block[], entries: RouteStop[]) {
     const section = document.createElement('section');
     section.className = 'cpp-unit';
     if (chapterLabel) {
@@ -757,58 +866,52 @@ const clientStrings = JSON.stringify({
       heading.textContent = chapterLabel;
       section.appendChild(heading);
     }
-    const height = TOP + (stops.length - 1) * ROW_H + CR + 52;
-    const svg = svgEl('svg', { viewBox: `0 0 ${VIEW_W} ${height}` });
-    const centers = stops.map((_, i) => ({ x: CX + ZIGZAG[i % ZIGZAG.length], y: TOP + i * ROW_H }));
-    const allConcepts = lastData?.concepts || [];
-    const allEdges = lastData?.edges || [];
-    const slicesOf = stops.map(({ items }) => sliceItems(items, allConcepts, allEdges) as any[]);
-    centers.slice(0, -1).forEach((from, i) => {
-      const to = centers[i + 1];
-      const done = slicesOf[i].length > 0 && slicesOf[i].every((item) => stateOf(item) >= 2);
-      svg.appendChild(svgEl('path', {
-        d: `M ${from.x} ${from.y + CR + 40} C ${from.x} ${from.y + ROW_H / 2 + 20}, ${to.x} ${to.y - ROW_H / 2 + 10}, ${to.x} ${to.y - CR - 10}`,
-        class: `cpp-conn${done ? ' done' : ''}`,
-      }));
-    });
-    stops.forEach(({ stop, state }, i) => {
-      const { x, y } = centers[i];
-      const slices = slicesOf[i];
-      const group = svgEl('g', { class: `cpp-stop cpp-stop--${stop.kind || 'concepto'}`, 'data-state': state });
-      const real = slices.filter((item) => !item.placeholder);
-      const complete = slices.length > 0 && slices.every((item) => stateOf(item) >= 2);
-      const next = real.find((item) => stateOf(item) < 2) || real[0];
-      const label = String(stop.title || '');
-      const circle = next ? noteLink(next, label) : svgEl('g', {});
-      if (state === 'current') circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR + 8), class: 'cpp-halo cpp-next' }));
-      circle.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR - 4), class: complete ? 'cpp-disc is-done' : 'cpp-disc' }));
-      const icon = svgEl('text', { x: String(x), y: String(y), 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'cpp-kind' });
-      icon.textContent = KIND_ICON.get(stop.kind) || '◆';
-      circle.appendChild(icon);
-      const text = svgEl('text', { x: String(x), y: String(y + CR + 20), 'text-anchor': 'middle', class: 'cpp-lab cpp-stop-lab' });
-      labelLines(label).forEach((line, index) => {
-        const span = svgEl('tspan', { x: String(x), dy: index ? '1.15em' : '0' });
-        span.textContent = line;
-        text.appendChild(span);
-      });
-      circle.appendChild(text);
-      group.appendChild(circle);
-      // El aro en gajos, uno por nota (o por hija de la nota): cada gajo abre la suya.
-      if (slices.length <= 1) {
-        const ring = slices[0] && !slices[0].placeholder ? noteLink(slices[0], String(slices[0].name || label)) : svgEl('g', {});
-        ring.appendChild(svgEl('circle', { cx: String(x), cy: String(y), r: String(CR), class: slices[0] ? sliceClass(slices[0]) : 'cpp-slice' }));
-        group.appendChild(ring);
-      } else {
-        const step = (2 * Math.PI) / slices.length;
-        slices.forEach((item, k) => {
-          const from = -Math.PI / 2 + k * step;
-          const link = item.placeholder ? svgEl('g', {}) : noteLink(item, String(item.name || item.slug || 'Nota'));
-          link.appendChild(svgEl('path', { d: arcPath(x, y, CR, from, from + step), class: sliceClass(item) }));
-          group.appendChild(link);
-        });
+    const svg = svgEl('svg', {});
+    let y = TOP;
+    let turn = 0;
+    let anchors: Anchor[] = [];
+    let bottom = 0;
+    for (const block of blocks) {
+      if (block.type === 'stop') {
+        const x = CX + ZIGZAG[turn++ % ZIGZAG.length];
+        connect(svg, anchors, x, y - CR - 10);
+        anchors = [drawStop(svg, entries[block.index], x, y)];
+        bottom = y + CR + 52;
+        y += ROW_H;
+        continue;
       }
-      svg.appendChild(group);
-    });
+      const forkY = y - CR + 6;
+      connect(svg, anchors, CX, forkY - 12);
+      drawMarker(svg, entries[block.fork].stop, CX, forkY);
+      const columns = Math.max(1, block.branches.length);
+      const top = forkY + 74;
+      const ends: Anchor[] = [];
+      block.branches.forEach((branch, j) => {
+        const bx = (VIEW_W * (j + 0.5)) / columns;
+        const letter = svgEl('text', { x: String(bx + CR + 6), y: String(top - CR - 4), class: 'cpp-lab cpp-branch-lab' });
+        letter.textContent = branch.label;
+        svg.appendChild(letter);
+        let anchor: Anchor = { x: CX, y: forkY + 12, done: false };
+        branch.indexes.forEach((index, k) => {
+          const by = top + k * ROW_H;
+          connect(svg, [anchor], bx, by - CR - 10);
+          anchor = drawStop(svg, entries[index], bx, by);
+        });
+        ends.push(anchor);
+      });
+      const rows = Math.max(0, ...block.branches.map((b) => b.indexes.length));
+      const unionY = rows ? top + (rows - 1) * ROW_H + CR + 70 : forkY + 50;
+      if (block.union >= 0) {
+        connect(svg, ends.length ? ends : [{ x: CX, y: forkY + 12, done: false }], CX, unionY - 12);
+        drawMarker(svg, entries[block.union].stop, CX, unionY);
+        anchors = [{ x: CX, y: unionY + 12, done: ends.length > 0 && ends.some((e) => e.done) }];
+      } else {
+        anchors = ends;
+      }
+      bottom = unionY + 24;
+      y = unionY + CR + 34;
+    }
+    svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${Math.max(bottom, 60)}`);
     section.appendChild(svg);
     host.appendChild(section);
   }
@@ -828,17 +931,25 @@ const clientStrings = JSON.stringify({
     }
     if (stops.length) {
       const route = resolveRoute(stops, concepts, activeSlug || activeNote().slug);
-      // Secciones: paradas seguidas del mismo capítulo (el de su primera nota conocida).
-      const sections: { chapter: string; stops: RouteStop[] }[] = [];
-      visibleStopIndexes(route.stops.length, route.currentIndex, folded).forEach((index) => {
-        const entry = route.stops[index] as RouteStop;
-        const known = entry.items.find((item) => !item.placeholder);
+      const entries = route.stops as RouteStop[];
+      const visible = new Set(visibleStopIndexes(entries.length, route.currentIndex, folded));
+      const chapterOf = (index: number) => {
+        const known = entries[index]?.items.find((item) => !item.placeholder);
+        return known ? String(known.unitLabel || '') : null;
+      };
+      // Secciones: cambian con el capítulo de una parada del tronco; una
+      // bifurcación queda entera en la sección donde empieza.
+      const sections: { chapter: string; blocks: Block[] }[] = [];
+      for (const block of routeBlocks(entries.map((e) => e.stop)) as Block[]) {
+        const indexes = block.type === 'stop' ? [block.index] : [block.fork, block.union, ...block.branches.flatMap((b) => b.indexes)];
+        if (!indexes.some((i) => visible.has(i))) continue;
         const last = sections[sections.length - 1];
-        const chapter = known ? String(known.unitLabel || '') : (last?.chapter ?? '');
-        if (last && last.chapter === chapter) last.stops.push(entry);
-        else sections.push({ chapter, stops: [entry] });
-      });
-      sections.forEach((section) => renderCircles(host, section.chapter, section.stops));
+        const own = block.type === 'stop' ? chapterOf(block.index) : null;
+        const chapter = own ?? last?.chapter ?? (block.type === 'fork' ? chapterOf(block.branches[0]?.indexes[0] ?? -1) ?? '' : '');
+        if (last && last.chapter === chapter) last.blocks.push(block);
+        else sections.push({ chapter, blocks: [block] });
+      }
+      sections.forEach((section) => renderSection(host, section.chapter, section.blocks, entries));
     }
     appendProject(host, project);
   }
@@ -896,6 +1007,13 @@ const clientStrings = JSON.stringify({
   });
   el('cpp-zoom-in')?.addEventListener('click', () => connectome?.zoomBy(1.4));
   el('cpp-zoom-out')?.addEventListener('click', () => connectome?.zoomBy(1 / 1.4));
+
+  // «?»: cómo se lee Progreso, en un <dialog>.
+  el('cpp-help-open')?.addEventListener('click', () => (el('cpp-help') as HTMLDialogElement | null)?.showModal());
+  el('cpp-help')?.addEventListener('click', (event) => {
+    const dialog = event.currentTarget as HTMLDialogElement;
+    if (event.target === dialog || (event.target as HTMLElement).closest('[data-help-close]')) dialog.close();
+  });
 
   // Pantalla completa: Progreso entero, con el mismo maximizar de la sidebar
   // derecha que usa el Foro. El botón refleja el estado aunque se cambie desde allá.

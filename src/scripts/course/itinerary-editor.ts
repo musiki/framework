@@ -3,7 +3,10 @@
 // reservorio, o buscándolas. Guarda solo, con control de versión: si otra
 // pestaña guardó en el medio, recarga lo del servidor en vez de pisarlo.
 import {
+  BRANCHES,
   ITINERARY_KINDS,
+  STRUCTURE_KINDS,
+  isStructural,
   kindForNoteType,
   reservoirOf,
   slugKey,
@@ -12,7 +15,7 @@ import {
 } from '../../lib/itinerary/itinerary.mjs';
 import { listNotes } from '../notes-editor/api';
 
-type Stop = { id: string; title: string; kind: string; notes: string[] };
+type Stop = { id: string; title: string; kind: string; notes: string[]; branch?: string };
 type Cohort = { id: string; label: string; isActive: boolean; stopCount: number };
 type NoteRef = { slug: string; title: string; type: string };
 type ItineraryResponse = {
@@ -30,7 +33,18 @@ const SAVE_DELAY_MS = 600;
 /** Lo que edita el docente, al momento: el Recorrido del pod lo dibuja al lado. */
 export const ITINERARY_DRAFT_EVENT = 'musiki:itinerary-draft';
 
-const kindOf = (id: string) => ITINERARY_KINDS.find((k) => k.id === id) ?? ITINERARY_KINDS[2];
+const kindOf = (id: string) =>
+  ITINERARY_KINDS.find((k) => k.id === id) ?? STRUCTURE_KINDS.find((k) => k.id === id) ?? ITINERARY_KINDS[2];
+
+/** Para cada parada, si está entre una bifurcación y su vuelta al tronco. */
+function insideFork(stops: Stop[]): boolean[] {
+  let open = false;
+  return stops.map((stop) => {
+    if (stop.kind === 'bifurcacion') { open = true; return false; }
+    if (stop.kind === 'union') { open = false; return false; }
+    return open;
+  });
+}
 
 export function mountItineraryEditor(root: HTMLElement, courseId: string): () => void {
   const q = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel);
@@ -40,6 +54,7 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
   const search = q<HTMLInputElement>('[data-it-search]')!;
   const datalist = q<HTMLDataListElement>('[data-it-notes]')!;
   const addBtn = q<HTMLButtonElement>('[data-it-add]')!;
+  const forkBtn = q<HTMLButtonElement>('[data-it-fork]')!;
   const dupBtn = q<HTMLButtonElement>('[data-it-duplicate]')!;
   const reservoir = q<HTMLElement>('[data-it-reservoir]')!;
   const reservoirCount = q<HTMLElement>('[data-it-reservoir-count]')!;
@@ -214,9 +229,12 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     ?? { slug, title: titleOf(slug), type: '' };
 
   // ── Render
-  function renderStop(stop: Stop, index: number): HTMLLIElement {
+  function renderStop(stop: Stop, index: number, inFork: boolean): HTMLLIElement {
+    const structural = isStructural(stop);
     const li = document.createElement('li');
     li.className = 'cpp-it-stop';
+    li.classList.toggle('is-structural', structural);
+    li.classList.toggle('is-branch', inFork);
     li.dataset.stopId = stop.id;
     li.dataset.kind = stop.kind;
     li.classList.toggle('is-selected', stop.id === selectedId);
@@ -245,7 +263,8 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     kindBtn.type = 'button';
     kindBtn.className = 'cpp-it-kind';
     kindBtn.textContent = kind.icon;
-    kindBtn.title = `${kind.label} · click para cambiar`;
+    kindBtn.title = structural ? kind.label : `${kind.label} · click para cambiar`;
+    kindBtn.disabled = structural;
     kindBtn.addEventListener('click', () => {
       const i = ITINERARY_KINDS.findIndex((k) => k.id === stop.kind);
       stop.kind = ITINERARY_KINDS[(i + 1) % ITINERARY_KINDS.length].id;
@@ -271,12 +290,50 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
     remove.textContent = '×';
     remove.title = 'Quitar la parada (sus notas vuelven al reservorio)';
     remove.addEventListener('click', () => {
-      stops = stops.filter((s) => s.id !== stop.id);
+      // Una bifurcación se va con su vuelta al tronco (y al revés); sus ramas quedan en el tronco.
+      const drop = new Set([stop.id]);
+      if (stop.kind === 'bifurcacion') {
+        const pair = stops.slice(index + 1).find((s) => s.kind === 'union');
+        if (pair) drop.add(pair.id);
+      } else if (stop.kind === 'union') {
+        const pair = stops.slice(0, index).reverse().find((s) => s.kind === 'bifurcacion');
+        if (pair) drop.add(pair.id);
+      }
+      stops = stops.filter((s) => !drop.has(s.id));
       if (selectedId === stop.id) selectedId = '';
       commit();
     });
 
-    head.append(handle, num, kindBtn, title, remove);
+    // En una rama: la letra, que cambia con click (A → B → … hasta una más de las usadas).
+    const branchBtn = document.createElement('button');
+    branchBtn.type = 'button';
+    branchBtn.className = 'cpp-it-branch';
+    branchBtn.textContent = stop.branch || 'A';
+    branchBtn.title = `Rama ${stop.branch || 'A'} · click para cambiar`;
+    branchBtn.addEventListener('click', () => {
+      const used = stops.filter((s, i) => insideFork(stops)[i]).map((s) => BRANCHES.indexOf(s.branch || 'A'));
+      const limit = Math.min(BRANCHES.length, Math.max(...used, 0) + 2);
+      stop.branch = BRANCHES[(BRANCHES.indexOf(stop.branch || 'A') + 1) % limit];
+      commit();
+    });
+
+    head.append(handle, num, kindBtn, ...(inFork ? [branchBtn] : []), title, remove);
+    if (structural) {
+      li.append(head);
+      li.addEventListener('dragover', (e) => {
+        if (e.dataTransfer?.types.includes(STOP_MIME)) { e.preventDefault(); li.classList.add('is-drop'); }
+      });
+      li.addEventListener('dragleave', () => li.classList.remove('is-drop'));
+      li.addEventListener('drop', (e) => {
+        li.classList.remove('is-drop');
+        const stopId = e.dataTransfer?.getData(STOP_MIME);
+        if (!stopId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        moveStop(stopId, stop.id);
+      });
+      return li;
+    }
 
     const chips = document.createElement('ul');
     chips.className = 'cpp-it-notes';
@@ -381,7 +438,8 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
   }
 
   function render() {
-    list.replaceChildren(...stops.map(renderStop));
+    const forked = insideFork(stops);
+    list.replaceChildren(...stops.map((stop, index) => renderStop(stop, index, forked[index])));
     empty.hidden = stops.length > 0;
     const source = cohorts.find((c) => c.id !== cohort?.id && c.stopCount > 0);
     dupBtn.hidden = !(cohort && stops.length === 0 && source);
@@ -395,6 +453,18 @@ export function mountItineraryEditor(root: HTMLElement, courseId: string): () =>
   }
 
   // ── Controles
+  forkBtn.addEventListener('click', () => {
+    const branchA: Stop = { id: newStopId(), title: 'Rama A', kind: 'concepto', notes: [], branch: 'A' };
+    stops.push(
+      { id: newStopId(), title: 'Elegí tu camino', kind: 'bifurcacion', notes: [] },
+      branchA,
+      { id: newStopId(), title: 'Rama B', kind: 'concepto', notes: [], branch: 'B' },
+      { id: newStopId(), title: 'Vuelta al tronco', kind: 'union', notes: [] },
+    );
+    selectedId = branchA.id;
+    commit();
+  }, { signal });
+
   addBtn.addEventListener('click', () => {
     const stop: Stop = { id: newStopId(), title: 'Nueva parada', kind: 'clase', notes: [] };
     stops.push(stop);

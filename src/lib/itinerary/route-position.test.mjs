@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { conceptState, noteKey, resolveRoute, sliceItems, visibleStopIndexes } from './route-position.mjs';
+import { conceptState, noteKey, resolveRoute, routeBlocks, sliceItems, visibleStopIndexes } from './route-position.mjs';
 
 test('noteKey compara slugs de cualquier forma por su última parte', () => {
   assert.equal(noteKey('public/11-sesgos/sesgo-de-confirmacion'), 'sesgo-de-confirmacion');
@@ -85,4 +85,29 @@ test('sliceItems: una parada de una nota se parte en sus hypo', () => {
   assert.deepEqual(sliceItems([all[0]], all, edges).map((c) => c.id), ['a', 'b']);
   assert.deepEqual(sliceItems([all[2]], all, edges).map((c) => c.id), ['b']);
   assert.deepEqual(sliceItems([all[1], all[2]], all, edges).map((c) => c.id), ['a', 'b']);
+});
+
+const forked = [
+  { id: '1', title: 'Clase', kind: 'clase', notes: ['escucha'] },
+  { id: '2', title: 'Elegí', kind: 'bifurcacion', notes: [] },
+  { id: '3', title: 'Timbre', kind: 'concepto', notes: ['timbre'], branch: 'A' },
+  { id: '4', title: 'Forma', kind: 'concepto', notes: ['forma'], branch: 'B' },
+  { id: '5', title: 'Más timbre', kind: 'concepto', notes: [], branch: 'A' },
+  { id: '6', title: 'Tronco', kind: 'union', notes: [] },
+  { id: '7', title: 'Cierre', kind: 'output', notes: [] },
+];
+
+test('routeBlocks agrupa las ramas entre bifurcación y vuelta al tronco', () => {
+  assert.deepEqual(routeBlocks(forked), [
+    { type: 'stop', index: 0 },
+    { type: 'fork', fork: 1, union: 5, branches: [{ label: 'A', indexes: [2, 4] }, { label: 'B', indexes: [3] }] },
+    { type: 'stop', index: 6 },
+  ]);
+});
+
+test('resolveRoute: la bifurcación no es parada actual', () => {
+  const route = resolveRoute(forked, concepts, '');
+  assert.equal(route.currentIndex, 2);
+  assert.equal(route.stops[1].state, 'structure');
+  assert.equal(route.stops[5].state, 'structure');
 });

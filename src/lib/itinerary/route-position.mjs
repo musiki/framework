@@ -6,6 +6,8 @@
 // `sesgo-de-confirmacion`, `public/11-sesgos/sesgo-de-confirmacion`,
 // `cursos/s123/Forma`. Se comparan por la última parte, normalizada.
 
+import { isStructural } from './itinerary.mjs';
+
 export function noteKey(value) {
   return String(value || '')
     .split(/[?#]/, 1)[0]
@@ -60,16 +62,20 @@ export function resolveRoute(stops, concepts, activeSlug = '') {
     return { stop, items, complete, holdsActive };
   });
 
+  // Las paradas de estructura (bifurcación, vuelta al tronco) no son destino.
+  const eligible = (r) => !isStructural(r.stop);
   let currentIndex = resolved.findIndex((r) => r.holdsActive);
-  if (currentIndex < 0) currentIndex = resolved.findIndex((r) => !r.complete);
-  if (currentIndex < 0) currentIndex = resolved.length - 1;
+  if (currentIndex < 0) currentIndex = resolved.findIndex((r) => eligible(r) && !r.complete);
+  if (currentIndex < 0) currentIndex = resolved.findLastIndex(eligible);
 
   return {
     currentIndex,
     stops: resolved.map((r, index) => ({
       stop: r.stop,
       items: r.items,
-      state: index === currentIndex ? 'current' : (r.complete || index < currentIndex && r.items.length === 0 ? 'done' : 'upcoming'),
+      state: isStructural(r.stop) ? 'structure'
+        : index === currentIndex ? 'current'
+        : (r.complete || index < currentIndex && r.items.length === 0 ? 'done' : 'upcoming'),
     })),
   };
 }
@@ -99,4 +105,31 @@ export function sliceItems(items, concepts, edges) {
     if (child && child !== parentId && byId.has(child) && !childIds.includes(child)) childIds.push(child);
   }
   return childIds.length ? childIds.map((id) => byId.get(id)) : items;
+}
+
+/**
+ * Las paradas como bloques para dibujar: una parada del tronco, o una
+ * bifurcación con sus ramas (en el orden en que aparece cada letra) hasta la
+ * vuelta al tronco. Trabaja sobre índices de la lista original.
+ */
+export function routeBlocks(stops) {
+  const blocks = [];
+  let fork = null;
+  (stops || []).forEach((stop, index) => {
+    if (stop?.kind === 'bifurcacion') {
+      fork = { type: 'fork', fork: index, union: -1, branches: [] };
+      blocks.push(fork);
+    } else if (stop?.kind === 'union' && fork) {
+      fork.union = index;
+      fork = null;
+    } else if (fork) {
+      const label = stop?.branch || 'A';
+      let branch = fork.branches.find((b) => b.label === label);
+      if (!branch) fork.branches.push(branch = { label, indexes: [] });
+      branch.indexes.push(index);
+    } else {
+      blocks.push({ type: 'stop', index });
+    }
+  });
+  return blocks;
 }

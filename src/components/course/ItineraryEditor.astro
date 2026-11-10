@@ -25,6 +25,7 @@
     />
     <datalist id="cpp-it-notes" data-it-notes></datalist>
     <button type="button" class="cpp-it-new" data-it-add>+ parada</button>
+    <button type="button" class="cpp-it-new" data-it-fork title="Bifurcación con dos ramas y vuelta al tronco">+ ⑂</button>
   </div>
   <details class="cpp-it-reservoir" data-it-reservoir>
     <summary>Reservorio · <span data-it-reservoir-count>0</span></summary>
@@ -130,6 +131,23 @@
   .cpp-it-stop.is-selected { box-shadow: 0 0 0 1px var(--cpp-accent, var(--c-accent)); }
   .cpp-it-stop.is-drop { background: color-mix(in srgb, var(--cpp-accent, var(--c-accent)) 8%, var(--c-bg)); }
   .cpp-it-stop.is-dragging { opacity: 0.45; }
+  /* Bifurcación y vuelta al tronco: una línea, sin notas. Las ramas, sangradas. */
+  .cpp-it-stop.is-structural { --it-kind: var(--c-fg); border-style: dashed; background: transparent; padding-block: 0.2rem; }
+  .cpp-it-stop.is-branch { margin-left: 1.1rem; }
+  .cpp-it-branch {
+    min-width: 1.2rem;
+    border: 1px solid var(--c-border);
+    border-radius: 3px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.64rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .cpp-it-stop.is-branch .cpp-it-stop-head { grid-template-columns: auto auto auto auto minmax(0, 1fr) auto; }
+  .cpp-it-kind:disabled { cursor: default; }
   .cpp-it-stop-head { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; align-items: center; gap: 0.3rem; }
   .cpp-it-handle { cursor: grab; color: var(--c-fg-dim); font-size: 0.7rem; opacity: 0.6; user-select: none; }
   .cpp-it-num { color: var(--c-fg-dim); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
@@ -180,7 +198,7 @@
   }
   .cpp-it-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cpp-it-drop-hint { color: var(--c-fg-dim); font-size: 0.66rem; font-style: italic; opacity: 0.7; }
-  .cpp-it-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem; margin-top: 0.5rem; }
+  .cpp-it-add { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; margin-top: 0.5rem; }
   .cpp-it-search, .cpp-it-new {
     border: 1px solid var(--c-border);
     border-radius: 6px;
