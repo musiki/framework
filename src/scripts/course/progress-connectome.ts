@@ -14,7 +14,7 @@ type ForceGraphInstance = {
   width: (w: number) => ForceGraphInstance;
   height: (h: number) => ForceGraphInstance;
   zoom: (k?: number, ms?: number) => any;
-  zoomToFit: (ms?: number, padding?: number) => ForceGraphInstance;
+  zoomToFit: (ms?: number, padding?: number, nodeFilter?: (node: GraphNode) => boolean) => ForceGraphInstance;
   centerAt: (x?: number, y?: number, ms?: number) => ForceGraphInstance;
   _destructor?: () => void;
   [key: string]: any;
@@ -58,6 +58,10 @@ export function createConnectome(host: HTMLElement, onOpen: (concept: Concept) =
   let activeSlug = '';
   let depth = 2;
   let pendingFit = true;
+  // Los nodos sin aristas se alejan con la repulsión; el encuadre los deja de
+  // lado para que el grafo conectado no quede como un punto en el medio.
+  let linked = new Set<string>();
+  const fit = (ms: number) => graph?.zoomToFit(ms, 18, (n: GraphNode) => linked.size === 0 || linked.has(n.id));
 
   const size = () => ({ w: host.clientWidth || 320, h: host.clientHeight || 220 });
 
@@ -74,6 +78,7 @@ export function createConnectome(host: HTMLElement, onOpen: (concept: Concept) =
     const links: GraphLink[] = edges
       .filter((e) => keep.has(e.source) && keep.has(e.target))
       .map((e) => ({ source: e.source, target: e.target, type: e.type, relType: e.relType }));
+    linked = new Set(links.flatMap((l) => [String(l.source), String(l.target)]));
     onCount?.(nodes.length, concepts.length);
     return { nodes, links };
   }
@@ -135,8 +140,9 @@ export function createConnectome(host: HTMLElement, onOpen: (concept: Concept) =
       })
       .onNodeClick((n: GraphNode) => onOpen(n.concept))
       .onEngineStop(() => {
-        if (pendingFit) { pendingFit = false; graph?.zoomToFit(300, 18); }
+        if (pendingFit) { pendingFit = false; fit(300); }
       });
+    graph.d3Force('charge')?.distanceMax?.(160);
     return graph;
   }
 
@@ -173,7 +179,7 @@ export function createConnectome(host: HTMLElement, onOpen: (concept: Concept) =
       if (!graph) return;
       const { w, h } = size();
       graph.width(w).height(h);
-      graph.zoomToFit(200, 18);
+      fit(200);
     },
     destroy() {
       graph?._destructor?.();
