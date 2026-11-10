@@ -129,8 +129,10 @@
   .cpp-it-stop[data-kind='assignment'] { --it-kind: var(--c-danger, #b42318); }
   .cpp-it-stop[data-kind='output'] { --it-kind: var(--c-success, #2e7d4f); }
   .cpp-it-stop.is-selected { box-shadow: 0 0 0 1px var(--cpp-accent, var(--c-accent)); }
-  /* El contador global de <ol> le ponía un ① a cada parada: el número ya está en la cabecera. */
-  .cpp-it-stops > li::before { content: none; display: none; }
+  /* Los marcadores globales de listas (① en <ol>, ▸ en <ul>) se colaban en paradas, notas y reservorio. */
+  .cpp-it-stops > li::before,
+  .cpp-it-notes > li::before,
+  .cpp-it-reservoir li::before { content: none; display: none; }
   .cpp-it-stop { position: relative; cursor: grab; }
   .cpp-it-stop.is-drop-before::after,
   .cpp-it-stop.is-drop-after::after {
