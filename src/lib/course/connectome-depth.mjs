@@ -13,8 +13,18 @@ export function clampDepth(value) {
 const endpoint = (value) => (value && typeof value === 'object' ? value.id : value);
 
 /**
+ * Un hub (una nota índice que enlaza a casi todo, como «Temas de seminarios»)
+ * aparece como vecino pero no se expande: si no, en dos saltos trae el mapa
+ * entero. Es hub con más de 20 aristas y más de un cuarto de las notas.
+ */
+export function isHub(degree, total) {
+  return degree > 20 && degree > total / 4;
+}
+
+/**
  * Los ids a no más de `depth` saltos de los de inicio, siguiendo aristas en
- * los dos sentidos. Con depth máximo, o sin inicio conocido, son todos.
+ * los dos sentidos y sin atravesar hubs (salvo el de inicio). Con depth
+ * máximo, o sin inicio conocido, son todos.
  */
 export function neighborhood(nodeIds, edges, startIds, depth) {
   const all = new Set(nodeIds);
@@ -33,11 +43,14 @@ export function neighborhood(nodeIds, edges, startIds, depth) {
     adjacency.get(b).push(a);
   }
 
+  const startSet = new Set(starts);
+  const expands = (id) => startSet.has(id) || !isHub((adjacency.get(id) || []).length, all.size);
   const seen = new Set(starts);
   let frontier = starts;
   for (let hop = 0; hop < level && frontier.length; hop++) {
     const next = [];
     for (const id of frontier) {
+      if (!expands(id)) continue;
       for (const neighbor of adjacency.get(id) || []) {
         if (!seen.has(neighbor)) {
           seen.add(neighbor);

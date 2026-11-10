@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_DEPTH, clampDepth, neighborhood } from './connectome-depth.mjs';
+import { MAX_DEPTH, clampDepth, isHub, neighborhood } from './connectome-depth.mjs';
 
 // a — b — c — d — e — f, y g suelto
 const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
@@ -38,4 +38,14 @@ test('profundidad máxima o sin inicio conocido: el mapa entero', () => {
 
 test('las aristas a nodos de afuera se ignoran', () => {
   assert.deepEqual(sorted(neighborhood(ids, edges, ['f'], 1)), ['e', 'f']);
+});
+
+test('un hub aparece como vecino pero no se expande, salvo desde él', () => {
+  const many = Array.from({ length: 30 }, (_, i) => `n${i}`);
+  const hubEdges = many.map((id) => ({ source: 'indice', target: id }));
+  const nodes = ['indice', 'x', ...many];
+  const all = [...hubEdges, { source: 'x', target: 'n0' }];
+  assert.equal(isHub(31, nodes.length), true);
+  assert.deepEqual(sorted(neighborhood(nodes, all, ['x'], 3)), ['indice', 'n0', 'x']);
+  assert.equal(neighborhood(nodes, all, ['indice'], 1).size, 31);
 });
