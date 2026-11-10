@@ -40,6 +40,14 @@ const clientStrings = JSON.stringify({
         <span class="cpp-pct" id="cpp-pct" aria-label="Progreso completado">—</span>
         <button
           type="button"
+          class="cpp-icon-btn"
+          id="cpp-maximize"
+          aria-pressed="false"
+          aria-label="Progreso a pantalla completa"
+          title="Progreso a pantalla completa"
+        >⤢</button>
+        <button
+          type="button"
           class="cpp-close"
           data-progress-close
           aria-label="Cerrar progreso"
@@ -119,7 +127,6 @@ const clientStrings = JSON.stringify({
           </label>
           <button type="button" class="cpp-icon-btn" id="cpp-zoom-out" aria-label="Alejar" title="Alejar">−</button>
           <button type="button" class="cpp-icon-btn" id="cpp-zoom-in" aria-label="Acercar" title="Acercar">+</button>
-          <button type="button" class="cpp-icon-btn" id="cpp-connect-max" aria-pressed="false" aria-label="Connectoma a pantalla completa" title="Connectoma a pantalla completa">⤢</button>
         </div>
       </div>
       <div class="cpp-graph" id="cpp-graph" aria-label="Red de notas conectadas"></div>
@@ -442,9 +449,8 @@ const clientStrings = JSON.stringify({
   .cpp-icon-btn[hidden] { display: none; }
   .cpp-icon-btn:hover,
   .cpp-icon-btn[aria-pressed='true'] { border-color: var(--cpp-accent); color: var(--cpp-accent); }
-  /* Connectoma a pantalla completa: la sidebar derecha maximizada y el pod sólo con el grafo. */
-  .progress-sidebar-panel.is-connectome-full .cpp-shell > :not(.cpp-header):not(.cpp-connect) { display: none; }
-  .progress-sidebar-panel.is-connectome-full .cpp-graph { height: calc(100vh - 9.5rem); }
+  /* Progreso a pantalla completa (la sidebar derecha maximizada): el Connectoma crece. */
+  .course-container[data-right-maximized='true'] .cpp-graph { height: 62vh; }
   /* Recorrido: la parada actual con acento, el resto en muted. */
   .cpp-route-empty { margin: 0; color: var(--c-fg-dim); font-size: 0.76rem; }
   .cpp-unit[data-state='upcoming'],
@@ -490,7 +496,7 @@ const clientStrings = JSON.stringify({
   .cpp-eval { fill: var(--cpp-accent); }
   .cpp-conn { fill: none; stroke: var(--cpp-line); stroke-width: 2; }
   .cpp-conn.done { stroke: currentColor; opacity: 0.48; }
-  .cpp-lab { fill: currentColor; font-size: 8.5px; opacity: 0.62; }
+  .cpp-lab { fill: currentColor; font-size: 11px; opacity: 0.78; }
   .cpp-next { animation: cpp-pulse 1.8s ease-in-out infinite; }
   @keyframes cpp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.34; } }
   @media (prefers-reduced-motion: reduce) {
@@ -509,7 +515,7 @@ const clientStrings = JSON.stringify({
   const R = 8;
   const COLS = 3;
   const DX = 122;
-  const DY = 72;
+  const DY = 84;
   const X0 = 42;
   const Y0 = 32;
 
@@ -646,6 +652,24 @@ const clientStrings = JSON.stringify({
     }
   }
 
+  // El título de la nota bajo el nodo, en hasta dos líneas. Los nombres de
+  // archivo sin title llegan con _ y -: se leen mejor como palabras.
+  const LABEL_CHARS = 17;
+  function labelLines(name: string): string[] {
+    const spaced = name.includes(' ') ? name : name.replace(/-/g, ' ');
+    const words = spaced.replace(/_+/g, ' ').trim().split(/\s+/);
+    const lines: string[] = [];
+    let line = '';
+    for (const word of words) {
+      if (!line) line = word;
+      else if ((line + ' ' + word).length <= LABEL_CHARS) line += ' ' + word;
+      else { lines.push(line); line = word; }
+    }
+    if (line) lines.push(line);
+    if (lines.length > 2) lines.splice(1, lines.length - 1, `${lines.slice(1).join(' ').slice(0, LABEL_CHARS - 1)}…`);
+    return lines.map((l) => (l.length > LABEL_CHARS ? `${l.slice(0, LABEL_CHARS - 1)}…` : l));
+  }
+
   function renderUnit(host: HTMLElement, label: string, concepts: any[], nextState: { marked: boolean }) {
     const section = document.createElement('section');
     section.className = 'cpp-unit';
@@ -684,8 +708,12 @@ const clientStrings = JSON.stringify({
       const isNext = stateOf(concept) === 0 && !nextState.marked;
       appendStateGlyph(link, concept, x, y, isNext);
       if (isNext) nextState.marked = true;
-      const text = svgEl('text', { x: String(x), y: String(y + R + 22), 'text-anchor': 'middle', class: 'cpp-lab' });
-      text.textContent = String(concept.name || concept.slug || '').slice(0, 18);
+      const text = svgEl('text', { x: String(x), y: String(y + R + 16), 'text-anchor': 'middle', class: 'cpp-lab' });
+      labelLines(String(concept.name || concept.slug || '')).forEach((line, index) => {
+        const span = svgEl('tspan', { x: String(x), dy: index ? '1.15em' : '0' });
+        span.textContent = line;
+        text.appendChild(span);
+      });
       link.appendChild(text);
       svg.appendChild(link);
       appendBadges(svg, concept, x, y);
@@ -803,23 +831,21 @@ const clientStrings = JSON.stringify({
   el('cpp-zoom-in')?.addEventListener('click', () => connectome?.zoomBy(1.4));
   el('cpp-zoom-out')?.addEventListener('click', () => connectome?.zoomBy(1 / 1.4));
 
-  // Pantalla completa: maximiza la sidebar derecha con su propio ⤢ (el del Foro)
-  // y deja sólo el grafo. Al salir la devuelve como estaba.
-  let maximizedByConnectome = false;
-  el('cpp-connect-max')?.addEventListener('click', () => {
-    const panel = el('progress-sidebar');
-    const button = el('cpp-connect-max');
-    if (!panel || !button) return;
-    const full = !panel.classList.contains('is-connectome-full');
-    const sidebarMax = document.querySelector<HTMLElement>('[data-sidebar-maximize="right"]');
-    const isMaximized = () => (container() as HTMLElement | null)?.dataset.rightMaximized === 'true';
-    if (full && !isMaximized()) { sidebarMax?.click(); maximizedByConnectome = true; }
-    if (!full && maximizedByConnectome && isMaximized()) sidebarMax?.click();
-    if (!full) maximizedByConnectome = false;
-    panel.classList.toggle('is-connectome-full', full);
-    button.setAttribute('aria-pressed', String(full));
+  // Pantalla completa: Progreso entero, con el mismo maximizar de la sidebar
+  // derecha que usa el Foro. El botón refleja el estado aunque se cambie desde allá.
+  const isMaximized = () => (container() as HTMLElement | null)?.dataset.rightMaximized === 'true';
+  const syncMaximize = () => el('cpp-maximize')?.setAttribute('aria-pressed', String(isMaximized()));
+  el('cpp-maximize')?.addEventListener('click', () => {
+    document.querySelector<HTMLElement>('[data-sidebar-maximize="right"]')?.click();
+    syncMaximize();
     window.setTimeout(() => connectome?.resize(), 220);
   });
+  const maximizeTarget = container();
+  if (maximizeTarget) {
+    new MutationObserver(() => { syncMaximize(); connectome?.resize(); })
+      .observe(maximizeTarget, { attributes: true, attributeFilter: ['data-right-maximized'] });
+  }
+  syncMaximize();
 
   // ── «En esta nota»: las evaluaciones de la nota que se está leyendo. Con
   // Dockview es el panel activo (data-rendered-slug); si no, la página. El
