@@ -421,7 +421,8 @@ const clientStrings = JSON.stringify({
     letter-spacing: 0.13em;
     text-transform: uppercase;
   }
-  .cpp-path svg { display: block; width: 100%; overflow: visible; }
+  /* Tope de ancho: con la sidebar maximizada el viewBox escalaría las etiquetas. */
+  .cpp-path svg { display: block; width: 100%; max-width: 22rem; overflow: visible; }
   .cpp-path-link { color: inherit; outline: none; }
   .cpp-path-link:focus-visible .cpp-ring,
   .cpp-path-link:hover .cpp-ring { stroke: var(--cpp-accent); opacity: 1; }
