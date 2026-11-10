@@ -1,6 +1,7 @@
 import { visit } from 'unist-util-visit';
 import fs from 'node:fs';
 import path from 'node:path';
+import { noteLinkHref } from '../lib/course/service-routes.mjs';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif']);
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac']);
@@ -289,7 +290,8 @@ export default function remarkWikiLink() {
         } else {
           const rawSlug = target.split('/').pop().trim();
           const slug = slugifyNoteTarget(rawSlug);
-          const url = '/' + slug;
+          // Una nota que vive plegada dentro de un servicio se abre en #concepto.
+          const url = noteLinkHref(slug);
           nodes.push({ type: 'link', url, children: [{ type: 'text', value: label || target }] });
         }
 

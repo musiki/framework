@@ -1,0 +1,12 @@
+{
+  "_comment": "Rutas de servicios de una materia. Las lee el framework (src/lib/course/service-routes.mjs) y el validador de contenido (validar-notas.py); vive acá porque el CI de cada materia sólo trae scripts/content. Si una nota de public/ tiene el slug de conceptSlug, el servicio la muestra plegada (#concepto) en lugar de darle página propia.",
+  "services": [
+    {
+      "id": "amigxcriticx",
+      "courseId": "s123",
+      "slugs": ["amigxcriticx", "amigx-criticx", "amigo-critico", "85-amigx-criticx"],
+      "views": ["devoluciones", "dashboard"],
+      "conceptSlug": "amigx-criticx"
+    }
+  ]
+}

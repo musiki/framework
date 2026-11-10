@@ -3154,6 +3154,40 @@ details.page-info-history[open] > summary::before { transform: rotate(90deg); }
 .note-pending-dialog h2 { margin: 0 0 0.5rem; font-size: 1.1rem; line-height: 1.3; }
 .note-pending-dialog p { margin: 0 0 0.9rem; line-height: 1.5; }
 .note-pending-dialog form { display: flex; justify-content: flex-end; margin: 0; }
+
+/* Nota de concepto plegada dentro de un servicio (amigx-criticx#concepto). */
+.service-concept {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--c-border);
+  padding-top: 1rem;
+  scroll-margin-top: 4rem;
+}
+.service-concept-summary {
+  position: relative;
+  padding-left: 1.1rem;
+  cursor: pointer;
+  list-style: none;
+}
+.service-concept-summary > span { display: block; }
+.service-concept-summary::-webkit-details-marker { display: none; }
+.service-concept-summary::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  top: 0.05rem;
+  color: var(--c-subtle);
+  transition: transform 0.15s ease;
+}
+.service-concept[open] > .service-concept-summary::before { transform: rotate(90deg); }
+.service-concept-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-subtle);
+}
+.service-concept-title { font-weight: 600; color: var(--c-fg); }
+.service-concept-def { font-size: 0.92rem; color: var(--c-subtle); }
+.service-concept-body { margin-top: 1.25rem; }
 .note-pending-close {
   font: inherit;
   font-size: 0.85rem;

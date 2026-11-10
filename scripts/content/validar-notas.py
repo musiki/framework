@@ -21,6 +21,7 @@ Qué chequea:
   ERROR   rastro del aparato normativo archivado
   AVISO   nota de public/ sin status
   AVISO   def demasiado larga para el índice
+  AVISO   nota con el slug de un servicio: se muestra plegada dentro de él
 
 Qué corrige con --arreglar:
 
@@ -33,12 +34,26 @@ No corrige lo que requiere criterio: una def faltante o un rastro normativo
 se informan y los resuelve una persona.
 """
 import argparse
+import json
 import os
 import re
 import unicodedata
 import sys
 
 CARPETAS_PUBLICABLES = ('public', 'cursos')
+
+
+def servicios_con_concepto():
+    """slug de nota → servicio que la muestra plegada (service-routes.json, al lado)."""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'service-routes.json')
+    try:
+        servicios = json.load(open(ruta, encoding='utf-8')).get('services', [])
+    except (OSError, ValueError):
+        return {}
+    return {s['conceptSlug']: s for s in servicios if s.get('conceptSlug')}
+
+
+SERVICIOS_CON_CONCEPTO = servicios_con_concepto()
 IGNORAR_SIEMPRE = {'.git', '.obsidian', '.trash', 'node_modules', '.github', 'tools'}
 RELACIONES = ('hypo', 'hyper', 'connect')
 
@@ -295,6 +310,14 @@ def validar(raiz, publicables, en_draft, sin_ruta=frozenset()):
                 errores.append(
                     f'{rel}: slug "{declarado}" no coincide con el nombre de archivo '
                     f'("{esperado}"). Los [[enlaces]] a esta nota van a romperse')
+
+            # La URL es del servicio (la que tienen los alumnos); la nota no tiene
+            # página propia y se ve plegada al pie del servicio, en #concepto.
+            servicio = SERVICIOS_CON_CONCEPTO.get(esperado)
+            if servicio:
+                avisos.append(
+                    f'{rel}: comparte la URL con el servicio {servicio["id"]} de '
+                    f'{servicio["courseId"]}; se muestra plegada dentro de él (#concepto)')
 
     return errores, avisos
 

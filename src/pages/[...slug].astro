@@ -55,6 +55,7 @@ import { buildPageProperties } from '../lib/page-properties';
 
 import { getRuntimeDynamicContent, getRuntimeDynamicContentByFilePath } from '../lib/runtime-content';
 import { normalizeContentSlug, getContentCanonicalSlug } from '../lib/content-slug';
+import { matchServiceRoute, FOLDED_CONCEPT_ANCHOR } from '../lib/course/service-routes.mjs';
 import { iconFor } from '../scripts/room/recursos/icons';
 import { buildGraphData } from '../scripts/build-graph-data.mjs';
 
@@ -123,23 +124,14 @@ const currentTenant = Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID];
 
 // Parse the slug to get course and optional path
 const normalizedSlugForAc = normalizeContentSlug(slug);
-const isTopLevelAmigxCriticx = [
-  'amigxcriticx',
-  'amigo-critico',
-  'amigx-criticx',
-  'amigxcriticx-devoluciones',
-  'amigo-critico-devoluciones',
-  'amigx-criticx-devoluciones',
-  'amigxcriticx-dashboard',
-  'amigo-critico-dashboard',
-  'amigx-criticx-dashboard',
-].includes(normalizedSlugForAc);
-const parts = isTopLevelAmigxCriticx
-  ? normalizedSlugForAc.endsWith('-devoluciones')
-    ? ['s123', 'amigxcriticx', 'devoluciones']
-    : normalizedSlugForAc.endsWith('-dashboard')
-      ? ['s123', 'amigxcriticx', 'dashboard']
-      : ['s123', 'amigxcriticx']
+// /amigx-criticx y sus alias sin materia van al servicio de su materia.
+const topLevelServiceMatch = matchServiceRoute(normalizedSlugForAc);
+const parts = topLevelServiceMatch
+  ? [
+      topLevelServiceMatch.service.courseId,
+      topLevelServiceMatch.service.id,
+      ...(topLevelServiceMatch.view ? [topLevelServiceMatch.view] : []),
+    ]
   : slug.split('/');
 const requestedCoursePathSegment = parts[0];
 const isCourseForumPage = (parts.length === 2 && parts[1] === 'foro') || (parts.length === 1 && Astro.url.searchParams.has('board'));
@@ -384,28 +376,32 @@ const isRecursosEditorPage =
   parts.length > 1 &&
   !isCourseForumPage &&
   ['recursos', '80-recursos', '80-recursos-recursos'].includes(normalizedRequestedLessonPage);
-const isAmigxCriticxPage =
-  canonicalCourseIdToUse === 's123' &&
-  parts.length > 1 &&
-  !isCourseForumPage &&
-  [
-    'amigxcriticx',
-    'amigo-critico',
-    'amigx-criticx',
-    '85-amigx-criticx',
-    'amigxcriticx-devoluciones',
-    'amigo-critico-devoluciones',
-    'amigx-criticx-devoluciones',
-    'amigxcriticx-dashboard',
-    'amigo-critico-dashboard',
-    'amigx-criticx-dashboard',
-  ].includes(normalizedRequestedLessonPage);
+const amigxServiceMatch =
+  parts.length > 1 && !isCourseForumPage && canonicalCourseIdToUse
+    ? matchServiceRoute(normalizedRequestedLessonPage, canonicalCourseIdToUse)
+    : null;
+// La nota de concepto que el servicio muestra plegada (#concepto), si existe y
+// es de este tenant. El servicio sigue pidiendo sesión: su URL es la que tienen
+// los alumnos, y sin sesión van al login como siempre.
+const foldedConceptSlug = amigxServiceMatch?.service.conceptSlug || '';
+const foldedConceptRoute = foldedConceptSlug
+  ? allPublicPaths.find((p) => p.params.slug === foldedConceptSlug && (p.props as PublicContentRouteProps).kind !== 'redirect')
+  : null;
+// @ts-ignore
+const foldedConceptCandidate = foldedConceptRoute ? await getEntry((foldedConceptRoute.props as PublicContentRouteProps).collection, (foldedConceptRoute.props as PublicContentRouteProps).entryId) : null;
+const foldedConceptEntry = foldedConceptCandidate && matchesTenant(foldedConceptCandidate, currentTenant.id) ? foldedConceptCandidate : null;
+const isAmigxCriticxPage = amigxServiceMatch?.service.id === 'amigxcriticx';
 const isAmigxCriticxDevolucionesPage =
   isAmigxCriticxPage &&
-  (normalizedRequestedLessonPage.endsWith('-devoluciones') || Astro.url.searchParams.get('view') === 'devoluciones');
+  (amigxServiceMatch?.view === 'devoluciones' || Astro.url.searchParams.get('view') === 'devoluciones');
 const isAmigxCriticxDashboardPage =
   isAmigxCriticxPage &&
-  (normalizedRequestedLessonPage.endsWith('-dashboard') || Astro.url.searchParams.get('view') === 'dashboard');
+  (amigxServiceMatch?.view === 'dashboard' || Astro.url.searchParams.get('view') === 'dashboard');
+const FoldedConceptContent = isAmigxCriticxPage && foldedConceptEntry && !isAmigxCriticxDevolucionesPage && !isAmigxCriticxDashboardPage
+  ? (await render(foldedConceptEntry)).Content
+  : null;
+const foldedConceptTitle = String(foldedConceptEntry?.data?.title || foldedConceptSlug);
+const foldedConceptDef = String((foldedConceptEntry?.data as Record<string, unknown> | undefined)?.def || '').trim();
 if (isAmigxCriticxPage && !session) {
   return Astro.redirect(`/login?redirect=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`);
 }
@@ -808,7 +804,7 @@ if (parts.length === 1) {
   // Canonical path redirection with loop protection.
   const isRootPublicContextUpgrade = parts.length === 1 && isPublicWikiPage && session && !canonicalCourseId;
 
-  if ((!isServingPublicFallback || isRootPublicContextUpgrade) && canonicalCourseIdToUse && !isRequestingWelcomePage && !isTopLevelAmigxCriticx) {
+  if ((!isServingPublicFallback || isRootPublicContextUpgrade) && canonicalCourseIdToUse && !isRequestingWelcomePage && !topLevelServiceMatch) {
     const isCoursePathMismatch = requestedCoursePathSegment !== preferredCoursePathSegment;
     const isLessonPathMismatch = (parts.length > 1 && !isCourseForumPage) && requestedLessonPath !== resolvedLessonRoutePath;
 
@@ -5641,12 +5637,31 @@ function renderLessonsTreeHTML(
             classOptions={recursosClassOptions}
           />
         ) : isAmigxCriticxPage ? (
+          <>
           <AmigxCriticxPortal
             courseId={canonicalCourseId || courseSlug || 's123'}
             session={session}
             isTeacher={canManageLiveInteractions}
             initialView={isAmigxCriticxDashboardPage ? 'dashboard' : isAmigxCriticxDevolucionesPage ? 'devoluciones' : 'form'}
           />
+          {FoldedConceptContent && (
+            <details
+              class="service-concept"
+              id={FOLDED_CONCEPT_ANCHOR}
+              data-eval-course-id={canonicalCourseIdToUse}
+              data-eval-page-slug={`${canonicalCourseIdToUse}/${foldedConceptSlug}`}
+            >
+              <summary class="service-concept-summary">
+                <span class="service-concept-kicker">Concepto</span>
+                <span class="service-concept-title">{foldedConceptTitle}</span>
+                {foldedConceptDef && <span class="service-concept-def">{foldedConceptDef}</span>}
+              </summary>
+              <div class="service-concept-body">
+                <FoldedConceptContent />
+              </div>
+            </details>
+          )}
+          </>
         ) : (
           dynamicHtml ? <Fragment set:html={dynamicHtml} /> : <Content />
         )}
@@ -6194,6 +6209,18 @@ function renderLessonsTreeHTML(
         dialog.showModal();
       }
       document.addEventListener('astro:page-load', openPendingNoteDialog);
+
+      // Los [[enlaces]] a una nota plegada dentro de un servicio llegan con
+      // #concepto: se abre la sección. El navegador no abre un <details> cuando
+      // el ancla es el <details> mismo.
+      function openFoldedConcept() {
+        const fold = document.querySelector('details.service-concept');
+        if (!(fold instanceof HTMLDetailsElement) || window.location.hash !== `#${fold.id}`) return;
+        fold.open = true;
+        fold.scrollIntoView({ block: 'start' });
+      }
+      document.addEventListener('astro:page-load', openFoldedConcept);
+      window.addEventListener('hashchange', openFoldedConcept);
     </script>
     {canManageLiveInteractions && (
       <script>
@@ -7833,7 +7860,17 @@ function renderLessonsTreeHTML(
         });
       }
 
-      function getPageContext() {
+      // `scope` es el elemento de la evaluación. Una nota plegada dentro de un
+      // servicio (amigx-criticx#concepto) registra sus entregas como de esa nota,
+      // no como de la página del servicio que la contiene.
+      function getPageContext(scope = null) {
+        const folded = scope instanceof Element ? scope.closest('[data-eval-page-slug]') : null;
+        if (folded instanceof HTMLElement && folded.dataset.evalPageSlug) {
+          return {
+            courseId: String(folded.dataset.evalCourseId || canonicalLiveCourseId || '').trim(),
+            pageSlug: String(folded.dataset.evalPageSlug).trim(),
+          };
+        }
         const pathParts = window.location.pathname
           .split('/')
           .filter(Boolean)
@@ -8798,7 +8835,8 @@ function renderLessonsTreeHTML(
         if (!isAuthenticatedUser) return false;
 
         try {
-          const { courseId, pageSlug } = getPageContext();
+          const evalWrapper = document.querySelector(`.eval-block-wrapper[data-eval-id="${CSS.escape(String(evalId || ''))}"]`);
+          const { courseId, pageSlug } = getPageContext(evalWrapper);
           const numericScore = typeof score === 'number' && Number.isFinite(score) ? score : null;
           const response = await fetch('/api/eval/submit', {
             method: 'POST',
@@ -9927,7 +9965,7 @@ function renderLessonsTreeHTML(
           setPollFeedback(widget, `Tu respuesta guardada: ${answerText}`);
         }
 
-        const courseContext = getPageContext();
+        const courseContext = getPageContext(wrapper);
         const clientId = ensureLiveClientId();
         const submitLivePollResponse = async () => {
           if (!widget.state.active || !widget.state.sessionId) return false;
@@ -10496,7 +10534,7 @@ function renderLessonsTreeHTML(
           });
         }
 
-        const courseContext = getPageContext();
+        const courseContext = getPageContext(wrapper);
         const clientId = ensureLiveClientId();
         const submitWordcloudResponse = async (wordOverride = '', suggestionIdOverride = '') => {
           if (!widget.state.active || !widget.state.sessionId) return false;
