@@ -1,5 +1,10 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-10 itinerario-por-cohorte> <br>
+- **Paso B del plan de itinerario**: el itinerario es un objeto de la base, uno por cohorte (tabla `Itinerary`, migración `20261110090000_itinerary.sql`): paradas en jsonb `{id, title, kind, notes[]}` con `version` para que dos pestañas no se pisen (409 con lo último guardado). Lógica pura y validación en `src/lib/itinerary/itinerary.mjs` (8 tests): los cinco kinds, `kindForNoteType`, `reservoirOf` (el reservorio es el complemento, sin campo), `stopFromNote`.
+- **API** `/api/progress/itinerary`: GET (docentes e inscriptos; las otras cohortes sólo docentes), PUT reemplaza la lista con control de versión, POST duplica de una cohorte a otra si la de destino está vacía.
+- **Editor** en el pod Progreso, sólo docentes (`ItineraryEditor.astro` + `src/scripts/course/itinerary-editor.ts`): se monta al abrir Progreso; paradas reordenables, kind con click, notas arrastradas desde el árbol, desde el reservorio o buscadas; autoguardado. La migración no se probó contra Postgres (sin base local); si falla, el deploy corta antes del build.
+
 <2026-11-10 progreso-nota-activa-arbol-plegado> <br>
 - **Progreso · «En esta nota»** (paso A del plan de itinerario, parte 3): el bloque «Progreso» de la sidebar izquierda (`#page-progress`) se armaba una vez por página y no seguía a la nota activa de Dockview. Se sacó; `[...slug].astro` publica el estado de las evaluaciones en `window.__musikiEvalProgress` + evento `musiki:eval-progress`, y el pod Progreso muestra arriba las de la nota activa (panel con `data-rendered-slug` o la página), con la rúbrica debajo y resaltado lo que suma esa nota (`src/lib/course/active-note-progress.mjs`).
 - **Árbol izquierdo plegado por defecto**: `notes-sidebar.ts` creaba todo con `open = true` y sólo recordaba lo cerrado mientras no se recargara. Ahora `tree-fold-state.mjs` pliega todo salvo lo que la persona dejó abierto (localStorage `musiki:tree-open:<materia>`) y el camino a la nota activa; lo usan el árbol docente, el de estudiantes y «plegar todo». Recursos conserva su estado propio.

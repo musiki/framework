@@ -1,0 +1,210 @@
+---
+// Itinerario de la cohorte, en el pod Progreso. Sólo lo ve el docente: el script
+// lo muestra si el layout dice que la persona puede gestionar la materia, y la
+// API lo vuelve a comprobar. La lógica está en src/scripts/course/itinerary-editor.ts.
+---
+
+<section class="cpp-itinerary" id="cpp-itinerary" aria-labelledby="cpp-it-title" hidden>
+  <div class="cpp-it-header">
+    <h3 class="cpp-section-label" id="cpp-it-title">Itinerario</h3>
+    <select class="cpp-it-cohort" data-it-cohort aria-label="Cohorte"></select>
+  </div>
+  <p class="cpp-it-status" data-it-status aria-live="polite"></p>
+  <p class="cpp-it-empty" data-it-empty hidden>
+    Todavía no hay paradas. Arrastrá notas desde el árbol de la izquierda o el reservorio, o buscalas acá abajo.
+  </p>
+  <button type="button" class="cpp-it-duplicate" data-it-duplicate hidden></button>
+  <ol class="cpp-it-stops" data-it-stops></ol>
+  <div class="cpp-it-add">
+    <input
+      class="cpp-it-search"
+      data-it-search
+      list="cpp-it-notes"
+      placeholder="Buscar nota: crea una parada"
+      aria-label="Buscar nota para agregar al itinerario"
+    />
+    <datalist id="cpp-it-notes" data-it-notes></datalist>
+    <button type="button" class="cpp-it-new" data-it-add>+ parada</button>
+  </div>
+  <details class="cpp-it-reservoir" data-it-reservoir>
+    <summary>Reservorio · <span data-it-reservoir-count>0</span></summary>
+    <p class="cpp-it-res-help">Lo que la materia tiene y este itinerario no usa.</p>
+    <ul></ul>
+  </details>
+</section>
+
+<script>
+  import { mountItineraryEditor } from '../../scripts/course/itinerary-editor';
+
+  let unmount: (() => void) | null = null;
+  let mountedFor = '';
+
+  const canManage = () =>
+    document.querySelector<HTMLElement>('[data-can-manage-live-interactions]')?.dataset.canManageLiveInteractions === 'true';
+  const courseId = () =>
+    (document.querySelector('.course-container')?.getAttribute('data-live-course-id') || '').trim();
+  const progressOpen = () =>
+    document.querySelector('.course-container')?.getAttribute('data-progress-open') === 'true';
+
+  // Se monta la primera vez que se abre Progreso: no pide la lista de notas en
+  // cada página que visita el docente.
+  function sync() {
+    const root = document.getElementById('cpp-itinerary');
+    const cid = courseId();
+    if (!root || !cid || !canManage()) return;
+    if (mountedFor === cid && unmount) return;
+    if (!progressOpen()) return;
+    unmount?.();
+    mountedFor = cid;
+    unmount = mountItineraryEditor(root, cid);
+  }
+
+  let observer: MutationObserver | null = null;
+  function boot() {
+    observer?.disconnect();
+    const container = document.querySelector('.course-container');
+    if (container) {
+      observer = new MutationObserver(sync);
+      observer.observe(container, { attributes: true, attributeFilter: ['data-progress-open'] });
+    }
+    sync();
+  }
+
+  document.addEventListener('astro:before-swap', () => {
+    unmount?.();
+    unmount = null;
+    mountedFor = '';
+  });
+  document.addEventListener('astro:page-load', boot);
+  boot();
+</script>
+
+<style is:global>
+  .cpp-itinerary {
+    margin: 0 var(--course-sidebar-pad-x) 0.9rem;
+    padding: 0.8rem 0.85rem 0.85rem;
+    border: 1px solid var(--cpp-line, var(--c-border));
+    border-radius: 8px;
+  }
+  .cpp-itinerary[hidden] { display: none; }
+  .cpp-it-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .cpp-it-cohort {
+    max-width: 60%;
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    font: inherit;
+    font-size: 0.72rem;
+    padding: 0.1rem 0.3rem;
+  }
+  .cpp-it-status { margin: 0.3rem 0 0; min-height: 1em; color: var(--c-fg-dim); font-size: 0.68rem; }
+  .cpp-it-status[data-tone='error'] { color: var(--c-danger, #b42318); }
+  .cpp-it-empty { margin: 0.4rem 0; color: var(--c-fg-dim); font-size: 0.76rem; line-height: 1.4; }
+  .cpp-it-duplicate {
+    width: 100%;
+    margin: 0.3rem 0 0.5rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px dashed var(--cpp-accent, var(--c-accent));
+    border-radius: 6px;
+    background: transparent;
+    color: var(--cpp-accent, var(--c-accent));
+    font: inherit;
+    font-size: 0.74rem;
+    cursor: pointer;
+    text-align: left;
+  }
+  .cpp-it-stops { display: grid; gap: 0.35rem; margin: 0.45rem 0 0; padding: 0; list-style: none; min-height: 0.5rem; }
+  .cpp-it-stop {
+    border: 1px solid var(--c-border);
+    border-left: 3px solid var(--it-kind, var(--c-border));
+    border-radius: 6px;
+    padding: 0.3rem 0.4rem 0.35rem;
+    background: var(--c-bg);
+  }
+  .cpp-it-stop[data-kind='concepto'] { --it-kind: var(--c-accent, #c0562b); }
+  .cpp-it-stop[data-kind='protocolo'] { --it-kind: var(--c-fg-dim); }
+  .cpp-it-stop[data-kind='clase'] { --it-kind: var(--cpp-gold, #b8892b); }
+  .cpp-it-stop[data-kind='assignment'] { --it-kind: var(--c-danger, #b42318); }
+  .cpp-it-stop[data-kind='output'] { --it-kind: var(--c-success, #2e7d4f); }
+  .cpp-it-stop.is-selected { box-shadow: 0 0 0 1px var(--cpp-accent, var(--c-accent)); }
+  .cpp-it-stop.is-drop { background: color-mix(in srgb, var(--cpp-accent, var(--c-accent)) 8%, var(--c-bg)); }
+  .cpp-it-stop.is-dragging { opacity: 0.45; }
+  .cpp-it-stop-head { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; align-items: center; gap: 0.3rem; }
+  .cpp-it-handle { cursor: grab; color: var(--c-fg-dim); font-size: 0.7rem; opacity: 0.6; user-select: none; }
+  .cpp-it-num { color: var(--c-fg-dim); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+  .cpp-it-kind {
+    border: none;
+    background: none;
+    color: var(--it-kind);
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 0 0.1rem;
+  }
+  .cpp-it-title {
+    min-width: 0;
+    border: none;
+    border-bottom: 1px solid transparent;
+    background: transparent;
+    color: var(--c-fg);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.05rem 0;
+  }
+  .cpp-it-title:focus { outline: none; border-bottom-color: var(--cpp-accent, var(--c-accent)); }
+  .cpp-it-remove, .cpp-it-chip button {
+    border: none;
+    background: none;
+    color: var(--c-fg-dim);
+    cursor: pointer;
+    font: inherit;
+    line-height: 1;
+    padding: 0 0.15rem;
+    opacity: 0.6;
+  }
+  .cpp-it-remove:hover, .cpp-it-chip button:hover { opacity: 1; color: var(--c-danger, #b42318); }
+  .cpp-it-notes { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.3rem 0 0 1.1rem; padding: 0; list-style: none; }
+  .cpp-it-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    max-width: 100%;
+    padding: 0.05rem 0.15rem 0.05rem 0.4rem;
+    border: 1px solid var(--c-border);
+    border-radius: 999px;
+    font-size: 0.68rem;
+    color: var(--c-fg);
+    cursor: grab;
+  }
+  .cpp-it-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cpp-it-drop-hint { color: var(--c-fg-dim); font-size: 0.66rem; font-style: italic; opacity: 0.7; }
+  .cpp-it-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem; margin-top: 0.5rem; }
+  .cpp-it-search, .cpp-it-new {
+    border: 1px solid var(--c-border);
+    border-radius: 6px;
+    background: var(--c-bg);
+    color: var(--c-fg);
+    font: inherit;
+    font-size: 0.74rem;
+    padding: 0.28rem 0.45rem;
+  }
+  .cpp-it-new { cursor: pointer; white-space: nowrap; }
+  .cpp-it-new:hover { border-color: var(--cpp-accent, var(--c-accent)); color: var(--cpp-accent, var(--c-accent)); }
+  .cpp-it-reservoir { margin-top: 0.6rem; font-size: 0.74rem; }
+  .cpp-it-reservoir summary { cursor: pointer; color: var(--c-fg-dim); }
+  .cpp-it-res-help { margin: 0.3rem 0; color: var(--c-fg-dim); font-size: 0.68rem; }
+  .cpp-it-reservoir ul { display: grid; gap: 0.1rem; max-height: 14rem; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+  .cpp-it-res-item {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: 0.3rem;
+    padding: 0.12rem 0.25rem;
+    border-radius: 4px;
+    cursor: grab;
+  }
+  .cpp-it-res-item:hover { background: color-mix(in srgb, var(--cpp-accent, var(--c-accent)) 8%, transparent); }
+  .cpp-it-res-item span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cpp-it-res-kind { color: var(--c-fg-dim); text-align: center; }
+</style>

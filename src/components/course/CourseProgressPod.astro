@@ -3,6 +3,7 @@
 // La API aporta evidencia real; el componente no fabrica puntos ni rachas.
 import { t } from '../../lib/i18n';
 import { TENANTS, DEFAULT_TENANT_ID } from '../../lib/tenant/tenants';
+import ItineraryEditor from './ItineraryEditor.astro';
 
 const locale = (Astro.locals.tenant ?? TENANTS[DEFAULT_TENANT_ID]).locale;
 // Strings the client script writes, in the tenant locale (read via data-cpp-strings).
@@ -66,6 +67,8 @@ const clientStrings = JSON.stringify({
       </div>
       <div class="cpp-rubric" id="cpp-rubric"></div>
     </section>
+
+    <ItineraryEditor />
 
     <section class="cpp-daily" id="cpp-daily" aria-labelledby="cpp-daily-title">
       <div class="cpp-daily-orbit" aria-hidden="true"><i></i><i></i><i></i></div>

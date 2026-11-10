@@ -450,3 +450,16 @@ en la base.
 
 Además: **el árbol de la sidebar izquierda arranca plegado** y recuerda, por persona y
 por materia, lo que cada uno dejó abierto (localStorage), más el camino a la nota activa.
+
+## 19. Paso B, hecho (2026-11-10)
+
+El itinerario existe como objeto: tabla `Itinerary`, una fila por cohorte, con las
+paradas en jsonb y control de versión. El docente lo arma en Progreso (bloque
+«Itinerario», debajo de «En esta nota»), arrastrando notas del árbol o del reservorio,
+o buscándolas; cada parada tiene nombre, kind y notas. Una cohorte nueva se arma
+duplicando la anterior con un botón.
+
+Queda para el paso C: que el pod del estudiante use el itinerario en vez de derivar
+unidades de la carpeta. Ojo ahí: las notas del árbol y los conceptos globales llegan
+con slugs de forma distinta (`sesgo-de-confirmacion` vs `public/11-sesgos/...`); el
+cruce con la nota activa tiene que comparar por la última parte del slug.
