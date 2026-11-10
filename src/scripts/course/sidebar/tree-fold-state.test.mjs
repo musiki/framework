@@ -12,3 +12,7 @@ test('parseOpenState tolera vacío, basura y tipos raros', () => {
 test('foldKeyFromTitles: ruta de títulos normalizada', () => {
   assert.equal(foldKeyFromTitles(['  70 CONCEPTOS ', 'timbre\n orquestación', '']), '70 CONCEPTOS / timbre orquestación');
 });
+
+test('foldKeyFromTitles: sin los glifos de adelante de las carpetas', () => {
+  assert.equal(foldKeyFromTitles(['70 CONCEPTOS', '▸⊟00-inicios-de-investigación']), '70 CONCEPTOS / 00-inicios-de-investigación');
+});

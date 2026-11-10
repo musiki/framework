@@ -20,7 +20,11 @@ export function parseOpenState(raw) {
 
 /** Clave de un nodo: los títulos de sus ancestros plegables, de afuera hacia adentro. */
 export function foldKeyFromTitles(titles) {
-  return titles.map((t) => String(t || '').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' / ');
+  // Sin los glifos de adelante (▸, ⊟…): la clave es el nombre, no el dibujo.
+  return titles
+    .map((t) => String(t || '').replace(/\s+/g, ' ').trim().replace(/^[^\p{L}\p{N}]+/u, ''))
+    .filter(Boolean)
+    .join(' / ');
 }
 
 const titleOf = (details) => {
@@ -45,6 +49,10 @@ function readOpen(courseId) {
   try { return parseOpenState(window.localStorage.getItem(storageKey(courseId))); } catch { return new Set(); }
 }
 
+function writeOpen(courseId, open) {
+  try { window.localStorage.setItem(storageKey(courseId), JSON.stringify([...open])); } catch { /* sin storage */ }
+}
+
 /** Guarda lo que está abierto ahora. Se llama después de cada pliegue de la persona. */
 export function rememberTreeFold(root, courseId) {
   if (!root) return;
@@ -55,7 +63,15 @@ export function rememberTreeFold(root, courseId) {
     const key = foldKeyOf(details, root);
     if (details.open) open.add(key); else open.delete(key);
   }
-  try { window.localStorage.setItem(storageKey(courseId), JSON.stringify([...open])); } catch { /* sin storage */ }
+  writeOpen(courseId, open);
+}
+
+/** Guarda un solo nodo: con varias pestañas abiertas, un pliegue no pisa los de las otras. */
+function rememberOne(details, root, courseId) {
+  const open = readOpen(courseId);
+  const key = foldKeyOf(details, root);
+  if (details.open) open.add(key); else open.delete(key);
+  writeOpen(courseId, open);
 }
 
 const bound = new WeakSet();
@@ -74,7 +90,7 @@ export function applyTreeFoldState(root, courseId) {
     bound.add(details);
     // Sólo los pliegues de la persona se guardan; los que hace el código no.
     details.querySelector(':scope > summary')?.addEventListener('click', () => {
-      window.setTimeout(() => rememberTreeFold(root, courseId), 0);
+      window.setTimeout(() => rememberOne(details, root, courseId), 0);
     });
   }
 }
