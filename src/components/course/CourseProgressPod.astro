@@ -745,17 +745,20 @@ const clientStrings = JSON.stringify({
   // ── «En esta nota»: las evaluaciones de la nota que se está leyendo. Con
   // Dockview es el panel activo (data-rendered-slug); si no, la página. El
   // estado de cada evaluación lo publica [...slug].astro en __musikiEvalProgress.
-  function activeNoteRoot(): HTMLElement | null {
+  // Nombre y evaluaciones salen de la misma raíz: si el panel de la nota activa
+  // no está a la vista se muestra la página, con su nombre, no el de otra nota.
+  function activeNote(): { root: HTMLElement | null; slug: string } {
     if (activeSlug) {
       const panel = document.querySelector<HTMLElement>(`[data-rendered-slug="${CSS.escape(activeSlug)}"]`);
-      if (panel && panel.getClientRects().length > 0) return panel;
+      if (panel && panel.getClientRects().length > 0) return { root: panel, slug: activeSlug };
     }
-    return document.querySelector<HTMLElement>('[data-class-content]');
+    return {
+      root: document.querySelector<HTMLElement>('[data-class-content]'),
+      slug: document.querySelector<HTMLElement>('[data-course-layout-root]')?.dataset.livePageSlug || '',
+    };
   }
 
-  function activeNoteName(): string {
-    const slug = activeSlug
-      || (document.querySelector<HTMLElement>('[data-course-layout-root]')?.dataset.livePageSlug || '');
+  function noteNameOf(slug: string): string {
     const last = slug.split('/').filter(Boolean).pop() || '';
     return last.replace(/\.(md|mdx)$/i, '').replace(/[-_]+/g, ' ').trim();
   }
@@ -763,7 +766,7 @@ const clientStrings = JSON.stringify({
   function renderHotNote() {
     const list = el('cpp-hot-list');
     if (!list) return;
-    const root = activeNoteRoot();
+    const { root, slug: noteSlug } = activeNote();
     const byId = new Map(((window as any).__musikiEvalProgress || []).map((item: any) => [item.id, item]));
     const items = root
       ? Array.from(root.querySelectorAll<HTMLElement>('.eval-block-wrapper'))
@@ -774,7 +777,7 @@ const clientStrings = JSON.stringify({
     touchedRubricKeys = summary.rubricKeys;
 
     const name = el('cpp-hot-name');
-    if (name) name.textContent = activeNoteName();
+    if (name) name.textContent = noteNameOf(noteSlug);
     const count = el('cpp-hot-count');
     if (count) count.textContent = summary.evals.length ? `${summary.done}/${summary.evals.length} hechas` : '';
     const empty = el('cpp-hot-empty');
