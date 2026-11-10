@@ -3187,6 +3187,8 @@ details.page-info-history[open] > summary::before { transform: rotate(90deg); }
 }
 .service-concept-title { font-weight: 600; color: var(--c-fg); }
 .service-concept-def { font-size: 0.92rem; color: var(--c-subtle); }
+/* Abierta, la def ya está en el callout de la nota. */
+.service-concept[open] .service-concept-def { display: none; }
 .service-concept-body { margin-top: 1.25rem; }
 .service-login-notice {
   display: flex;
