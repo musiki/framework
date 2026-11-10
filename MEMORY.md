@@ -1,5 +1,10 @@
 # MEMORY.md — Project Activity Log
 
+<2026-11-10 progreso-recorrido-connectoma> <br>
+- **Árbol de estudiantes** (`[...slug].astro`): en la rama de estudiantes `<ul set:html={cond ? html : undefined}>` reemplazaba los hijos por nada en todo capítulo que no fuera CONCEPTOS: por eso FORMA Y ESTRUCTURA y las GENERAL salían vacías (el árbol docente es otro, en el cliente, y no lo mostraba). Además las notas sin capítulo iban a una carpeta `general` en minúscula, que con `chapter: GENERAL` daba dos GENERAL; ahora van a la raíz sin carpeta (`chapter--root`), fuera del plegado.
+- **Ribbon**: Progreso con ícono propio y puntito rojo si hay repasos vencidos (`src/lib/course/progress-pending.mjs`, cache 5 min en sessionStorage, lo refresca el pod al cargar); el «Aa» de temas pasa a un sol.
+- **Pod Progreso** (paso C del itinerario, plan sección 20): «Camino conceptual» → «Recorrido» sobre las paradas del itinerario de la cohorte; el Connectoma three.js → force-graph con profundidad 1–5, zoom y pantalla completa (`src/scripts/course/progress-connectome.ts`, `src/lib/course/connectome-depth.mjs`). `pod.ts` deja afuera `latex-template` y `course`, y las aristas llevan `relType`.
+
 <2026-11-10 itinerario-por-cohorte> <br>
 - **Paso B del plan de itinerario**: el itinerario es un objeto de la base, uno por cohorte (tabla `Itinerary`, migración `20261110090000_itinerary.sql`): paradas en jsonb `{id, title, kind, notes[]}` con `version` para que dos pestañas no se pisen (409 con lo último guardado). Lógica pura y validación en `src/lib/itinerary/itinerary.mjs` (8 tests): los cinco kinds, `kindForNoteType`, `reservoirOf` (el reservorio es el complemento, sin campo), `stopFromNote`.
 - **API** `/api/progress/itinerary`: GET (docentes e inscriptos; las otras cohortes sólo docentes), PUT reemplaza la lista con control de versión, POST duplica de una cohorte a otra si la de destino está vacía.

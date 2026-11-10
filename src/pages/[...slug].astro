@@ -483,10 +483,12 @@ const sidebarLessons = canManageLiveInteractions
     });
 
 // Group lessons by chapter
+const ROOT_CHAPTER_NAME = '';
 const chapters = sidebarLessons.reduce((acc, lesson) => {
   const legacyRelPath = getCourseEntryLegacyPath(lesson, canonicalCourseIdToUse || '');
   const legacyDir = legacyRelPath.includes('/') ? legacyRelPath.split('/').slice(0, -1).join('/') : '';
-  const chapter = lesson.data.chapter || legacyDir || 'general';
+  // Sin capítulo ni carpeta: la raíz, sin carpeta en el árbol (como el árbol docente).
+  const chapter = lesson.data.chapter || legacyDir || ROOT_CHAPTER_NAME;
   if (!acc[chapter]) acc[chapter] = [];
   acc[chapter].push(lesson);
   return acc;
@@ -531,6 +533,7 @@ if (session && !chapters['90 NOTAS']) {
 
 const sortedChapters = Object.entries(chapters).sort(([leftChapter, leftLessons], [rightChapter, rightLessons]) => {
   const getMinOrder = (name: string, lessons: typeof allLessons) => {
+    if (name === ROOT_CHAPTER_NAME) return -Infinity;
     const matchDigits = name.trim().match(/^(\d+)/);
     const fallbackFromTitle = matchDigits ? parseInt(matchDigits[1], 10) : null;
 
@@ -4944,8 +4947,8 @@ function renderLessonsTreeHTML(
           const isNotas = displayTitle.toUpperCase().includes('NOTAS');
 
           return (
-            <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas }]}>
-              <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
+            <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas, "chapter--root": chapterName === ROOT_CHAPTER_NAME }]}>
+              <details class="chapter-details" open={chapterName === ROOT_CHAPTER_NAME || isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
                 <summary class="chapter-title">
                   <span class="chapter-title-main">
                     <span class="chapter-caret">▸</span>
@@ -5322,8 +5325,8 @@ function renderLessonsTreeHTML(
             const isNotas = displayTitle.toUpperCase().includes('NOTAS');
 
             return (
-              <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas }]}>
-                <details class="chapter-details" open={isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
+              <div class:list={["chapter", { "chapter--conceptos": isConceptos, "chapter--recursos": isRecursos, "chapter--notas": isNotas, "chapter--root": chapterName === ROOT_CHAPTER_NAME }]}>
+                <details class="chapter-details" open={chapterName === ROOT_CHAPTER_NAME || isRecursosEditorPage || lessons.some(l => currentEntry?.id === l.id)}>
                   <summary class="chapter-title">
                     <span class="chapter-title-main">
                       <span class="chapter-caret">▸</span>
@@ -5405,8 +5408,11 @@ function renderLessonsTreeHTML(
                       })}
                     </div>
                   ) : (
+                    displayTitle.toUpperCase().includes('CONCEPTOS') ? (
+                    // set:html reemplaza los hijos: sólo CONCEPTOS va por acá. Con
+                    // set:html={undefined} en la misma <ul>, los demás capítulos
+                    // salían vacíos para estudiantes.
                     <ul class="lesson-list" set:html={
-                      displayTitle.toUpperCase().includes('CONCEPTOS') ? (
                         renderLessonsTreeHTML(
                           buildLessonsTree(lessons),
                           currentEntry?.id,
@@ -5417,9 +5423,10 @@ function renderLessonsTreeHTML(
                           lessonPathIndex,
                           canManageLiveInteractions
                         )
-                      ) : undefined
-                    }>
-                      {!displayTitle.toUpperCase().includes('CONCEPTOS') && (
+                    } />
+                    ) : (
+                    <ul class="lesson-list">
+                      {(
                         lessons.map((lesson) => {
                           const isContentCollection = (lesson as any).collection === 'content';
                           const lessonType = String(lesson.data.type || '').trim().toLowerCase();
@@ -5498,6 +5505,7 @@ function renderLessonsTreeHTML(
                         })
                       )}
                     </ul>
+                    )
                   )}
                 </details>
               </div>

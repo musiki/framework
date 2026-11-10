@@ -463,3 +463,23 @@ Queda para el paso C: que el pod del estudiante use el itinerario en vez de deri
 unidades de la carpeta. Ojo ahí: las notas del árbol y los conceptos globales llegan
 con slugs de forma distinta (`sesgo-de-confirmacion` vs `public/11-sesgos/...`); el
 cruce con la nota activa tiene que comparar por la última parte del slug.
+
+## 20. Paso C, empezado (2026-11-10)
+
+Limpieza del pod Progreso del estudiante, según lo que se vio con s123:
+
+- **«Camino conceptual» → «Recorrido»**: ya no lista todas las notas de la materia
+  agrupadas por carpeta. Muestra las paradas del itinerario de la cohorte (ícono del
+  kind + nombre), con la parada actual con acento y el resto en muted; la actual es la
+  que tiene la nota activa o, si ninguna, la primera sin terminar
+  (`src/lib/itinerary/route-position.mjs`). Con 4 paradas o más aparece ◎, que pliega
+  a la actual y sus vecinas. Sin itinerario dice que no hay, no inventa uno.
+- **Connectoma**: la esfera three.js, que no servía para nada, pasa a ser el mapa total
+  con force-graph (el mismo motor del Graph): profundidad 1 (vecinos de la nota activa)
+  a 5 (todo), zoom ± y ⤢ a pantalla completa, que usa el maximizar de la sidebar
+  derecha (el del Foro). Las relaciones hypo/hyper van con flecha, connect punteado.
+  Es la única vista de «todas las notas»: no se duplica en el Recorrido.
+- **Fuera del pod**: notas `type: latex-template` y `type: course` (`pod.ts`).
+
+Falta: que el docente vea el Recorrido como lo ve el estudiante mientras lo edita, y
+probar con un itinerario real (s123 no tiene ninguno todavía).

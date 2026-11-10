@@ -26,6 +26,7 @@ const normSeg = (value: string): string =>
     .replace(/^-+|-+$/g, '');
 
 const C4_LEVEL: Record<string, number> = { 'mini-c': 1, 'little-c': 2, 'pro-c': 3, 'big-c': 4 };
+const NON_ROUTE_NOTE_TYPES = new Set(['latex-template', 'course']);
 const REQUIRED = { proyecto: 1, conexiones: 5, coloquios: 2, estigmergia: 1, aporte: 1 };
 
 function humanizeUnit(value: string): string {
@@ -79,7 +80,10 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
   try {
     const graph = buildGraphData({ publicOnly: false }) as { nodes: Array<any>; links: Array<any> };
-    const courseNodes = graph.nodes.filter((n) => n?.type === 'document' && n?.course === courseId);
+    // Plantillas y la ficha de la materia no son nodos del recorrido: se excluyen
+    // por su type del frontmatter, no por la carpeta donde estén.
+    const courseNodes = graph.nodes.filter((n) =>
+      n?.type === 'document' && n?.course === courseId && !NON_ROUTE_NOTE_TYPES.has(String(n?.noteType || '')));
     if (courseNodes.length === 0) {
       return json({
         courseId, concepts: [], edges: [], project: { c4Level: 0 },
@@ -116,15 +120,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    const edgeSet = new Set<string>();
-    const edges: Array<{ source: string; target: string; type: string }> = [];
+    // Una arista por par de notas. Si el par tiene un link suelto y una relación
+    // tipada (hypo/hyper/connect), gana la relación: es la que dibuja el Connectoma.
+    const edgeIndex = new Map<string, number>();
+    const edges: Array<{ source: string; target: string; type: string; relType?: string }> = [];
     for (const l of graph.links) {
       if (l?.type === 'tag') continue;
       if (!idSet.has(l.source) || !idSet.has(l.target)) continue;
       const key = l.source < l.target ? `${l.source}|${l.target}` : `${l.target}|${l.source}`;
-      if (edgeSet.has(key)) continue;
-      edgeSet.add(key);
-      edges.push({ source: l.source, target: l.target, type: l.type || 'link' });
+      const edge = { source: l.source, target: l.target, type: l.type || 'link', ...(l.relType ? { relType: l.relType } : {}) };
+      const seen = edgeIndex.get(key);
+      if (seen === undefined) {
+        edgeIndex.set(key, edges.length);
+        edges.push(edge);
+      } else if (edge.type === 'rel' && edges[seen].type !== 'rel') {
+        edges[seen] = edge;
+      }
     }
 
     const rubric = { proyecto: 0, conexiones: 0, coloquios: 0, estigmergia: 0, aporte: 0 };

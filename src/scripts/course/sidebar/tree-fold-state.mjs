@@ -1,6 +1,7 @@
 // Estado plegado/desplegado del árbol de la sidebar izquierda, por persona y por
 // materia. Todo arranca plegado salvo lo que la persona dejó abierto y el camino
-// hasta la nota que está leyendo. Recursos tiene su propio estado y no se toca.
+// hasta la nota que está leyendo. Recursos tiene su propio estado y no se toca;
+// la raíz (notas sin capítulo) no tiene título y está siempre abierta.
 
 const STORAGE_PREFIX = 'musiki:tree-open:';
 const FOLDABLE = 'details.chapter-details, details.recursos-sidebar-folder';
@@ -43,7 +44,7 @@ function foldKeyOf(details, root) {
 }
 
 const foldables = (root) =>
-  Array.from(root.querySelectorAll(FOLDABLE)).filter((d) => !d.closest('.chapter--recursos'));
+  Array.from(root.querySelectorAll(FOLDABLE)).filter((d) => !d.closest('.chapter--recursos, .chapter--root'));
 
 function readOpen(courseId) {
   try { return parseOpenState(window.localStorage.getItem(storageKey(courseId))); } catch { return new Set(); }

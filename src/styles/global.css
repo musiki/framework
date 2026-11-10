@@ -3216,3 +3216,6 @@ details.page-info-history[open] > summary::before { transform: rotate(90deg); }
 }
 .note-pending-close:hover,
 .note-pending-close:focus-visible { border-color: var(--c-accent); color: var(--c-accent); }
+
+/* Raíz del árbol del curso: las notas sin capítulo van sin carpeta ni título. */
+.sidebar--left .chapter--root > .chapter-details > .chapter-title { display: none; }

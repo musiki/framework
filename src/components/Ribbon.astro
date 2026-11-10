@@ -292,7 +292,10 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     aria-haspopup="menu"
     aria-expanded="false"
   >
-    <span class="ribbon-theme-aa" aria-hidden="true">Aa</span>
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
+      <path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
   </button>
 
   <!-- Info / metadata panel -->
@@ -309,20 +312,20 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
     </svg>
   </button>
 
-  <!-- Progreso — pod de la cátedra-recorrido -->
+  <!-- Progreso — pod de la cátedra-recorrido. El punto rojo marca repasos pendientes. -->
   <button
     type="button"
-    class="ribbon-item ribbon-item--circle"
+    class="ribbon-item ribbon-progress-btn"
     data-progress-toggle
     aria-label={t(locale, 'ribbon.progressPath')}
     title={t(locale, 'ribbon.progressTitle')}
   >
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="6" cy="18" r="2.4" stroke="currentColor" stroke-width="2"/>
-      <circle cx="12" cy="9" r="2.4" stroke="currentColor" stroke-width="2"/>
-      <circle cx="18" cy="14" r="2.4" fill="currentColor"/>
-      <path d="M7.7 16.3 10.6 10.7M13.6 10.3 16.4 12.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" opacity="0.3"/>
+      <path d="M12 3a9 9 0 0 1 8.2 12.7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M8.5 12.2 11 14.6l4.6-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
+    <span class="ribbon-pending-dot" data-progress-pending hidden></span>
   </button>
 
   <!-- Contextual help — opens inside Dockview when available -->
@@ -543,12 +546,19 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
   :root {
     --musiki-header-height: 0px !important;
   }
-  .ribbon-theme-aa {
-    font-family: var(--font-reading, Georgia, serif);
-    font-size: 0.8rem;
-    font-weight: 650;
-    letter-spacing: -0.04em;
+  .ribbon-progress-btn { position: relative; }
+  .ribbon-pending-dot {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 999px;
+    background: #e5484d;
+    box-shadow: 0 0 0 2px var(--c-bg);
+    pointer-events: none;
   }
+  .ribbon-pending-dot[hidden] { display: none; }
   .ribbon-theme-menu {
     position: fixed;
     z-index: 1000;
@@ -660,6 +670,8 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
 </style>
 
 <script>
+  import { loadPending, pendingLabel, PENDING_EVENT } from '../lib/course/progress-pending.mjs';
+
   type AppearanceApi = {
     themes: { id: string; label: string; dark: boolean }[];
     get: () => string;
@@ -924,4 +936,26 @@ const userInitial = (ribbonUserName || requestUser?.email || '?')
 
   setupRibbon();
   document.addEventListener('astro:page-load', setupRibbon);
+
+  // Punto rojo en Progreso: repasos pendientes de la materia que se está viendo.
+  const courseOfPage = () =>
+    (document.querySelector('.course-container')?.getAttribute('data-live-course-id') || '').trim();
+  const showPending = (count: number) => {
+    const btn = document.querySelector<HTMLElement>('[data-progress-toggle]');
+    const dot = btn?.querySelector<HTMLElement>('[data-progress-pending]');
+    if (!btn || !dot) return;
+    dot.hidden = count <= 0;
+    const base = btn.getAttribute('aria-label') || '';
+    btn.title = count > 0 ? `${base} · ${pendingLabel(count)}` : base;
+  };
+  async function refreshPending() {
+    const courseId = courseOfPage();
+    if (!courseId) { showPending(0); return; }
+    try { showPending(await loadPending(courseId)); } catch { showPending(0); }
+  }
+  window.addEventListener(PENDING_EVENT, ((event: CustomEvent<{ courseId: string; count: number }>) => {
+    if (event.detail?.courseId === courseOfPage()) showPending(event.detail.count);
+  }) as EventListener);
+  void refreshPending();
+  document.addEventListener('astro:page-load', () => void refreshPending());
 </script>

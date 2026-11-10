@@ -167,6 +167,8 @@ export function buildGraphData({ publicOnly = false, tenant = null } = {}) {
         course: course || null,
         isPublic: record.isPublic,
         status: String(fm.data.status || '').trim().toLowerCase(),
+        // El type del frontmatter: el pod Progreso deja afuera lo que no es contenido de la cursada.
+        noteType: String(fm.data.type || '').trim().toLowerCase(),
         canonicalSlug,
         def: fm.data.def ? String(fm.data.def).trim() : '',
         excerpt: makeExcerpt(fm.content),

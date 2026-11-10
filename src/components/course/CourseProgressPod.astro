@@ -88,20 +88,42 @@ const clientStrings = JSON.stringify({
     </section>
 
 
+    <!-- Recorrido: el itinerario que armó el docente, con la parada actual
+         resaltada y el resto en muted. Sin itinerario no se inventa uno. -->
     <section class="cpp-block cpp-route" aria-labelledby="cpp-route-title">
       <div class="cpp-block-head">
-        <h3 class="cpp-section-label" id="cpp-route-title">Camino conceptual</h3>
-        <span class="cpp-block-note">elegí tu próximo nodo</span>
+        <h3 class="cpp-section-label" id="cpp-route-title">Recorrido</h3>
+        <button
+          type="button"
+          class="cpp-icon-btn"
+          id="cpp-route-fold"
+          aria-pressed="false"
+          title="Ver sólo la parada actual y sus vecinas"
+          aria-label="Ver sólo la parada actual y sus vecinas"
+          hidden
+        >◎</button>
       </div>
+      <p class="cpp-route-empty" id="cpp-route-empty" hidden>La cursada todavía no tiene itinerario.</p>
       <div class="cpp-path" id="cpp-path"></div>
     </section>
 
+    <!-- Connectoma: el grafo de la materia desde la nota activa. Profundidad
+         1 = sus vecinos, 5 = el mapa entero (relaciones hypo/hyper/connect). -->
     <section class="cpp-connect" aria-labelledby="cpp-connect-title">
       <div class="cpp-block-head">
         <h3 class="cpp-section-label" id="cpp-connect-title">Connectoma</h3>
-        <span class="cpp-density" id="cpp-dens">densidad —</span>
+        <div class="cpp-connect-tools">
+          <label class="cpp-depth" title="Profundidad: 1 sus vecinos · 5 el mapa entero">
+            <input type="range" id="cpp-depth" min="1" max="5" step="1" value="2" aria-label="Profundidad del Connectoma" />
+            <output id="cpp-depth-out" for="cpp-depth">2</output>
+          </label>
+          <button type="button" class="cpp-icon-btn" id="cpp-zoom-out" aria-label="Alejar" title="Alejar">−</button>
+          <button type="button" class="cpp-icon-btn" id="cpp-zoom-in" aria-label="Acercar" title="Acercar">+</button>
+          <button type="button" class="cpp-icon-btn" id="cpp-connect-max" aria-pressed="false" aria-label="Connectoma a pantalla completa" title="Connectoma a pantalla completa">⤢</button>
+        </div>
       </div>
-      <canvas id="cpp-brain" aria-label="Red de conceptos conectados"></canvas>
+      <div class="cpp-graph" id="cpp-graph" aria-label="Red de notas conectadas"></div>
+      <span class="cpp-density" id="cpp-dens"></span>
     </section>
 
     <div class="cpp-legend" aria-label="Leyenda del recorrido">
@@ -398,8 +420,39 @@ const clientStrings = JSON.stringify({
   .cpp-path-link:hover .cpp-ring { stroke: var(--cpp-accent); opacity: 1; }
   .cpp-path-link:focus-visible .cpp-lab,
   .cpp-path-link:hover .cpp-lab { fill: var(--cpp-accent); opacity: 1; }
-  .cpp-connect { padding-bottom: 0.3rem; }
-  #cpp-brain { display: block; width: 100%; height: 180px; }
+  .cpp-connect { padding-bottom: 0.5rem; }
+  .cpp-graph { position: relative; width: 100%; height: 220px; overflow: hidden; border-radius: 6px; cursor: grab; }
+  .cpp-connect-tools { display: flex; align-items: center; gap: 0.25rem; }
+  .cpp-depth { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--c-fg-dim); font-size: 0.66rem; }
+  .cpp-depth input { width: 4.2rem; accent-color: var(--cpp-accent); }
+  .cpp-depth output { min-width: 0.6rem; font-variant-numeric: tabular-nums; }
+  .cpp-icon-btn {
+    min-width: 1.45rem;
+    height: 1.45rem;
+    padding: 0 0.3rem;
+    border: 1px solid var(--cpp-line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--c-fg-dim);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .cpp-icon-btn[hidden] { display: none; }
+  .cpp-icon-btn:hover,
+  .cpp-icon-btn[aria-pressed='true'] { border-color: var(--cpp-accent); color: var(--cpp-accent); }
+  /* Connectoma a pantalla completa: la sidebar derecha maximizada y el pod sólo con el grafo. */
+  .progress-sidebar-panel.is-connectome-full .cpp-shell > :not(.cpp-header):not(.cpp-connect) { display: none; }
+  .progress-sidebar-panel.is-connectome-full .cpp-graph { height: calc(100vh - 9.5rem); }
+  /* Recorrido: la parada actual con acento, el resto en muted. */
+  .cpp-route-empty { margin: 0; color: var(--c-fg-dim); font-size: 0.76rem; }
+  .cpp-unit[data-state='upcoming'],
+  .cpp-unit[data-state='done'] { opacity: 0.45; transition: opacity 160ms ease; }
+  .cpp-unit[data-state='upcoming']:hover,
+  .cpp-unit[data-state='done']:hover { opacity: 0.85; }
+  .cpp-unit[data-state='current'] .cpp-unit-label { color: var(--cpp-accent); }
+  .cpp-unit-kind { margin-right: 0.35rem; }
   .cpp-legend {
     display: flex;
     flex-wrap: wrap;
@@ -446,8 +499,11 @@ const clientStrings = JSON.stringify({
 </style>
 
 <script>
-  import * as THREE from 'three';
+  import { pendingFromPod, publishPending } from '../../lib/course/progress-pending.mjs';
   import { summarizeActiveNote } from '../../lib/course/active-note-progress.mjs';
+  import { ITINERARY_KINDS } from '../../lib/itinerary/itinerary.mjs';
+  import { resolveRoute, visibleStopIndexes } from '../../lib/itinerary/route-position.mjs';
+  import { createConnectome, type Connectome } from '../../scripts/course/progress-connectome';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
   const R = 8;
@@ -456,7 +512,6 @@ const clientStrings = JSON.stringify({
   const DY = 72;
   const X0 = 42;
   const Y0 = 32;
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const REQ_LABEL: Record<string, string> = {
     proyecto: 'proyecto (obra)',
@@ -473,7 +528,9 @@ const clientStrings = JSON.stringify({
     aporte: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m8 2 1.4 3.6H13l-2.9 2.3 1.1 3.7L8 9.4l-3.2 2.2 1.1-3.7L3 5.6h3.6Z" class="cpp-badge"/></svg>',
   };
 
-  let three: any = null;
+  let connectome: Connectome | null = null;
+  let itinerary: { stops: any[] } | null = null;
+  const ROUTE_FOLD_KEY = 'musiki:progress-route-folded';
   let lastCourse = '';
   let lastData: any = null;
   let activeSlug = '';
@@ -658,92 +715,111 @@ const clientStrings = JSON.stringify({
     host.appendChild(section);
   }
 
+  // ── Recorrido: las paradas del itinerario de la cohorte (paso C). Cada parada
+  // es una unidad del camino; la actual va con acento y el resto en muted. Sin
+  // itinerario no se listan todas las notas: eso es el Connectoma.
+  const KIND_ICON = new Map<string, string>(ITINERARY_KINDS.map((kind: { id: string; icon: string }) => [kind.id, kind.icon]));
+
+  async function loadItinerary(cid: string): Promise<{ stops: any[] } | null> {
+    try {
+      const response = await fetch(`/api/progress/itinerary?courseId=${encodeURIComponent(cid)}`, { headers: { Accept: 'application/json' } });
+      const data = response.ok ? await response.json() : null;
+      return Array.isArray(data?.itinerary?.stops) ? { stops: data.itinerary.stops } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const routeFolded = () => {
+    try { return localStorage.getItem(ROUTE_FOLD_KEY) === '1'; } catch { return false; }
+  };
+
   function renderPath(concepts: any[], project: any) {
     const host = el('cpp-path');
     if (!host) return;
     host.replaceChildren();
-    const units = new Map<string, { label: string; concepts: any[] }>();
-    concepts.forEach((concept) => {
-      const key = String(concept.unitId || 'recorrido');
-      const unit = units.get(key) || { label: String(concept.unitLabel || 'Recorrido'), concepts: [] };
-      unit.concepts.push(concept);
-      units.set(key, unit);
-    });
-    const nextState = { marked: false };
-    units.forEach((unit) => renderUnit(host, unit.label, unit.concepts, nextState));
+    const stops = itinerary?.stops || [];
+    const empty = el('cpp-route-empty');
+    if (empty) empty.hidden = stops.length > 0;
+    const fold = el('cpp-route-fold');
+    const folded = routeFolded();
+    if (fold) {
+      fold.hidden = stops.length < 4;
+      fold.setAttribute('aria-pressed', String(folded));
+    }
+    if (stops.length) {
+      const route = resolveRoute(stops, concepts, activeSlug || activeNote().slug);
+      const nextState = { marked: false };
+      visibleStopIndexes(route.stops.length, route.currentIndex, folded).forEach((index) => {
+        const { stop, items, state } = route.stops[index];
+        const label = `${KIND_ICON.get(stop.kind) || '◆'} ${stop.title || ''}`.trim();
+        renderUnit(host, label, items, nextState);
+        const unit = host.lastElementChild as HTMLElement | null;
+        if (unit) unit.dataset.state = state;
+      });
+    }
     appendProject(host, project);
   }
 
-  function renderBrain(concepts: any[], edges: any[]) {
-    const canvas = el('cpp-brain') as HTMLCanvasElement | null;
-    if (!canvas) return;
-    try {
-      const width = canvas.clientWidth || 380;
-      const height = 180;
-      if (!three) {
-        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.setSize(width, height, false);
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-        camera.position.z = 7.5;
-        three = { renderer, scene, camera, nodes: {}, lines: new THREE.Group(), raf: 0 };
-        scene.add(three.lines);
-        const loop = () => {
-          if (!reduce && isOpen()) {
-            scene.rotation.y += 0.0038;
-            scene.rotation.x = 0.18;
-          }
-          renderer.render(scene, camera);
-          three.raf = requestAnimationFrame(loop);
-        };
-        loop();
-      } else if (three.renderer.domElement === canvas) {
-        three.renderer.setSize(width, height, false);
-        three.camera.aspect = width / height;
-        three.camera.updateProjectionMatrix();
-      }
-      Object.values(three.nodes).forEach((node: any) => three.scene.remove(node.mesh));
-      three.nodes = {};
-      while (three.lines.children.length) three.lines.remove(three.lines.children[0]);
-      const styles = getComputedStyle(document.documentElement);
-      const ink = new THREE.Color((styles.getPropertyValue('--c-fg') || '#e9e5dc').trim());
-      const accent = new THREE.Color((styles.getPropertyValue('--accent') || '#e2703f').trim());
-      const lineColor = new THREE.Color((styles.getPropertyValue('--c-border') || '#7d786e').trim());
-      const total = Math.max(1, concepts.length);
-      concepts.forEach((concept, index) => {
-        const y = 1 - (index / Math.max(1, total - 1)) * 2;
-        const radius = Math.sqrt(Math.max(0, 1 - y * y));
-        const theta = index * 2.399963;
-        const position = new THREE.Vector3(Math.cos(theta) * radius, y, Math.sin(theta) * radius).multiplyScalar(2.6);
-        const state = stateOf(concept);
-        const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.13, 16, 16),
-          new THREE.MeshBasicMaterial({ color: state >= 3 ? accent : ink }),
-        );
-        mesh.position.copy(position);
-        mesh.scale.setScalar(state >= 2 ? 1.25 : 1);
-        three.scene.add(mesh);
-        three.nodes[concept.id] = { mesh, position };
-      });
-      const states: Record<string, number> = {};
-      concepts.forEach((concept) => { states[concept.id] = stateOf(concept); });
-      let activeEdges = 0;
-      edges.forEach((edge) => {
-        const source = three.nodes[edge.source];
-        const target = three.nodes[edge.target];
-        if (!source || !target || (states[edge.source] || 0) < 2 || (states[edge.target] || 0) < 2) return;
-        const geometry = new THREE.BufferGeometry().setFromPoints([source.position, target.position]);
-        three.lines.add(new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: lineColor, transparent: true, opacity: 0.55 })));
-        activeEdges += 1;
-      });
-      const density = el('cpp-dens');
-      if (density) density.textContent = str('density', 'densidad {density} · {edges} aristas', { density: (activeEdges / Math.max(1, edges.length)).toFixed(2), edges: activeEdges });
-    } catch (error) {
-      console.warn('[progress-pod] connectome render failed', error);
-    }
+  el('cpp-route-fold')?.addEventListener('click', () => {
+    try { localStorage.setItem(ROUTE_FOLD_KEY, routeFolded() ? '0' : '1'); } catch { /* sin storage queda desplegado */ }
+    if (lastData) renderPath(lastData.concepts || [], lastData.project || {});
+  });
+
+  // ── Connectoma: force-graph desde la nota activa (progress-connectome.ts).
+  // Un click abre la nota igual que un link del recorrido: un .cpp-path-link
+  // que atrapa el handler de Dockview de [...slug].astro, o navega si no hay.
+  function openConcept(concept: any) {
+    const link = document.createElement('a');
+    link.className = 'cpp-path-link';
+    link.href = String(concept.href || '#');
+    link.dataset.courseId = courseId();
+    link.dataset.lessonPageSlug = String(concept.pageSlug || concept.slug || '');
+    link.hidden = true;
+    el('progress-sidebar')?.appendChild(link);
+    link.click();
+    link.remove();
   }
 
+  function renderConnectome(concepts: any[], edges: any[]) {
+    const host = el('cpp-graph');
+    if (!host) return;
+    if (!connectome) {
+      connectome = createConnectome(host, openConcept, (shown, total) => {
+        const density = el('cpp-dens');
+        if (density) density.textContent = shown < total ? `${shown} de ${total} notas` : `${total} notas`;
+      });
+      connectome.setDepth(Number((el('cpp-depth') as HTMLInputElement | null)?.value) || 2);
+    }
+    connectome.update(concepts, edges, activeSlug || activeNote().slug);
+  }
+
+  el('cpp-depth')?.addEventListener('input', (event) => {
+    const value = (event.target as HTMLInputElement).value;
+    const out = el('cpp-depth-out');
+    if (out) out.textContent = value;
+    connectome?.setDepth(Number(value));
+  });
+  el('cpp-zoom-in')?.addEventListener('click', () => connectome?.zoomBy(1.4));
+  el('cpp-zoom-out')?.addEventListener('click', () => connectome?.zoomBy(1 / 1.4));
+
+  // Pantalla completa: maximiza la sidebar derecha con su propio ⤢ (el del Foro)
+  // y deja sólo el grafo. Al salir la devuelve como estaba.
+  let maximizedByConnectome = false;
+  el('cpp-connect-max')?.addEventListener('click', () => {
+    const panel = el('progress-sidebar');
+    const button = el('cpp-connect-max');
+    if (!panel || !button) return;
+    const full = !panel.classList.contains('is-connectome-full');
+    const sidebarMax = document.querySelector<HTMLElement>('[data-sidebar-maximize="right"]');
+    const isMaximized = () => (container() as HTMLElement | null)?.dataset.rightMaximized === 'true';
+    if (full && !isMaximized()) { sidebarMax?.click(); maximizedByConnectome = true; }
+    if (!full && maximizedByConnectome && isMaximized()) sidebarMax?.click();
+    if (!full) maximizedByConnectome = false;
+    panel.classList.toggle('is-connectome-full', full);
+    button.setAttribute('aria-pressed', String(full));
+    window.setTimeout(() => connectome?.resize(), 220);
+  });
 
   // ── «En esta nota»: las evaluaciones de la nota que se está leyendo. Con
   // Dockview es el panel activo (data-rendered-slug); si no, la página. El
@@ -862,10 +938,12 @@ const clientStrings = JSON.stringify({
       const percent = el('cpp-pct');
       if (percent) percent.textContent = concepts.length ? `${Math.round(100 * completed / concepts.length)}%` : '0%';
       renderDaily(data.daily || {});
+      publishPending(cid, pendingFromPod(data));
       renderRubric(data.rubric || {}, data.required || {}, data.project || {});
       renderHotNote();
+      itinerary = await loadItinerary(cid);
       renderPath(concepts, data.project || {});
-      renderBrain(concepts, edges);
+      renderConnectome(concepts, edges);
       updateActiveUnit();
       if (note) note.textContent = concepts.length ? '' : str('empty', 'Todavía no hay conceptos disponibles para este curso.');
     } catch (error) {
@@ -877,6 +955,10 @@ const clientStrings = JSON.stringify({
   window.addEventListener('musiki:active-note', ((event: CustomEvent<{ slug?: string }>) => {
     activeSlug = String(event.detail?.slug || '');
     updateActiveUnit();
+    if (lastData) {
+      renderPath(lastData.concepts || [], lastData.project || {});
+      renderConnectome(lastData.concepts || [], lastData.edges || []);
+    }
     // El panel recién abierto hidrata sus evaluaciones después del evento.
     renderHotNote();
     window.setTimeout(renderHotNote, 300);
@@ -884,8 +966,7 @@ const clientStrings = JSON.stringify({
   }) as EventListener);
   window.addEventListener('musiki:progress-changed', () => { if (isOpen()) void load(); });
   document.addEventListener('astro:before-swap', () => {
-    if (three?.raf) cancelAnimationFrame(three.raf);
-    try { three?.renderer?.dispose(); } catch {}
-    three = null;
+    connectome?.destroy();
+    connectome = null;
   }, { once: true });
 </script>
