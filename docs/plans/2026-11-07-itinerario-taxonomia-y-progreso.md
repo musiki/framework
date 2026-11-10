@@ -325,3 +325,108 @@ estudiante para ubicarse. Avance sobre el itinerario, retención sobre los conce
 y referencial. Filtros por tipo de arista. Limpiar los `hyper` que apuntan a carpetas.
 
 El orden importa: la 6 depende de que la carpeta haya dejado de significar algo, o sea de la 2.
+
+---
+
+# Parte 3 · revisión del 2026-11-10, después de 47 commits
+
+## 13. Dónde quedó cada etapa, verificado en el código
+
+**Etapa 0 · a medias.** `8bc74dd` juntó la convención en un solo objeto,
+`CHAPTER_CONVENTION` (`notes-sidebar-utils.mjs`), pero no la sacó: el umbral 70 y los
+cuatro nombres reservados siguen ahí, ahora en un lugar en vez de cinco. Además
+`[...slug].astro` tiene su propia copia para el árbol de estudiantes (`80-recursos`,
+`85 AMIGX CRÍTICX`, `90-notas`, el `if s123`), que la etapa 0 no tocó. El filtro del
+árbol por `project` no está hecho.
+
+**Etapa 1 · hecha en lo esencial.** `f24a1bb` (esquema `note-metadata-schema.mjs`),
+`94f79bd` y `3c40a42`: las propiedades se editan en el pod Info, en la misma lista,
+como en Obsidian, y se guardan con js-yaml. Falta verificarla en uso real.
+
+**Etapas 2 a 6 · sin empezar.**
+
+**Lo que apareció en el medio y toca este plan:**
+
+- **Cohortes** (`a058ce1`, `365ce3c`): tabla `Cohort` con una activa por materia y
+  `cohortId` en `Enrollment`. Es la pieza que faltaba para que el itinerario sea
+  *de una cohorte* y se duplique a la siguiente (sección 10).
+- **Servicios con nota de concepto** (`81801a9`): la lista de rutas de servicios
+  (`scripts/content/service-routes.json`) es el primer caso de configuración por
+  materia sacada del código. Es el formato al que tiene que ir `CHAPTER_CONVENTION`.
+- **Validador global** (`cfc4c44` y siguientes): ya frena pushes por slugs, tags y
+  enlaces. Es donde se valida un itinerario cuando exista.
+
+## 14. Lo que muestra Progreso hoy, y por qué es el caos
+
+Hay dos «progresos» que no se hablan:
+
+- **El bloque «Progreso» de la sidebar izquierda** (`#page-progress`) lista las
+  evaluaciones de la página. Se arma una vez por carga, a partir del DOM, y no
+  sigue a la nota activa de Dockview: cambiás de nota y sigue mostrando la de fondo.
+  Visualmente es un capítulo más del árbol, cuando es otra cosa.
+- **El pod Progreso de la derecha** (`CourseProgressPod.astro`, `/api/progress/pod`)
+  arma las «unidades» con `unitForNode`, o sea **desde la carpeta de cada nota**:
+  bottom-up puro. Y trae una rúbrica fija en código,
+  `REQUIRED = { proyecto: 1, conexiones: 5, coloquios: 2, estigmergia: 1, aporte: 1 }`.
+
+Lo segundo es justo lo que la sección 9 advertía: un contador de requisitos en la
+misma superficie que el recorrido es el instrumento doble —guía formativa y mecanismo
+sancionatorio— que falló en 2026. Hay que decidir si se queda.
+
+## 15. La reconsideración: el itinerario va antes que `chapter`
+
+El plan original decía no empezar la etapa 4 sin haber usado la 2 un cuatrimestre.
+Pido revisar eso, porque el pedido de hoy —que el docente arme el árbol *top-down* en
+Progreso— cambia el razonamiento:
+
+Si el itinerario vive en Progreso como objeto propio, **el árbol de la izquierda puede
+quedarse como archivo** (la carpeta, como en Obsidian) y no hace falta que `chapter`
+signifique nada pedagógico. La etapa 2 existía para que el árbol pudiera expresar el
+recorrido; si el recorrido tiene su lugar, la 2 pierde razón de ser, y con ella el
+riesgo mayor de la sección 7 —que el árbol de musiki y el de Obsidian dejen de
+coincidir—. Quedan dos superficies con dos preguntas distintas: la izquierda contesta
+«dónde está», Progreso contesta «cuándo y para qué».
+
+Es un modelo más simple de explicar que «chapter explícito que gana sobre la carpeta»,
+y por eso creo que el adelanto es razonable y no es meter complejidad antes de tiempo.
+
+## 16. Plan revisado
+
+**Paso A · la nota activa en Progreso.** Sacar `#page-progress` de la izquierda. En
+el pod Progreso, arriba, un bloque visualmente distinto —«En esta nota»— con lo que
+se evalúa en la nota que estás leyendo: sigue a `musiki:active-note`, se recalcula al
+cambiar de panel y al entregar. Chico, sin modelo nuevo, arregla el bug de hoy.
+
+**Paso B · itinerario como objeto, mínimo, por cohorte.** Etapa 4 adelantada y
+recortada: una lista ordenada de paradas, cada una con nombre, kind (los cinco de la
+sección 9) y referencias a notas. Pertenece a una cohorte; al abrir una cohorte nueva
+se ofrece duplicar la anterior. El docente lo arma en Progreso arrastrando notas desde
+el árbol de la izquierda o buscándolas. El reservorio es el complemento, sin campo.
+
+**Paso C · el estudiante se ubica sobre el itinerario.** El pod deja de derivar
+unidades de la carpeta cuando hay itinerario (sin itinerario, queda como hoy). Avance
+sobre las paradas; la retención por concepto viene después, con SRS (`SrsState` ya
+existe en la base).
+
+**Paso D · terminar la etapa 0.** `CHAPTER_CONVENTION` y la copia de `[...slug].astro`
+pasan a configuración por materia, con el formato de `service-routes.json`. Filtro
+por `project`.
+
+**Etapas 3 y 6 siguen como estaban.** La 3 (índices generados) se vuelve más fácil
+con el itinerario: Conceptos es «los `type: concept` de la materia», no una carpeta.
+La 6 dependía de la 2; ahora depende de que el árbol se acepte como archivo.
+
+**Etapa 2 · en suspenso.** Se retoma sólo si, usando el itinerario, el árbol de la
+izquierda sigue necesitando expresar recorrido.
+
+## 17. Decisiones que tiene que tomar una persona
+
+1. **Dónde vive el itinerario.** En la base, por cohorte (se edita desde la UI, se
+   duplica con un click, no aparece en Obsidian), o como archivo en el repo de la
+   materia, `cursos/<id>/itinerario-<cohorte>.yaml`, escrito por la UI con la API de
+   publicación (versionado, legible en Obsidian, pero un commit por cada arrastre).
+2. **La rúbrica fija del pod.** Si el contador `REQUIRED` se queda en Progreso, se
+   va a otro lado (la nota se conversa en otro momento, sección 9), o se vuelve parte
+   del itinerario como paradas de kind Assignment.
+3. **Qué ve el estudiante al principio.** Sólo su posición sobre el itinerario, o
+   también el mapa completo (la advertencia sobre Duolingo, sección 3).
